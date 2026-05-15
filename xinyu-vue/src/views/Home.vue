@@ -12,9 +12,24 @@ const content = ref('')
 const moodList = ref([])
 const message = ref('')
 const messageType = ref('success')
-
+const selectedMood =ref(null)
 
 const adding =ref(false)
+
+const editingMoodId = ref(null)
+const editMoodType = ref('')
+const editContent = ref('')
+const updating = ref(false)
+
+const filterMoodType = ref('')
+
+const startDate = ref('')
+const endDate = ref('')
+
+const pageNum = ref(1)
+const pageSize = ref(5)
+const total = ref(0)
+const pages = ref(0)
 
 onMounted(() => {
   const loginUserStr = localStorage.getItem('loginUser')
@@ -83,12 +98,31 @@ function loadMoodList() {
     return
   }
 
-  request.get('/mood/list')
+  if (startDate.value && endDate.value && startDate.value > endDate.value) {
+    showMessage('开始日期不能晚于结束日期', 'warning')
+    return
+  }
+
+  request.get('/mood/list', {
+    params: {
+      moodType: filterMoodType.value,
+      startDate: startDate.value,
+      endDate: endDate.value,
+      pageNum: pageNum.value,
+      pageSize:pageSize.value
+    }
+  })
     .then(res => {
       console.log('心情记录列表：', res.data)
 
       if (res.data.code === 200) {
-        moodList.value = res.data.data
+        const pageData = res.data.data
+
+        moodList.value = pageData.records
+        total.value = pageData.total
+        pages.value = pageData.pages
+        pageNum.value = pageData.current
+        pageSize.value=pageData.size
       } else {
         showMessage(res.data.message, 'error')
       }
@@ -167,6 +201,121 @@ function showMessage(text, type = 'success') {
     message.value=''
   },2000)
 }
+
+function loadMoodDetail(id) {
+  request.get('/mood/detail/' + id)
+    .then(res => {
+      console.log('心情详情：', res.data)
+
+      if (res.data.code === 200) {
+        selectedMood.value = res.data.data
+        showMessage('详情加载成功', 'success')
+      } else {
+        showMessage(res.data.message, 'error')
+      }
+    })
+    .catch(err => {
+      console.log('查询详情失败：', err)
+      showMessage('查询详情失败，请检查后端是否启动','error')
+  })
+}
+function closeDetail() {
+  selectedMood.value = null
+  cancelEdit()
+}
+
+function startEdit(mood) {
+  editingMoodId.value = mood.id
+  editMoodType.value = mood.moodType
+  editContent.value = mood.content
+}
+
+function cancelEdit() {
+  editingMoodId.value = null
+  editMoodType.value = ''
+  editContent.value=''
+}
+
+function updateMood() {
+  if (!editingMoodId.value) {
+    showMessage('请选择要修改的记录', 'warning')
+    return
+  }
+
+  if (!editMoodType.value) {
+    showMessage('请选择心情类型', 'warning')
+    return
+  }
+
+  if (!editContent.value || editContent.value.trim() === '') {
+    showMessage('请输入心情内容', 'warning')
+    return
+  }
+
+  if (updating.value) {
+    return
+  }
+
+  updating.value = true
+
+  request.put('/mood/update/' + editingMoodId.value,{
+    moodType: editMoodType.value,
+    content:editContent.value.trim()
+  })
+    .then(res => {
+      console.log('修改心情返回结果', res.data)
+
+      if (res.data.code === 200) {
+        showMessage(res.data.message, 'success')
+
+        const updatedId = editingMoodId.value
+
+        cancelEdit()
+        loadMoodList()
+
+        if (selectedMood.value && selectedMood.value.id === updatedId) {
+          loadMoodDetail(updatedId)
+        }
+      }else {
+        showMessage(res.data.message, 'error')
+      }
+    }).catch(err => {
+      console.log('修改心情失败：', err)
+      showMessage('修改失败，请检查后端是否启动', 'error')
+    }).finally(() => {
+      updating.value = false
+    })
+}
+function resetFilter() {
+  filterMoodType.value = ''
+  startDate.value = ''
+  endDate.value = ''
+  pageNum.value=1
+  loadMoodList()
+}
+function searchMoodList(){
+  pageNum.value = 1
+  loadMoodList()
+}
+
+function prevPage() {
+  if (pageNum.value <= 1) {
+    return
+  }
+
+  pageNum.value--
+  loadMoodList()
+}
+
+function nextPage() {
+  if (pageNum.value >= pages.value) {
+    return
+  }
+
+  pageNum.value++
+  loadMoodList()
+}
+
 </script>
 
 <template>
@@ -212,14 +361,85 @@ function showMessage(text, type = 'success') {
 
       <section class="panel list-panel">
         <div class="list-header">
-          <div>
+          <div class="list-info">
             <h2>我的心情记录</h2>
             <p class="panel-desc">查看你最近记录下来的情绪变化。</p>
           </div>
 
-          <button class="refresh-btn" @click="loadMoodList">刷新</button>
-        </div>
+          <div class="filter-area">
+            <select v-model="filterMoodType">
+              <option value="">全部心情</option>
+              <option value="开心">开心</option>
+              <option value="平静">平静</option>
+              <option value="焦虑">焦虑</option>
+              <option value="难过">难过</option>
+              <option value="疲惫">疲惫</option>
+              <option value="其他">其他</option>
+            </select>
+            
+            <input v-model="startDate" type="date"/>
+            <input v-model="endDate" type="date"/>
 
+            <button class="refresh-btn" @click="searchMoodList">查询</button>
+            <button class="reset-btn" @click="resetFilter">重置</button>
+            <button class="refresh-btn" @click="loadMoodList">刷新</button>
+          </div>
+        </div>
+        <div v-if="selectedMood" class="detail-box">
+          <div class="detail-header">
+            <h3>心情记录详情</h3>
+            <div class="detail-actions">
+              <button class="edit-btn" @click="startEdit(selectedMood)">编辑</button>
+              <button class="close-btn" @click="closeDetail">关闭</button>
+            </div>
+            
+          </div>
+
+          <p>
+            <strong>心情类型：</strong>
+            <span class="mood-tag" :class="getMoodClass(selectedMood.moodType)">
+              {{ selectedMood.moodType }}
+            </span>
+          </p>
+
+          <p>
+            <strong>心情内容：</strong>
+            {{ selectedMood.content }}
+          </p>
+
+          <p>
+            <strong>创建时间：</strong>
+            {{ formatTime(selectedMood.createTime) }}
+          </p>
+
+          <p>
+            <strong>更新时间：</strong>
+            {{ formatTime(selectedMood.updateTime) }}
+          </p>
+          
+          <div v-if="editingMoodId===selectedMood.id" class="edit-box">
+            <h4>编辑心情记录</h4>
+
+            <select v-model="editMoodType">
+              <option value="">请选择心情类型</option>
+              <option value="开心">开心</option>
+              <option value="平静">平静</option>
+              <option value="焦虑">焦虑</option>
+              <option value="难过">难过</option>
+              <option value="疲惫">疲惫</option>
+              <option value="其他">其他</option>
+            </select>
+
+            <textarea v-model="editContent" placeholder="请输入修改后的心情内容"></textarea>
+
+            <div class="edit-actions">
+              <button class="primary-btn" :disabled="updating" @click="updateMood">
+                {{ updating ? '保存中...' : '保存修改' }}
+              </button>
+              <button class="cancel-btn" @click="cancelEdit">取消</button>
+            </div>
+          </div>
+        </div>
         <div v-if="moodList.length === 0" class="empty">
           <div class="empty-title">暂无心情记录</div>
           <div class="empty-desc">写下第一条记录，给今天的情绪一个出口。</div>
@@ -229,13 +449,29 @@ function showMessage(text, type = 'success') {
           <div v-for="item in moodList" :key="item.id" class="record-card">
             <div class="record-top">
               <span class="mood-tag" :class="getMoodClass(item.moodType)">{{ item.moodType }}</span>
-              <button class="delete-btn" @click="deleteMood(item.id)">删除</button>
+              <div class="record-actions">
+                <button class="detail-btn" @click="loadMoodDetail(item.id)">查看详情</button>
+                <button class="delete-btn" @click="deleteMood(item.id)">删除</button>
+              </div>
             </div>
 
             <p class="record-content">{{ item.content }}</p>
             <p class="record-time">{{ formatTime(item.createTime) }}</p>
           </div>
         </div>
+          <div v-if="total > 0" class="pagination">
+            <button class="page-btn" :disabled="pageNum <= 1" @click="prevPage">
+              上一页
+            </button>
+
+            <span>
+              第 {{ pageNum }} / {{ pages }} 页，共 {{ total }} 条
+            </span>
+
+            <button class="page-btn" :disabled="pageNum >= pages" @click="nextPage">
+              下一页
+            </button>
+          </div>
       </section>
     </main>
   </div>
@@ -374,6 +610,24 @@ textarea {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.list-info {
+  flex: 1;
+  min-width: 220px;
+}
+
+.list-info h2 {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.list-info .panel-desc {
+  margin: 8px 0 0;
+  color: #888;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .refresh-btn {
@@ -511,5 +765,176 @@ textarea {
 .message.warning {
   background: #fff7e6;
   color: #d9822b;
+}
+
+.record-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.detail-btn {
+  border: none;
+  background: transparent;
+  color: #4b6cb7;
+  font-size: 14px;
+}
+
+.detail-btn:hover {
+  color: #2f55b7;
+}
+
+.detail-box {
+  margin: 18px 0;
+  padding: 18px;
+  border-radius: 14px;
+  background: #f8f9ff;
+  border: 1px solid #edf0ff;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.detail-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.close-btn {
+  border: none;
+  background: #eef2ff;
+  color: #4b6cb7;
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.close-btn:hover {
+  background: #e0e7ff;
+}
+
+.detail-box p {
+  margin: 10px 0;
+  color: #444;
+  line-height: 1.7;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.edit-btn {
+  border: none;
+  background: #eef2ff;
+  color: #4b6cb7;
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.edit-btn:hover {
+  background: #e0e7ff;
+}
+
+.edit-box {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #edf0ff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edit-box h4 {
+  margin: 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.cancel-btn {
+  height: 42px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 10px;
+  background: #f2f4ff;
+  color: #4b6cb7;
+}
+
+.cancel-btn:hover {
+  background: #e4e8ff;
+}
+
+.filter-area {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.filter-area select,
+.filter-area input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 9px;
+  background: #fff;
+  color: #333;
+  outline: none;
+}
+
+.reset-btn {
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 9px;
+  background: #f5f5f5;
+  color: #666;
+}
+
+.reset-btn:hover {
+  background: #eaeaea;
+}
+
+.pagination {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  color: #666;
+  font-size: 14px;
+}
+
+.page-btn {
+  height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: #f2f4ff;
+  color: #4b6cb7;
+}
+
+.page-btn:hover {
+  background: #e4e8ff;
+}
+
+.page-btn:disabled {
+  background: #f1f1f1;
+  color: #aaa;
+  cursor: not-allowed;
 }
 </style>
