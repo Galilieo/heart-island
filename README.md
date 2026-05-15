@@ -1,0 +1,374 @@
+# 心屿 AI 情绪记录与匿名互助社区系统
+
+心屿是一个基于 Spring Boot、Vue3、MySQL 和 JWT 的前后端分离 Web 应用，围绕个人情绪记录、AI 情绪陪伴和匿名社区表达场景进行设计。
+
+当前版本已经完成用户注册、登录认证、token 携带、心情记录新增、列表查询、删除、统一返回结果和基础异常处理等核心能力，形成了“登录 -> 记录心情 -> 查看记录 -> 管理记录”的基础闭环。后续版本将继续扩展 AI 回复、匿名社区、后台管理和情绪统计等模块。
+
+## 项目定位
+
+心屿的核心目标是帮助用户完成以下事情：
+
+- 记录自己的情绪状态和当天想法。
+- 回看历史心情记录，观察情绪变化。
+- 通过 AI 获得温和、支持性的情绪回应。
+- 在匿名社区中表达情绪、获得互动。
+- 通过统计图表了解一段时间内的情绪趋势。
+
+系统不定位为医疗诊断工具，也不替代专业心理咨询服务。它更适合作为情绪记录、AI 陪伴反馈和匿名表达的综合型应用。
+
+## 技术栈
+
+### 后端
+
+- Java 17
+- Spring Boot
+- MyBatis-Plus
+- MySQL
+- JWT
+- BCrypt
+- Maven
+
+### 前端
+
+- Vue 3
+- Vue Router
+- axios
+- Vite
+- Element Plus
+- localStorage
+
+### 开发与测试工具
+
+- IntelliJ IDEA
+- Apifox
+- Edge / Chrome DevTools
+- Git
+- npm
+
+## 已完成功能
+
+### 用户与认证
+
+- 用户注册
+- 用户登录
+- 密码加密存储
+- JWT token 生成
+- 登录状态保存
+- 退出登录
+- 前端请求自动携带 token
+- 后端通过 token 解析当前用户
+
+### 心情记录
+
+- 新增心情记录
+- 查询当前用户心情记录
+- 删除心情记录
+- 前端心情记录卡片展示
+- 空状态、加载状态和基础错误提示
+
+### 工程规范
+
+- 前后端分离架构
+- Controller / Service / Mapper 分层
+- 统一返回结果 `Result`
+- 全局异常处理
+- CORS 跨域配置
+- axios 请求封装
+- 基础接口测试
+
+## 规划功能
+
+后续版本计划继续完善：
+
+- 心情记录详情
+- 心情记录修改
+- 分页查询
+- 按日期和心情类型筛选
+- AI 情绪回复生成与保存
+- 匿名社区发帖
+- 评论、点赞、收藏
+- 话题分类
+- 管理员后台
+- 用户管理和内容审核
+- 情绪趋势统计
+- ECharts 图表展示
+- Redis 缓存
+- 部署上线配置
+
+## 系统架构
+
+```text
+浏览器
+  -> Vue 前端服务
+  -> axios / request.js
+  -> Spring Boot 后端服务
+  -> MyBatis-Plus
+  -> MySQL 数据库
+```
+
+核心数据流：
+
+```text
+用户操作页面
+-> 前端调用后端接口
+-> request.js 自动携带 token
+-> 后端解析 token 获取当前用户
+-> Service 处理业务逻辑
+-> Mapper 操作数据库
+-> 后端返回统一 Result
+-> 前端渲染结果
+```
+
+## 项目结构
+
+```text
+heart_island
+├─ xinyu-backend        Spring Boot 后端项目
+│  ├─ src
+│  ├─ pom.xml
+│  └─ ...
+│
+├─ xinyu-vue            Vue 前端项目
+│  ├─ src
+│  ├─ package.json
+│  ├─ vite.config.js
+│  └─ ...
+│
+├─ docs                 项目设计与说明文档
+├─ sql                  数据库 SQL 文件
+├─ assets               项目图片资源
+├─ README.md            项目说明
+└─ .gitignore
+```
+
+## 后端结构
+
+```text
+xinyu-backend
+├─ common       通用类，例如统一返回结果 Result
+├─ config       配置类，例如跨域配置
+├─ controller   接收前端请求，提供后端接口
+├─ entity       实体类，对应数据库表
+├─ exception    全局异常处理
+├─ mapper       数据库操作接口
+├─ service      业务逻辑层
+├─ utils        工具类，例如 JWT 工具
+└─ resources    配置文件
+```
+
+## 前端结构
+
+```text
+xinyu-vue
+├─ src
+│  ├─ views        页面，例如登录页、注册页、首页
+│  ├─ router       路由配置
+│  ├─ utils        工具文件，例如 request.js
+│  ├─ components   可复用组件
+│  ├─ App.vue      根组件
+│  └─ main.js      入口文件
+└─ package.json
+```
+
+## 快速启动
+
+### 1. 初始化数据库
+
+创建数据库：
+
+```sql
+CREATE DATABASE xinyu DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+```
+
+数据库表结构可以参考 `sql` 目录或文档：
+
+```text
+docs/04-数据库设计说明书.md
+docs/09-部署与运行说明.md
+```
+
+### 2. 启动后端
+
+使用 IntelliJ IDEA 打开后端项目：
+
+```text
+D:\heart_island\xinyu-backend
+```
+
+确认 `src/main/resources/application.properties` 中数据库配置正确：
+
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/xinyu?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
+spring.datasource.username=root
+spring.datasource.password=123456
+```
+
+运行启动类：
+
+```text
+XinyuBackendApplication
+```
+
+后端默认地址：
+
+```text
+http://localhost:8080
+```
+
+也可以在后端目录使用命令启动：
+
+```bash
+mvn spring-boot:run
+```
+
+### 3. 启动前端
+
+进入前端目录：
+
+```bash
+cd xinyu-vue
+npm install
+npm run dev
+```
+
+前端默认地址：
+
+```text
+http://localhost:5173
+```
+
+## 核心接口
+
+| 功能 | 请求方式 | 接口地址 | 说明 |
+| --- | --- | --- | --- |
+| 用户注册 | POST | `/user/register` | 新用户注册 |
+| 用户登录 | POST | `/user/login` | 登录成功后返回用户信息和 token |
+| 查询心情记录 | GET | `/mood/list` | 查询当前登录用户的心情记录 |
+| 新增心情记录 | POST | `/mood/add` | 新增当前登录用户的心情记录 |
+| 删除心情记录 | DELETE | `/mood/delete/{id}` | 删除当前用户的指定心情记录 |
+
+更完整的接口规划见：
+
+```text
+docs/05-接口设计说明书.md
+```
+
+## 统一返回格式
+
+后端接口统一使用 `Result` 返回：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {}
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| code | 业务状态码 |
+| message | 响应提示信息 |
+| data | 业务数据 |
+
+## 登录认证流程
+
+```text
+用户输入用户名和密码
+-> 前端调用 /user/login
+-> 后端查询用户并校验密码
+-> 登录成功后生成 JWT token
+-> 后端返回 token 和不含 password 的用户信息
+-> 前端保存 token 和 loginUser 到 localStorage
+-> 后续请求由 request.js 自动携带 token
+-> 后端从 token 中解析 userId
+```
+
+## 心情记录流程
+
+```text
+用户填写心情类型和内容
+-> 前端调用 /mood/add
+-> 请求头自动携带 token
+-> 后端解析 token 获取当前 userId
+-> 后端保存心情记录
+-> 前端刷新心情记录列表
+```
+
+## 数据安全设计
+
+- 密码使用 BCrypt 加密后保存。
+- 登录接口不向前端返回 password。
+- 后端不信任前端传入的 `userId`。
+- 需要登录的接口通过 token 判断当前用户。
+- 前端统一通过 request.js 携带 token。
+- 私密心情记录默认只属于当前登录用户。
+
+## 项目文档
+
+项目文档位于 `docs` 目录：
+
+| 文档 | 说明 |
+| --- | --- |
+| `01-项目背景与可行性分析.md` | 项目背景、建设目标、可行性分析 |
+| `02-需求分析说明书.md` | 用户角色、用户故事、功能需求 |
+| `03-系统概要设计说明书.md` | 系统架构、模块划分、技术选型 |
+| `04-数据库设计说明书.md` | 数据表、字段、关系和索引设计 |
+| `05-接口设计说明书.md` | 接口规范、请求参数、返回结果 |
+| `06-详细设计说明书.md` | 业务流程和核心模块详细设计 |
+| `07-前端界面与交互设计说明.md` | 页面结构、交互流程、状态设计 |
+| `08-测试说明书.md` | 测试范围、测试用例、验收标准 |
+| `09-部署与运行说明.md` | 本地运行、联调、部署方案 |
+| `10-项目总结与后续规划.md` | 阶段总结、问题边界、迭代计划 |
+
+## 当前版本说明
+
+当前版本重点完成基础业务闭环：
+
+```text
+注册
+-> 登录
+-> 保存 token
+-> 新增心情记录
+-> 查看自己的心情记录
+-> 删除心情记录
+-> 退出登录
+```
+
+AI 回复、匿名社区、后台管理和统计分析属于后续迭代模块，相关设计已经在 `docs` 目录中进行规划。
+
+## 后续迭代路线
+
+```text
+第一阶段：完善心情记录详情、修改、分页、筛选
+第二阶段：接入 AI 回复能力
+第三阶段：建设匿名社区模块
+第四阶段：建设后台管理模块
+第五阶段：建设情绪统计模块
+第六阶段：完善部署、缓存和工程配置
+```
+
+## 运行验证
+
+登录成功后，可以在浏览器 DevTools 中验证：
+
+```text
+Application -> LocalStorage -> http://localhost:5173
+```
+
+应能看到：
+
+```text
+loginUser
+token
+```
+
+刷新心情记录时，可以在：
+
+```text
+Network -> Fetch/XHR -> /mood/list -> Request Headers
+```
+
+看到请求头中携带 `token`，说明前端请求拦截器已经生效。
