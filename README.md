@@ -2,7 +2,7 @@
 
 心屿是一个基于 Spring Boot、Vue3、MySQL 和 JWT 的前后端分离 Web 应用，围绕个人情绪记录、AI 情绪陪伴和匿名社区表达场景进行设计。
 
-当前版本已经完成用户注册、登录认证、token 携带、心情记录新增、列表查询、详情查看、记录修改、删除、分页筛选、统一返回结果和基础异常处理等核心能力，形成了“登录 -> 记录心情 -> 查看记录 -> 筛选记录 -> 管理记录”的基础闭环。后续版本将继续扩展 AI 回复、匿名社区、后台管理和情绪统计等模块。
+当前版本已经完成用户注册、登录认证、token 携带、心情记录新增、列表查询、详情查看、记录修改、删除、分页筛选、AI 情绪陪伴回复、统一返回结果和基础异常处理等核心能力，形成了“登录 -> 记录心情 -> 生成 AI 回复 -> 查看记录 -> 筛选记录 -> 管理记录”的基础闭环。后续版本将继续扩展匿名社区、后台管理和情绪统计等模块。
 
 ## 项目定位
 
@@ -26,6 +26,7 @@
 - MySQL
 - JWT
 - BCrypt
+- RestTemplate
 - Maven
 
 ### 前端
@@ -44,6 +45,7 @@
 - Edge / Chrome DevTools
 - Git
 - npm
+- DeepSeek API
 
 ## 已完成功能
 
@@ -67,8 +69,19 @@
 - 删除心情记录
 - 分页查询心情记录
 - 按日期和心情类型筛选记录
+- 新增记录时生成 AI 陪伴回复
+- 修改记录时重新生成 AI 陪伴回复
 - 前端心情记录卡片展示
+- 前端展示 AI 回复和详情弹窗
 - 空状态、加载状态和基础错误提示
+
+### AI 情绪陪伴
+
+- 接入 DeepSeek API
+- 通过环境变量读取 API Key
+- 根据心情类型和记录内容生成温和回复
+- AI 调用失败时返回默认陪伴文案
+- 回复内容保存到心情记录中，便于列表和详情展示
 
 ### 工程规范
 
@@ -84,7 +97,6 @@
 
 后续版本计划继续完善：
 
-- AI 情绪回复生成与保存
 - 匿名社区发帖
 - 评论、点赞、收藏
 - 话题分类
@@ -102,6 +114,7 @@
   -> Vue 前端服务
   -> axios / request.js
   -> Spring Boot 后端服务
+  -> DeepSeek API
   -> MyBatis-Plus
   -> MySQL 数据库
 ```
@@ -114,6 +127,7 @@
 -> request.js 自动携带 token
 -> 后端解析 token 获取当前用户
 -> Service 处理业务逻辑
+-> 需要 AI 回复时调用 DeepSeek API
 -> Mapper 操作数据库
 -> 后端返回统一 Result
 -> 前端渲染结果
@@ -198,10 +212,16 @@ D:\heart_island\xinyu-backend
 确认 `src/main/resources/application.properties` 中数据库配置正确：
 
 ```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/xinyu?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
-spring.datasource.username=root
-spring.datasource.password=123456
+deepseek.api-key=${DEEPSEEK_API_KEY}
+deepseek.base-url=https://api.deepseek.com
+deepseek.model=deepseek-v4-flash
+
+spring.datasource.url=${DB_URL:jdbc:mysql://localhost:3306/xinyu?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true}
+spring.datasource.username=${DB_USERNAME:root}
+spring.datasource.password=${DB_PASSWORD:123456}
 ```
+
+启动后端前需要配置 `DEEPSEEK_API_KEY` 环境变量。数据库连接也可以通过 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 覆盖默认值。
 
 运行启动类：
 
@@ -243,10 +263,10 @@ http://localhost:5173
 | --- | --- | --- | --- |
 | 用户注册 | POST | `/user/register` | 新用户注册 |
 | 用户登录 | POST | `/user/login` | 登录成功后返回用户信息和 token |
-| 查询心情记录 | GET | `/mood/list` | 分页查询当前登录用户的心情记录，支持条件筛选 |
-| 新增心情记录 | POST | `/mood/add` | 新增当前登录用户的心情记录 |
-| 查看心情详情 | GET | `/mood/detail/{id}` | 查看当前用户的指定心情记录 |
-| 修改心情记录 | PUT | `/mood/update/{id}` | 修改当前用户的指定心情记录 |
+| 查询心情记录 | GET | `/mood/list` | 分页查询当前登录用户的心情记录，支持条件筛选，并返回 AI 回复 |
+| 新增心情记录 | POST | `/mood/add` | 新增当前登录用户的心情记录，并生成 AI 回复 |
+| 查看心情详情 | GET | `/mood/detail/{id}` | 查看当前用户的指定心情记录和 AI 回复 |
+| 修改心情记录 | PUT | `/mood/update/{id}` | 修改当前用户的指定心情记录，并重新生成 AI 回复 |
 | 删除心情记录 | DELETE | `/mood/delete/{id}` | 删除当前用户的指定心情记录 |
 
 更完整的接口规划见：
@@ -295,8 +315,9 @@ docs/05-接口设计说明书.md
 -> 前端调用 /mood/add
 -> 请求头自动携带 token
 -> 后端解析 token 获取当前 userId
--> 后端保存心情记录
--> 前端刷新心情记录列表
+-> 后端调用 AI 服务生成陪伴回复
+-> 后端保存心情记录和 AI 回复
+-> 前端刷新心情记录列表并展示 AI 回复
 ```
 
 ## 数据安全设计
@@ -335,21 +356,23 @@ docs/05-接口设计说明书.md
 -> 登录
 -> 保存 token
 -> 新增心情记录
+-> 生成 AI 陪伴回复
 -> 查看自己的心情记录
 -> 分页和条件筛选
 -> 查看心情详情
 -> 修改心情记录
+-> 重新生成 AI 回复
 -> 删除心情记录
 -> 退出登录
 ```
 
-AI 回复、匿名社区、后台管理和统计分析属于后续迭代模块，相关设计已经在 `docs` 目录中进行规划。
+匿名社区、后台管理和统计分析属于后续迭代模块，相关设计已经在 `docs` 目录中进行规划。
 
 ## 后续迭代路线
 
 ```text
 第一阶段：完善心情记录详情、修改、分页、筛选（已完成）
-第二阶段：接入 AI 回复能力（下一阶段）
+第二阶段：接入 AI 回复能力（已完成基础版本）
 第三阶段：建设匿名社区模块
 第四阶段：建设后台管理模块
 第五阶段：建设情绪统计模块
@@ -378,3 +401,5 @@ Network -> Fetch/XHR -> /mood/list -> Request Headers
 ```
 
 看到请求头中携带 `token`，说明前端请求拦截器已经生效。
+
+新增或修改心情记录后，可以在列表卡片或详情弹窗中看到 `心屿回复`。如果 AI 服务暂时不可用，后端会返回默认陪伴文案，保证记录流程不中断。
