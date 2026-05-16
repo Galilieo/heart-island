@@ -2,6 +2,7 @@ package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.introspect.AnnotationIntrospectorPair;
 import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.MoodRecordMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,11 +12,20 @@ import java.util.List;
 
 @Service
 public class MoodRecordService {
+    @Autowired
+    private AiReplyService aiReplyService;
 
     @Autowired
     private MoodRecordMapper moodRecordMapper;
 
     public Boolean add(MoodRecord moodRecord) {
+        String aiReply = aiReplyService.generateReply(
+                moodRecord.getMoodType(),
+                moodRecord.getContent()
+        );
+
+        moodRecord.setAiReply(aiReply);
+
         int rows = moodRecordMapper.insert(moodRecord);
         return rows > 0;
     }
@@ -28,7 +38,16 @@ public class MoodRecordService {
         return moodRecordMapper.selectList(queryWrapper);
     }
 
-    public Boolean delete(Long id) {
+    public Boolean delete(Long id,Long userId) {
+        MoodRecord moodRecord =moodRecordMapper.selectById(id);
+
+        if(moodRecord == null){
+            return false;
+        }
+
+        if(!moodRecord.getUserId().equals(userId)){
+            return false;
+        }
         int rows = moodRecordMapper.deleteById(id);
         return rows > 0;
     }
@@ -88,7 +107,16 @@ public class MoodRecordService {
         dbRecord.setMoodType(moodRecord.getMoodType());
         dbRecord.setContent(moodRecord.getContent());
 
+        String aiReply = aiReplyService.generateReply(
+                moodRecord.getMoodType(),
+                moodRecord.getContent()
+        );
+
+        dbRecord.setAiReply(aiReply);
+
         int rows = moodRecordMapper.updateById(dbRecord);
         return rows > 0;
     }
+
+
 }

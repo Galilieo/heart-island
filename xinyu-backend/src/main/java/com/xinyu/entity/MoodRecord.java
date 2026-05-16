@@ -13,6 +13,7 @@ public class MoodRecord {
     private Long userId;
     private String moodType;
     private String content;
+    private String aiReply;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -30,6 +31,14 @@ public class MoodRecord {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public String getAiReply() {
+        return aiReply;
+    }
+
+    public void setAiReply(String aiReply) {
+        this.aiReply = aiReply;
     }
 
     public String getMoodType() {

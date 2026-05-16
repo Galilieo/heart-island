@@ -87,11 +87,12 @@ public class MoodRecordController {
         if (id == null) {
             return Result.error("记录id不能为空");
         }
+        Long userId = jwtUtil.getUserId(token);
 
-        Boolean success = moodRecordService.delete(id);
+        Boolean success = moodRecordService.delete(id, userId);
 
         if (!success) {
-            return Result.error("删除失败");
+            return Result.error("心情记录不存在或者无权删除");
         }
 
         return Result.success("删除成功", true);
