@@ -7,6 +7,7 @@ CREATE DATABASE IF NOT EXISTS `xinyu`
 
 USE `xinyu`;
 
+DROP TABLE IF EXISTS `ai_reply`;
 DROP TABLE IF EXISTS `mood_record`;
 DROP TABLE IF EXISTS `user`;
 
@@ -26,6 +27,7 @@ CREATE TABLE `mood_record` (
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID',
   `mood_type` VARCHAR(30) NOT NULL COMMENT '心情类型',
   `content` TEXT NOT NULL COMMENT '心情内容',
+  `ai_reply` TEXT DEFAULT NULL COMMENT 'AI回复内容',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -36,3 +38,24 @@ CREATE TABLE `mood_record` (
     ON DELETE CASCADE
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='心情记录表';
+
+CREATE TABLE `ai_reply` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'AI回复ID',
+  `user_id` BIGINT NOT NULL COMMENT '所属用户ID',
+  `target_type` VARCHAR(50) NOT NULL COMMENT '关联业务类型：MOOD_RECORD、POST、SUMMARY',
+  `target_id` BIGINT NOT NULL COMMENT '关联业务ID',
+  `prompt` TEXT DEFAULT NULL COMMENT '发送给AI的提示词',
+  `reply_content` TEXT DEFAULT NULL COMMENT 'AI回复内容',
+  `model_name` VARCHAR(100) DEFAULT NULL COMMENT '模型名称',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1成功，0失败',
+  `error_message` TEXT DEFAULT NULL COMMENT '失败原因',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_ai_user_time` (`user_id`, `create_time`),
+  KEY `idx_ai_target` (`target_type`, `target_id`),
+  KEY `idx_ai_status_time` (`status`, `create_time`),
+  CONSTRAINT `fk_ai_reply_user`
+    FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI回复记录表';

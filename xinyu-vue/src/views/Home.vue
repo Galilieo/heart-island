@@ -1,7 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
+import MoodCard from '../components/MoodCard.vue'
+import MoodDetailDialog from '../components/MoodDetailDialog.vue'
+import MoodForm from '../components/MoodForm.vue'
 
 const router = useRouter()
 
@@ -9,11 +12,20 @@ const loginUser = ref(null)
 const moodType = ref('')
 const content = ref('')
 const moodList = ref([])
+
 const message = ref('')
 const messageType = ref('success')
+const messageTimer = ref(null)
+
 const selectedMood = ref(null)
 const adding = ref(false)
+const listLoading = ref(false)
+const trendLoading = ref(false)
+const detailLoadingId = ref(null)
+const deletingId = ref(null)
+
 const editingMoodId = ref(null)
+
 const editMoodType = ref('')
 const editContent = ref('')
 const updating = ref(false)
@@ -24,6 +36,22 @@ const pageNum = ref(1)
 const pageSize = ref(5)
 const total = ref(0)
 const pages = ref(0)
+const moodTrend = ref({
+  total: 0,
+  mainMoodType: '',
+  lastMoodType: '',
+  lastRecordTime: '',
+  moodCounts: []
+})
+
+const moodOptions = [
+  { label: '开心', value: '开心' },
+  { label: '平静', value: '平静' },
+  { label: '焦虑', value: '焦虑' },
+  { label: '难过', value: '难过' },
+  { label: '疲惫', value: '疲惫' },
+  { label: '其他', value: '其他' }
+]
 
 onMounted(() => {
   const loginUserStr = localStorage.getItem('loginUser')
@@ -37,6 +65,7 @@ onMounted(() => {
 
   loginUser.value = JSON.parse(loginUserStr)
   loadMoodList()
+  loadMoodTrend()
 })
 
 function addMood() {
@@ -76,6 +105,7 @@ function addMood() {
         moodType.value = ''
         content.value = ''
         loadMoodList()
+        loadMoodTrend()
       } else {
         showMessage(res.data.message, 'error')
       }
@@ -94,10 +124,16 @@ function loadMoodList() {
     return
   }
 
+  if (listLoading.value) {
+    return
+  }
+
   if (startDate.value && endDate.value && startDate.value > endDate.value) {
     showMessage('开始日期不能晚于结束日期', 'warning')
     return
   }
+
+  listLoading.value = true
 
   request
     .get('/mood/list', {
@@ -110,8 +146,6 @@ function loadMoodList() {
       }
     })
     .then((res) => {
-      console.log('心情记录列表：', res.data)
-
       if (res.data.code === 200) {
         const pageData = res.data.data
 
@@ -128,14 +162,23 @@ function loadMoodList() {
       console.log('查询心情记录失败：', err)
       showMessage('查询失败，请检查后端是否启动', 'error')
     })
+    .finally(() => {
+      listLoading.value=false
+    })
 }
 
 function deleteMood(id) {
+  if (deletingId.value) {
+    return
+  }
+
   const ok = confirm('确定要删除这条心情记录吗？')
 
   if (!ok) {
     return
   }
+
+  deletingId.value = id
 
   request
     .delete('/mood/delete/' + id)
@@ -143,15 +186,23 @@ function deleteMood(id) {
       console.log('删除返回结果：', res.data)
 
       if (res.data.code === 200) {
-        showMessage(res.data.message, 'success')
+        showMessage(res.data.message || '删除成功', 'success')
+
+        if (selectedMood.value && selectedMood.value.id === id) {
+          closeDetail()
+        }
         loadMoodList()
+        loadMoodTrend()
       } else {
-        showMessage(res.data.message, 'error')
+        showMessage(res.data.message||'删除失败', 'error')
       }
     })
     .catch((err) => {
       console.log('删除失败：', err)
       showMessage('删除失败，请检查后端是否启动', 'error')
+    })
+    .finally(() => {
+      deletingId.value = null
     })
 }
 
@@ -197,12 +248,73 @@ function showMessage(text, type = 'success') {
   message.value = text
   messageType.value = type
 
-  setTimeout(() => {
+  if (messageTimer.value) {
+    clearTimeout(messageTimer.value)
+  }
+
+  messageTimer.value = setTimeout(() => {
     message.value = ''
-  }, 2000)
+    messageTimer.value = null
+  }, 2200)
+
+}
+
+onBeforeUnmount(() => {
+  if (messageTimer.value) {
+    clearTimeout(messageTimer.value)
+  }
+})
+
+function loadMoodTrend() {
+  if (!loginUser.value) {
+    return
+  }
+
+  if (trendLoading.value) {
+    return
+  }
+
+  trendLoading.value = true
+
+  request
+    .get('/mood/trend/recent7')
+    .then((res) => {
+      if (res.data.code === 200) {
+        moodTrend.value = res.data.data || {
+          total: 0,
+          mainMoodType: '',
+          lastMoodType: '',
+          lastRecordTime: '',
+          moodCounts: []
+        }
+      } else {
+        showMessage(res.data.message || '心情趋势加载失败', 'error')
+      }
+    })
+    .catch((err) => {
+      console.log('查询心情趋势失败：', err)
+      showMessage('心情趋势加载失败，请检查后端是否启动', 'error')
+    })
+    .finally(() => {
+      trendLoading.value = false
+    })
+}
+
+function getMoodCountPercent(count) {
+  if (!moodTrend.value.total) {
+    return '0%'
+  }
+
+  return Math.round((count / moodTrend.value.total) * 100) + '%'
 }
 
 function loadMoodDetail(id) {
+  if (detailLoadingId.value) {
+    return
+  }
+
+  detailLoadingId.value = id
+
   request
     .get('/mood/detail/' + id)
     .then((res) => {
@@ -210,20 +322,34 @@ function loadMoodDetail(id) {
 
       if (res.data.code === 200) {
         selectedMood.value = res.data.data
-        showMessage('详情加载成功', 'success')
       } else {
-        showMessage(res.data.message, 'error')
+        showMessage(res.data.message || '详情加载失败', 'error')
       }
     })
     .catch((err) => {
       console.log('查询详情失败：', err)
       showMessage('查询详情失败，请检查后端是否启动', 'error')
     })
+    .finally(() => {
+      detailLoadingId.value = null
+    })
 }
 
 function closeDetail() {
+  if (updating.value) {
+    showMessage('心屿正在更新回复，请稍等一下', 'warning')
+    return
+  }
+
+  if (editingMoodId.value) {
+    const ok = confirm('正在编辑中，确定要放弃这次修改吗？')
+
+    if (!ok) {
+      return
+    }
+  }
   selectedMood.value = null
-  cancelEdit()
+  resetEditState()
 }
 
 function startEdit(mood) {
@@ -233,11 +359,25 @@ function startEdit(mood) {
 }
 
 function cancelEdit() {
+  if (updating.value) {
+      showMessage('正在保存修改，请稍等一下', 'warning')
+      return
+    }
+
+    const ok = confirm('确定要取消这次编辑吗？')
+
+    if (!ok) {
+      return
+    }
+
+    resetEditState()
+}
+
+function resetEditState() {
   editingMoodId.value = null
   editMoodType.value = ''
   editContent.value = ''
 }
-
 function updateMood() {
   if (!editingMoodId.value) {
     showMessage('请选择要修改的记录', 'warning')
@@ -274,8 +414,9 @@ function updateMood() {
 
         const updatedId = editingMoodId.value
 
-        cancelEdit()
+        resetEditState()
         loadMoodList()
+        loadMoodTrend()
 
         if (selectedMood.value && selectedMood.value.id === updatedId) {
           loadMoodDetail(updatedId)
@@ -347,33 +488,13 @@ function nextPage() {
     </header>
 
     <main class="main">
-      <section class="panel add-panel">
-        <div class="section-kicker">今日记录</div>
-        <h2>把此刻放下来</h2>
-        <p class="panel-desc">写下一点真实感受，心屿会给你一段轻轻的回应。</p>
-
-        <div class="form">
-          <select v-model="moodType">
-            <option value="">请选择心情类型</option>
-            <option value="开心">开心</option>
-            <option value="平静">平静</option>
-            <option value="焦虑">焦虑</option>
-            <option value="难过">难过</option>
-            <option value="疲惫">疲惫</option>
-            <option value="其他">其他</option>
-          </select>
-
-          <textarea
-            v-model="content"
-            placeholder="今天发生了什么？你现在是什么感受？"
-          ></textarea>
-
-          <button class="primary-btn" :disabled="adding" @click="addMood">
-            {{ adding ? '心屿正在生成回复...' : '新增心情记录' }}
-          </button>
-        </div>
-      </section>
-
+      <MoodForm
+        v-model:moodType="moodType"
+        v-model:content="content"
+        :mood-options="moodOptions"
+        :adding="adding"
+        @submit="addMood"
+      />
       <section class="panel list-panel">
         <div class="list-header">
           <div>
@@ -382,7 +503,45 @@ function nextPage() {
             <p class="panel-desc">用更轻的方式回看最近的情绪变化。</p>
           </div>
 
-          <button class="ghost-btn" @click="loadMoodList">刷新</button>
+          <button class="ghost-btn" :disabled="listLoading" @click="loadMoodList">{{ listLoading?'刷新中': '刷新' }}</button>
+        </div>
+
+        <div class="trend-panel">
+          <div class="trend-summary">
+            <div>
+              <div class="trend-label">最近 7 天</div>
+              <strong>{{ trendLoading ? '读取中' : moodTrend.total }}</strong>
+              <span>条记录</span>
+            </div>
+
+            <div>
+              <div class="trend-label">主要心情</div>
+              <strong>{{ moodTrend.mainMoodType || '暂无' }}</strong>
+              <span>出现最多</span>
+            </div>
+
+            <div>
+              <div class="trend-label">最近一次</div>
+              <strong>{{ moodTrend.lastMoodType || '暂无' }}</strong>
+              <span>{{ formatTime(moodTrend.lastRecordTime) || '还没有记录' }}</span>
+            </div>
+          </div>
+
+          <div v-if="trendLoading" class="trend-empty">正在读取最近的情绪变化...</div>
+          <div v-else-if="!moodTrend.moodCounts.length" class="trend-empty">
+            最近 7 天还没有记录，写下一条后这里会慢慢有变化。
+          </div>
+          <div v-else class="trend-bars">
+            <div v-for="item in moodTrend.moodCounts" :key="item.moodType" class="trend-row">
+              <div class="trend-row-top">
+                <span>{{ item.moodType }}</span>
+                <span>{{ item.count }} 次</span>
+              </div>
+              <div class="trend-track">
+                <div class="trend-fill" :style="{ width: getMoodCountPercent(item.count) }"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="filter-area">
@@ -399,115 +558,63 @@ function nextPage() {
           <input v-model="startDate" type="date" />
           <input v-model="endDate" type="date" />
 
-          <button class="soft-btn" @click="searchMoodList">查询</button>
-          <button class="plain-btn" @click="resetFilter">重置</button>
+          <button class="soft-btn" :disabled="listLoading" @click="searchMoodList">{{ listLoading ? '查询中' : '查询' }}</button>
+          <button class="plain-btn" :disabled="listLoading" @click="resetFilter">重置</button>
         </div>
 
-        <div v-if="moodList.length === 0" class="empty">
-          <div class="empty-title">暂无心情记录</div>
-          <div class="empty-desc">写下第一条记录，给今天的情绪一个出口。</div>
+        <div v-if="listLoading" class="state-box">
+          <div class="state-title">正在整理你的心情记录</div>
+          <div class="state-desc">稍等一下，心屿正在读取最近的记录。</div>
+        </div>
+
+        <div v-else-if="moodList.length === 0" class="empty">
+          <div class="empty-title">这里还很安静</div>
+          <div class="empty-desc">写下第一条心情记录，心屿会陪你慢慢整理。</div>
         </div>
 
         <div v-else class="record-list">
-          <article v-for="item in moodList" :key="item.id" class="record-card">
-            <div class="record-main">
-              <div class="record-top">
-                <span class="mood-tag" :class="getMoodClass(item.moodType)">
-                  {{ item.moodType }}
-                </span>
-                <span class="record-time">{{ formatTime(item.createTime) }}</span>
-              </div>
-
-              <p class="record-content">{{ item.content }}</p>
-
-              <div class="ai-reply-box">
-                <div class="ai-reply-title">心屿回复</div>
-                <p class="ai-reply-content">
-                  {{ item.aiReply || '暂无心屿回复' }}
-                </p>
-              </div>
-            </div>
-
-            <div class="record-actions">
-              <button class="detail-btn" @click="loadMoodDetail(item.id)">详情</button>
-              <button class="delete-btn" @click="deleteMood(item.id)">删除</button>
-            </div>
-          </article>
+          <MoodCard
+            v-for="item in moodList"
+            :key="item.id"
+            :mood="item"
+            :mood-class="getMoodClass(item.moodType)"
+            :formatted-time="formatTime(item.createTime)"
+            :deleting="deletingId === item.id" 
+            :detail-loading="detailLoadingId===item.id"
+            @detail="loadMoodDetail"
+            @delete="deleteMood"
+          />
         </div>
 
         <div v-if="total > 0" class="pagination">
-          <button class="page-btn" :disabled="pageNum <= 1" @click="prevPage">
+          <button class="page-btn" :disabled="listLoading || pageNum <= 1" @click="prevPage">
             上一页
           </button>
 
-          <span>第 {{ pageNum }} / {{ pages }} 页，共 {{ total }} 条</span>
+          <span class="page-info">第 {{ pageNum }} / {{ pages }} 页，共 {{ total }} 条</span>
 
-          <button class="page-btn" :disabled="pageNum >= pages" @click="nextPage">
+          <button class="page-btn" :disabled="listLoading || pageNum >= pages" @click="nextPage">
             下一页
           </button>
         </div>
       </section>
     </main>
 
-    <div v-if="selectedMood" class="detail-overlay" @click.self="closeDetail">
-      <section class="detail-dialog">
-        <div class="detail-header">
-          <div>
-            <div class="section-kicker">记录详情</div>
-            <h3>心情记录详情</h3>
-          </div>
-
-          <div class="detail-actions">
-            <button class="soft-btn" @click="startEdit(selectedMood)">编辑</button>
-            <button class="plain-btn" @click="closeDetail">关闭</button>
-          </div>
-        </div>
-
-        <div class="detail-meta">
-          <span class="mood-tag" :class="getMoodClass(selectedMood.moodType)">
-            {{ selectedMood.moodType }}
-          </span>
-          <span>创建于 {{ formatTime(selectedMood.createTime) }}</span>
-          <span>更新于 {{ formatTime(selectedMood.updateTime) }}</span>
-        </div>
-
-        <div class="detail-block">
-          <h4>心情内容</h4>
-          <p>{{ selectedMood.content }}</p>
-        </div>
-
-        <div class="detail-block ai-detail">
-          <h4>心屿回复</h4>
-          <p>{{ selectedMood.aiReply || '暂无心屿回复' }}</p>
-        </div>
-
-        <div v-if="editingMoodId === selectedMood.id" class="edit-box">
-          <h4>编辑心情记录</h4>
-
-          <select v-model="editMoodType">
-            <option value="">请选择心情类型</option>
-            <option value="开心">开心</option>
-            <option value="平静">平静</option>
-            <option value="焦虑">焦虑</option>
-            <option value="难过">难过</option>
-            <option value="疲惫">疲惫</option>
-            <option value="其他">其他</option>
-          </select>
-
-          <textarea
-            v-model="editContent"
-            placeholder="请输入修改后的心情内容"
-          ></textarea>
-
-          <div class="edit-actions">
-            <button class="primary-btn" :disabled="updating" @click="updateMood">
-              {{ updating ? '心屿正在重新生成回复...' : '保存修改' }}
-            </button>
-            <button class="plain-btn" @click="cancelEdit">取消</button>
-          </div>
-        </div>
-      </section>
-    </div>
+    <MoodDetailDialog
+      v-if="selectedMood"
+      v-model:editMoodType="editMoodType"
+      v-model:editContent="editContent"
+      :mood="selectedMood"
+      :mood-options="moodOptions"
+      :editing="editingMoodId === selectedMood.id"
+      :updating="updating"
+      :mood-class="getMoodClass(selectedMood.moodType)"
+      :format-time="formatTime"
+      @close="closeDetail"
+      @start-edit="startEdit"
+      @update="updateMood"
+      @cancel-edit="cancelEdit"
+    />
   </div>
 </template>
 
@@ -515,10 +622,14 @@ function nextPage() {
 .home-page {
   min-height: 100vh;
   padding: 32px;
-  color: #243044;
+  color: #2f3a3d;
   background:
-    linear-gradient(135deg, rgba(89, 126, 247, 0.12), rgba(88, 166, 137, 0.1)),
-    #f6f8fc;
+    radial-gradient(circle at 12% 16%, rgba(95, 158, 160, 0.18), transparent 28%),
+    radial-gradient(circle at 86% 10%, rgba(238, 234, 248, 0.78), transparent 28%),
+    radial-gradient(circle at 72% 84%, rgba(216, 169, 109, 0.12), transparent 26%),
+    linear-gradient(135deg, #faf8f3 0%, #f6f3ea 48%, #fffdf8 100%);
+  background-size: 120% 120%;
+  animation: ambientShift 20s ease-in-out infinite alternate;
 }
 
 .header,
@@ -528,12 +639,8 @@ function nextPage() {
 }
 
 .header {
-  margin-bottom: 24px;
-  padding: 24px 28px;
-  border: 1px solid rgba(90, 110, 150, 0.12);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 40px rgba(46, 64, 100, 0.08);
+  margin-bottom: 22px;
+  padding: 18px 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -541,9 +648,6 @@ function nextPage() {
 
 .brand,
 .user-area,
-.record-top,
-.record-actions,
-.detail-actions,
 .edit-actions {
   display: flex;
   align-items: center;
@@ -554,33 +658,33 @@ function nextPage() {
 }
 
 .brand-mark {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: #4f72e8;
+  background: linear-gradient(135deg, #5f9ea0, #7e8fc7);
   color: #fff;
   font-size: 22px;
   font-weight: 700;
+  box-shadow: 0 12px 28px rgba(95, 158, 160, 0.24);
 }
 
 .header h1,
-.panel h2,
-.detail-dialog h3 {
+.panel h2 {
   margin: 0;
-  color: #182235;
+  color: #2f3a3d;
   letter-spacing: 0;
 }
 
 .header h1 {
-  font-size: 32px;
+  font-size: 28px;
 }
 
 .header p,
 .panel-desc {
   margin: 6px 0 0;
-  color: #6f7787;
+  color: #778184;
   line-height: 1.6;
 }
 
@@ -602,13 +706,6 @@ function nextPage() {
   box-shadow: 0 18px 40px rgba(46, 64, 100, 0.08);
 }
 
-.add-panel {
-  padding: 28px;
-  align-self: start;
-  position: sticky;
-  top: 24px;
-}
-
 .list-panel {
   padding: 28px;
   min-width: 0;
@@ -616,7 +713,7 @@ function nextPage() {
 
 .section-kicker {
   margin-bottom: 8px;
-  color: #4f72e8;
+  color: #3f7378;
   font-size: 13px;
   font-weight: 700;
 }
@@ -625,19 +722,12 @@ function nextPage() {
   font-size: 28px;
 }
 
-.form {
-  margin-top: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
 input,
 select,
 textarea {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #d8deea;
+  border: 1px solid #e6e1d8;
   border-radius: 8px;
   padding: 12px 14px;
   outline: none;
@@ -649,14 +739,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #4f72e8;
-  box-shadow: 0 0 0 3px rgba(79, 114, 232, 0.12);
-}
-
-textarea {
-  min-height: 180px;
-  resize: vertical;
-  line-height: 1.7;
+  border-color: #5f9ea0;
+  box-shadow: 0 0 0 3px rgba(95, 158, 160, 0.14);
 }
 
 button {
@@ -669,9 +753,12 @@ button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-button:disabled {
+textarea:disabled,
+select:disabled,
+input:disabled {
   cursor: not-allowed;
-  opacity: 0.65;
+  background: #f4f6fa;
+  color: #98a2b3;
 }
 
 .primary-btn,
@@ -689,28 +776,29 @@ button:disabled {
 }
 
 .primary-btn {
-  background: #4f72e8;
+  background: linear-gradient(135deg, #4f8f91, #6caeb0);
   color: #fff;
   font-weight: 700;
+  box-shadow: 0 10px 22px rgba(95, 158, 160, 0.2);
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #3f61d3;
+  background: linear-gradient(135deg, #3f7378, #5f9ea0);
 }
 
 .soft-btn,
 .ghost-btn,
 .page-btn,
 .detail-btn {
-  background: #eef3ff;
-  color: #3f61d3;
+  background: #e8f1ef;
+  color: #3f7378;
 }
 
 .soft-btn:hover,
 .ghost-btn:hover,
 .page-btn:hover,
 .detail-btn:hover {
-  background: #e0e9ff;
+  background: #dbe9e7;
 }
 
 .plain-btn {
@@ -723,12 +811,12 @@ button:disabled {
 }
 
 .delete-btn {
-  background: #fff1f1;
-  color: #c95151;
+  background: transparent;
+  color: #b85b5b;
 }
 
 .delete-btn:hover {
-  background: #ffe3e3;
+  background: #fff1f1;
 }
 
 .list-header {
@@ -740,132 +828,135 @@ button:disabled {
 
 .filter-area {
   margin: 22px 0;
+  padding: 12px;
   display: grid;
-  grid-template-columns: 150px 170px 170px auto auto;
+  grid-template-columns: 150px minmax(150px, 1fr) minmax(150px, 1fr) auto auto;
   gap: 10px;
   align-items: center;
+  border: 1px solid #e6e1d8;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.trend-panel {
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid #e6e1d8;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #fffdf8, #f7fbfa);
+}
+
+.trend-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.trend-summary > div {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.trend-label {
+  margin-bottom: 6px;
+  color: #7b817c;
+  font-size: 12px;
+}
+
+.trend-summary strong {
+  display: block;
+  color: #2f3a3d;
+  font-size: 22px;
+}
+
+.trend-summary span {
+  color: #7b817c;
+  font-size: 13px;
+}
+
+.trend-empty {
+  margin-top: 14px;
+  color: #7b817c;
+  font-size: 14px;
+}
+
+.trend-bars {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.trend-row-top {
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  color: #4f5d5f;
+  font-size: 13px;
+}
+
+.trend-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf0ec;
+}
+
+.trend-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5f9ea0, #9b8ac7);
+}
+
+
+.filter-area select,
+.filter-area input {
+  height: 40px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .empty {
-  padding: 52px 20px;
-  border: 1px dashed #ccd5e7;
+  padding: 56px 24px;
+  border: 1px dashed #e2d9ca;
   border-radius: 8px;
-  background: #f8faff;
+  background: linear-gradient(180deg, #fffdf8, #f7f3ea);
   text-align: center;
+}
+
+.state-box {
+  padding: 56px 24px;
+  border: 1px dashed #d9e5e2;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #f4faf8);
+  text-align: center;
+}
+
+.state-title {
+  margin-bottom: 8px;
+  color: #354244;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.state-desc {
+  color: #7b817c;
 }
 
 .empty-title {
   margin-bottom: 8px;
-  color: #344054;
+  color: #354244;
   font-size: 17px;
   font-weight: 700;
 }
 
 .empty-desc {
-  color: #7a8494;
+  color: #7b817c;
 }
 
 .record-list {
   display: grid;
   gap: 12px;
-}
-
-.record-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
-  padding: 18px;
-  border: 1px solid #e5ebf5;
-  border-radius: 8px;
-  background: #fbfcff;
-}
-
-.record-main {
-  min-width: 0;
-}
-
-.record-top {
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.record-actions {
-  gap: 8px;
-}
-
-.mood-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.mood-happy {
-  background: #fff2cf;
-  color: #946200;
-}
-
-.mood-calm {
-  background: #e6f5ed;
-  color: #28724d;
-}
-
-.mood-anxious {
-  background: #fff0e4;
-  color: #b65f18;
-}
-
-.mood-sad {
-  background: #e9eef7;
-  color: #50627d;
-}
-
-.mood-default {
-  background: #eef3ff;
-  color: #3f61d3;
-}
-
-.record-content {
-  margin: 12px 0;
-  color: #263244;
-  line-height: 1.7;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.record-time {
-  color: #8a94a6;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.ai-reply-box {
-  padding: 12px 14px;
-  border-left: 3px solid #4f72e8;
-  border-radius: 8px;
-  background: #f2f6ff;
-}
-
-.ai-reply-title {
-  margin-bottom: 4px;
-  color: #3f61d3;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ai-reply-content {
-  margin: 0;
-  color: #566174;
-  line-height: 1.7;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 
 .pagination {
@@ -874,8 +965,14 @@ button:disabled {
   justify-content: center;
   align-items: center;
   gap: 14px;
-  color: #667085;
+  color: #778184;
   font-size: 14px;
+}
+
+.page-info {
+  min-width: 150px;
+  text-align: center;
+  color: #7b817c;
 }
 
 .message {
@@ -901,79 +998,6 @@ button:disabled {
   color: #946200;
 }
 
-.detail-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  padding: 32px;
-  background: rgba(21, 30, 48, 0.42);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.detail-dialog {
-  width: min(760px, 100%);
-  max-height: calc(100vh - 64px);
-  overflow: auto;
-  padding: 26px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
-}
-
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: flex-start;
-}
-
-.detail-meta {
-  margin: 18px 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  color: #7a8494;
-  font-size: 14px;
-}
-
-.detail-block {
-  margin-top: 14px;
-  padding: 16px;
-  border: 1px solid #e5ebf5;
-  border-radius: 8px;
-  background: #fbfcff;
-}
-
-.detail-block h4,
-.edit-box h4 {
-  margin: 0 0 10px;
-  color: #263244;
-  font-size: 16px;
-}
-
-.detail-block p {
-  margin: 0;
-  color: #344054;
-  line-height: 1.8;
-}
-
-.ai-detail {
-  border-left: 3px solid #4f72e8;
-  background: #f2f6ff;
-}
-
-.edit-box {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid #dfe6f2;
-  border-radius: 8px;
-  display: grid;
-  gap: 12px;
-}
-
 @media (max-width: 980px) {
   .home-page {
     padding: 18px;
@@ -989,20 +1013,17 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .add-panel {
-    position: static;
-  }
-
   .filter-area {
     grid-template-columns: 1fr 1fr;
   }
 
-  .record-card {
+  .trend-summary {
     grid-template-columns: 1fr;
   }
 
-  .record-actions {
-    justify-content: flex-end;
+  .filter-area .soft-btn,
+  .filter-area .plain-btn {
+    width: 100%;
   }
 }
 
@@ -1011,17 +1032,28 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .detail-overlay {
-    padding: 14px;
-  }
-
-  .detail-header {
-    flex-direction: column;
-  }
-
   .user-area {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .pagination {
+    flex-wrap: wrap;
+  }
+
+  .page-info {
+    order: -1;
+    width: 100%;
+  }
+}
+
+@keyframes ambientShift {
+  0% {
+    background-position: 0% 0%;
+  }
+
+  100% {
+    background-position: 100% 70%;
   }
 }
 </style>

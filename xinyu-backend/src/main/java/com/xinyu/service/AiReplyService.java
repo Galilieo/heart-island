@@ -1,5 +1,6 @@
 package com.xinyu.service;
 
+import com.xinyu.dto.AiReplyResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -27,11 +28,18 @@ public class AiReplyService {
     private RestTemplate restTemplate;
 
     public String generateReply(String moodType, String content) {
+        return generateReplyResult(moodType, content).getReplyContent();
+    }
+
+    public AiReplyResult generateReplyResult(String moodType, String content) {
+        String prompt = buildPromptText(moodType, content);
+
         try {
-            return doGenerateReply(moodType, content);
+            String replyContent = doGenerateReply(moodType, content);
+            return AiReplyResult.success(replyContent, prompt, model);
         } catch (Exception e) {
             e.printStackTrace();
-            return getDefaultReply();
+            return AiReplyResult.failure(getDefaultReply(), prompt, model, e.getMessage());
         }
     }
 
@@ -92,6 +100,20 @@ public class AiReplyService {
         messages.add(userMessage);
 
         return messages;
+    }
+
+    private String buildPromptText(String moodType, String content) {
+        StringBuilder promptBuilder = new StringBuilder();
+
+        for (Map<String, String> message : buildMessages(moodType, content)) {
+            promptBuilder
+                    .append(message.get("role"))
+                    .append(": ")
+                    .append(message.get("content"))
+                    .append("\n");
+        }
+
+        return promptBuilder.toString().trim();
     }
 
     private String parseReply(Map responseBody) {

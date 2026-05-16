@@ -5,6 +5,7 @@ import com.xinyu.common.Result;
 import com.xinyu.entity.MoodRecord;
 import com.xinyu.service.MoodRecordService;
 import com.xinyu.utils.JwtUtil;
+import com.xinyu.vo.MoodTrendVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -142,5 +143,17 @@ public class MoodRecordController {
         }
 
         return Result.success("修改成功", true);
+    }
+
+    @GetMapping("/trend/recent7")
+    public Result<MoodTrendVO> recentSevenDaysTrend(@RequestHeader(required = false) String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return Result.error("请先登录");
+        }
+
+        Long userId = jwtUtil.getUserId(token);
+        MoodTrendVO trend = moodRecordService.getRecentSevenDaysTrend(userId);
+
+        return Result.success("查询成功", trend);
     }
 }
