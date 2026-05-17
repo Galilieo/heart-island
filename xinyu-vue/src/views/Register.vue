@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../utils/request'
+import logoUrl from '../assets/logo-xinyu.png'
 
 const router = useRouter()
 
@@ -72,7 +73,9 @@ function showMessage(text, type = 'error') {
 <template>
   <div class="auth-page">
     <section class="auth-card">
-      <div class="brand-mark">心</div>
+      <div class="brand-mark">
+        <img :src="logoUrl" alt="心屿 logo" />
+      </div>
       <p class="kicker">新的开始</p>
       <h1>创建账号</h1>
       <p class="subtitle">给自己的心情留一个安静的位置，从今天开始慢慢记录。</p>
@@ -127,13 +130,16 @@ function showMessage(text, type = 'error') {
   height: 48px;
   margin: 0 auto 18px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #5f9ea0, #7e8fc7);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 700;
+  overflow: hidden;
+  background: #fff;
   box-shadow: 0 12px 28px rgba(95, 158, 160, 0.24);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .kicker {

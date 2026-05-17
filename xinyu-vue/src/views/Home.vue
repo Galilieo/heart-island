@@ -5,6 +5,7 @@ import request from '../utils/request'
 import MoodCard from '../components/MoodCard.vue'
 import MoodDetailDialog from '../components/MoodDetailDialog.vue'
 import MoodForm from '../components/MoodForm.vue'
+import logoUrl from '../assets/logo-xinyu.png'
 
 const router = useRouter()
 
@@ -474,7 +475,9 @@ function nextPage() {
 
     <header class="header">
       <div class="brand">
-        <div class="brand-mark">心</div>
+        <div class="brand-mark">
+          <img :src="logoUrl" alt="心屿 logo" />
+        </div>
         <div>
           <h1>心屿</h1>
           <p>AI 情绪陪伴系统</p>
@@ -661,13 +664,16 @@ function nextPage() {
   width: 46px;
   height: 46px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #5f9ea0, #7e8fc7);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 700;
+  overflow: hidden;
+  background: #fff;
   box-shadow: 0 12px 28px rgba(95, 158, 160, 0.24);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .header h1,
