@@ -24,7 +24,7 @@ export function usePagination(fetcher, options = {}) {
       const res = await fetcher({
         pageNum: state.pageNum,
         pageSize: state.pageSize,
-        ...(extra || {})
+        ...extra
       })
       if (res && typeof res === 'object') {
         if (typeof res.total === 'number') state.total = res.total
