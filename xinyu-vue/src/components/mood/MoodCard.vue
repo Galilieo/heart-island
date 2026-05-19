@@ -1,4 +1,6 @@
 <script setup>
+// 心情记录卡片。展示心情类型、时间、内容（3 行截断）和 AI 回复（2 行截断）。
+// 点查看详情触发 @detail，点删除触发 @delete，loading 状态由父级传入。
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTag from '../ui/BaseTag.vue'
 import BaseButton from '../ui/BaseButton.vue'

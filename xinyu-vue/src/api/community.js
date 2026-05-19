@@ -1,3 +1,6 @@
+// 社区相关接口：帖子 + 回复。
+// 注意后端 like/unlike/favorite/unfavorite/delete 用的是 query param
+// （不是请求体），所以这里都走 params 形式。
 import { request, unwrap } from './_helpers'
 
 export const communityApi = {

@@ -1,4 +1,5 @@
 <script setup>
+// 加载占位卡片。列表请求中显示几个占位，避免空白闪烁。
 defineProps({
   rows: { type: [Number, String], default: 3 },
   avatar: Boolean

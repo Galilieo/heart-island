@@ -1,4 +1,9 @@
 <script setup>
+// 社区帖子列表页。
+//   - 顶部 hero + 话题胶囊筛选（TopicFilter）
+//   - 可折叠的发帖表单（PostPublishForm）
+//   - 帖子卡列表 + 全部/我的切换
+// 点卡片跳详情页；点赞/收藏在卡片上原地完成（走 communityStore 的乐观更新）。
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'

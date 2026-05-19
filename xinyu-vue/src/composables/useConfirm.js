@@ -1,5 +1,11 @@
+// 全局确认弹窗。模块级单例，配合 ConfirmDialog.vue 使用。
+// 用法：
+//   const { confirm } = useConfirm()
+//   const ok = await confirm({ title: '删除？', tone: 'danger' })
+//   if (!ok) return
 import { reactive } from 'vue'
 
+// 当前弹窗状态；ConfirmDialog 监听这个对象渲染 UI
 const state = reactive({
   open: false,
   title: '',
@@ -10,6 +16,7 @@ const state = reactive({
   _resolve: null
 })
 
+// 打开弹窗并返回 Promise<boolean>：用户点确定 → true，取消/关闭 → false
 function confirm(options = {}) {
   state.title = options.title || '确认操作'
   state.content = options.content || ''

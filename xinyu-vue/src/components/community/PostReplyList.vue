@@ -1,4 +1,9 @@
 <script setup>
+// 回复列表。
+// 楼主才能看到的"编辑/删除"按钮 inline 工作：
+//   - 编辑：在卡片内切到 textarea，保存通过 @edit-submit 给父级，
+//     父级在成功后调用回调 done() 让本组件退出编辑态。
+//   - 删除：直接 @delete，由父级走 useConfirm + store。
 import { ref, computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'

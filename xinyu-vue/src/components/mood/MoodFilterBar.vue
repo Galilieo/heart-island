@@ -1,4 +1,6 @@
 <script setup>
+// 心情列表筛选栏：心情类型 + 起止日期。
+// 自身不发请求，只通过 v-model + @apply/@reset 把意图给父级。
 import { computed } from 'vue'
 import BaseSelect from '../ui/BaseSelect.vue'
 import BaseButton from '../ui/BaseButton.vue'

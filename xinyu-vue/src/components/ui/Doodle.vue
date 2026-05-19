@@ -1,4 +1,6 @@
 <script setup>
+// 手绘风 SVG 小图。8 种图案：cloud/star/leaf/wave/cup/plant/sun/heart。
+// 用 currentColor 描边，可被父级的 color 样式直接控制颜色。
 defineProps({
   name: {
     type: String,

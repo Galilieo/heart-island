@@ -1,4 +1,5 @@
 <script setup>
+// 页脚：一行 slogan 加两片叶子涂鸦。
 import Doodle from '../ui/Doodle.vue'
 </script>
 

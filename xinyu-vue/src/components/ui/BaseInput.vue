@@ -1,4 +1,6 @@
 <script setup>
+// 单行输入框。支持 v-model、label、hint、error 文案。
+// 聚焦时薄荷青描边 + 软光晕。回车触发 @enter 事件，方便登录之类的页面快捷提交。
 defineProps({
   modelValue: { type: [String, Number], default: '' },
   type: { type: String, default: 'text' },

@@ -1,3 +1,6 @@
+// 用户 store：登录态 + 用户信息的唯一来源。
+// view 不再直接读 localStorage，统一通过这个 store。
+// 持久化策略：token + loginUser 同步写入 localStorage，刷新页面后自动恢复。
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { userApi } from '../api'
@@ -21,6 +24,7 @@ export const useUserStore = defineStore('user', () => {
 
   const isLoggedIn = computed(() => Boolean(token.value))
 
+  // 设置/清空登录态：传 null 视为登出
   function setSession(payload) {
     token.value = payload?.token || ''
     loginUser.value = payload?.user || null

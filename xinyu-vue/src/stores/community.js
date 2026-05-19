@@ -1,3 +1,8 @@
+// 社区 store：话题 / 帖子列表 / 当前帖子详情 / 回复列表。
+// 设计思路：
+//  - PostList 关心 posts + filters；PostDetail 关心 currentPost + replies
+//  - toggleLike/toggleFavorite 走"乐观更新"：先把本地状态翻转，
+//    后端返回失败时再 toast 错误（这一步由 view 接住）
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { communityApi, topicApi } from '../api'

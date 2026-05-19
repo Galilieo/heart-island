@@ -1,4 +1,6 @@
 <script setup>
+// 话题胶囊筛选器。第一个"全部"对应 topicId=null，
+// 点击发 @select(topicId)，自身不知道当前的列表，纯展示。
 defineProps({
   topics: { type: Array, default: () => [] },
   selectedTopicId: { type: [String, Number, null], default: null },

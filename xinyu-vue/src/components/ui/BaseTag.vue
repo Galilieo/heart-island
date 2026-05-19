@@ -1,4 +1,6 @@
 <script setup>
+// 标签。tone 决定配色（含 5 种心情色 joy/calm/sad/angry/tired），
+// variant 决定填充方式（soft 柔底 / solid 实色 / outline 描边）。
 defineProps({
   tone: {
     type: String,

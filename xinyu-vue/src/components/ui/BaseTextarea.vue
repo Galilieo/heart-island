@@ -1,4 +1,5 @@
 <script setup>
+// 多行输入框。带 maxlength 时右下角会自动显示字数计数。
 defineProps({
   modelValue: { type: String, default: '' },
   placeholder: String,

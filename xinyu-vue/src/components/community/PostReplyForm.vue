@@ -1,4 +1,6 @@
 <script setup>
+// 发回复用的小卡片。500 字以内。
+// 提交把字符串内容传给父级，父级调 store.publishReply 后 reset() 清空。
 import { ref, computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'

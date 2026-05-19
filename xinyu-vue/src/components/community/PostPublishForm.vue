@@ -1,4 +1,7 @@
 <script setup>
+// 发帖表单：话题 + 情绪 + 内容（800 字内）。
+// 表单值在组件内部维护，提交时通过 @submit 把完整 payload 给父级；
+// 父级请求成功后调 resetAfterSuccess() 清空表单（情绪 + 内容，话题保留方便连续发）。
 import { ref, computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseSelect from '../ui/BaseSelect.vue'

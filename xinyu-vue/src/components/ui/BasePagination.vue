@@ -1,4 +1,6 @@
 <script setup>
+// 分页器。页数超过 7 页时自动折叠成"1 … 当前 … N"的省略形式。
+// 不内置数据请求，只发 @change(pageNum) 事件，由父级决定怎么刷新。
 import { computed } from 'vue'
 
 const props = defineProps({

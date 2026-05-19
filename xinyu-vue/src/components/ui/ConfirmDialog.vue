@@ -1,4 +1,6 @@
 <script setup>
+// 全局确认弹窗的渲染器。挂在 App.vue 一次即可，
+// 由 useConfirm() 控制开关与 Promise 返回结果。
 import { _confirmState } from '../../composables/useConfirm'
 
 const { state, accept, reject } = _confirmState()

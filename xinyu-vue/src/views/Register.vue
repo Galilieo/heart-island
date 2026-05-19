@@ -1,4 +1,6 @@
 <script setup>
+// 注册页。结构与 Login 几乎一样，多一个昵称字段。
+// 注册成功后回到登录页（不自动登录，让用户主动确认密码）。
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AuthLayout from '../components/layout/AuthLayout.vue'

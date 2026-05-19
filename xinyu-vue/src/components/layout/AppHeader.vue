@@ -1,4 +1,6 @@
 <script setup>
+// 顶部导航条。包含 Logo、心情/社区 两个 Tab、右侧用户菜单。
+// 用户菜单里的"退出登录"会弹确认框，确认后清登录态并跳回登录页。
 import { ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useUserStore } from '../../stores/user'

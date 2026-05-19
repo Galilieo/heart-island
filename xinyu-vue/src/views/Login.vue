@@ -1,4 +1,6 @@
 <script setup>
+// 登录页。表单 → userStore.login → 成功跳 /home。
+// 校验仅做"非空"，详细错误（密码错等）由后端返回，通过 toast 展示。
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AuthLayout from '../components/layout/AuthLayout.vue'

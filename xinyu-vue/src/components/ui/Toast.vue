@@ -1,4 +1,6 @@
 <script setup>
+// Toast 队列的全局渲染器。挂在 App.vue 顶层一份就够，
+// 不要在多个地方挂，会渲染重复。点击 toast 可立即关闭。
 import { _toastState, useToast } from '../../composables/useToast'
 
 const state = _toastState()

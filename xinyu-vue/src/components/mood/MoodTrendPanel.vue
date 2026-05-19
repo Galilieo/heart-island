@@ -1,4 +1,6 @@
 <script setup>
+// 7 天情绪小图。顶部 3 个统计块（总数 / 主旋律 / 最近一次），
+// 下方按心情维度展示横向条形，宽度按当前最大计数等比缩放。
 import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTag from '../ui/BaseTag.vue'

@@ -1,4 +1,9 @@
 <script setup>
+// 心情主页。整页只做"组装 + 事件绑定"：
+//   - 左栏：MoodForm（写心情）
+//   - 右栏：MoodTrendPanel（7 天趋势）+ MoodFilterBar + MoodCard 列表 + 分页
+//   - 中心：MoodDetailDialog（查看/编辑详情弹窗）
+// 所有数据/请求逻辑都在 moodStore，本文件不直接调 api 或读 localStorage。
 import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'

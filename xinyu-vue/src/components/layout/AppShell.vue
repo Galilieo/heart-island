@@ -1,4 +1,7 @@
 <script setup>
+// 登录后页面的整体外壳：顶部导航 + 内容区 + 底部 + 纸纹理背景。
+// width: normal/narrow/wide 决定 slot 的最大宽度。
+// 登录/注册页不用这个，它们用 AuthLayout。
 import AppHeader from './AppHeader.vue'
 import AppFooter from './AppFooter.vue'
 

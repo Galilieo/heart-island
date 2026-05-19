@@ -1,3 +1,5 @@
+// 分页状态封装：维护 pageNum/pageSize/total/pages，并提供 goto/next/prev/reset。
+// 适合配合后端的 PageHelper 风格分页响应。
 import { reactive, computed } from 'vue'
 
 /**

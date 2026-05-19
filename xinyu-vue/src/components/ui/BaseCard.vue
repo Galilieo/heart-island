@@ -1,4 +1,6 @@
 <script setup>
+// 通用卡片容器。padding 三档 + 4 种 tone（白/奶油/品牌色/强调色），
+// hoverable 时鼠标悬停会浮起；tilt 可以让卡片轻微旋转出"手绘感"。
 defineProps({
   padding: {
     type: String,

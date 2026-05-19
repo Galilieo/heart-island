@@ -1,4 +1,6 @@
 <script setup>
+// 下拉选择框。options 形如 [{label, value}]，原生 <select> 套个壳，
+// 保持和 BaseInput 一致的视觉规范。
 defineProps({
   modelValue: { type: [String, Number, null], default: '' },
   options: { type: Array, default: () => [] }, // [{label, value}]

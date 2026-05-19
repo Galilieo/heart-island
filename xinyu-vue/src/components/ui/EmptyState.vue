@@ -1,4 +1,5 @@
 <script setup>
+// 空状态占位。一张涂鸦 + 标题 + 提示 + 可选操作按钮（通过 default slot 传）。
 import Doodle from './Doodle.vue'
 
 defineProps({

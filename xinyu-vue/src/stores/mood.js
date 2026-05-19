@@ -1,3 +1,6 @@
+// 心情 store：列表 / 筛选 / 分页 / 趋势 / 选中详情。
+// 关键约定：add/update/remove 成功后会自动刷新列表和趋势，
+// view 只需要 await store.add()，不用再手动 reload。
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { moodApi } from '../api'
@@ -27,6 +30,7 @@ export const useMoodStore = defineStore('mood', () => {
     moodCounts: []
   })
 
+  // 把 store 内的 filters + pagination 拼成后端能识别的 query 参数
   function buildListParams() {
     return {
       moodType: filters.moodType || undefined,

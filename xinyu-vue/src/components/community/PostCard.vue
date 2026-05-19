@@ -1,4 +1,8 @@
 <script setup>
+// 帖子卡。两种 variant：
+//   - card：列表中使用，3 行截断，整卡可点跳详情
+//   - detail：详情页使用，全文展示 + 楼主才显示的编辑/删除
+// 点赞 / 收藏 / 编辑 / 删除都只发事件，逻辑在父级走 communityStore。
 import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTag from '../ui/BaseTag.vue'

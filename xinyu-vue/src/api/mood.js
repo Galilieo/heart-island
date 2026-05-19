@@ -1,3 +1,5 @@
+// 心情记录相关接口：增删改查 + 7 天趋势统计。
+// AI 回复由后端在 create/update 时自动生成，不需要前端单独调。
 import { request, unwrap } from './_helpers'
 
 export const moodApi = {

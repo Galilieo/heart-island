@@ -1,4 +1,10 @@
 <script setup>
+// 帖子详情页。窄栏单列布局：
+//   - PostCard（detail 变体，含点赞/收藏；楼主额外见编辑/删除）
+//   - PostReplyForm（发新回复）
+//   - PostReplyList（已有回复列表 + 楼主自己回复的 inline 编辑/删除）
+//   - PostEditDialog（楼主编辑帖子时打开）
+// 路由参数 :id 变化时会自动重新拉详情和回复。
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'

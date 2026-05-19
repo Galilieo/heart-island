@@ -1,11 +1,15 @@
+// 全局 Toast 提示。模块级单例：任何组件 import 拿到的都是同一份队列。
+// 用法：const toast = useToast(); toast.success('保存成功')
 import { reactive } from 'vue'
 
+// 当前正在显示的所有 toast；由 Toast.vue 渲染
 const state = reactive({
   items: []
 })
 
 let seq = 0
 
+// 新增一条 toast，duration 毫秒后自动消失；duration=0 表示不自动消失
 function push(type, message, duration = 2400) {
   const id = ++seq
   state.items.push({ id, type, message })

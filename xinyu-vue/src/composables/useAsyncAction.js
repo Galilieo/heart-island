@@ -1,3 +1,5 @@
+// 异步动作封装：把"loading 状态 + try/catch + 成功/失败 toast"打包成一行。
+// 解决的问题：原来每个按钮都要写一遍 loading=true → try → toast → finally。
 import { ref } from 'vue'
 import { useToast } from './useToast'
 

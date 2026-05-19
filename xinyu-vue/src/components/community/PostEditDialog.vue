@@ -1,4 +1,6 @@
 <script setup>
+// 编辑帖子弹窗。打开/post 变化时把表单值同步成当前帖子的内容。
+// 保存中（saving=true）不允许通过遮罩或 ESC 关闭，避免误关丢数据。
 import { ref, watch, computed } from 'vue'
 import BaseDialog from '../ui/BaseDialog.vue'
 import BaseSelect from '../ui/BaseSelect.vue'

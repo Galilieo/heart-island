@@ -1,4 +1,7 @@
 <script setup>
+// 登录/注册页共用的两栏布局。
+// 左：漂浮涂鸦 + slogan；右：白色表单卡（slot 放具体表单）。
+// 窄屏自动堆叠成单列。
 import Doodle from '../ui/Doodle.vue'
 import logoUrl from '../../assets/logo-xinyu.png'
 

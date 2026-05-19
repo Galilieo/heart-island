@@ -1,3 +1,7 @@
+// 路由表 + 全局守卫。
+// 守卫规则：
+//   - 带 requiresAuth 的页面，未登录跳 /
+//   - 已登录访问 / 或 /register 自动跳 /home
 import { createRouter, createWebHistory } from 'vue-router'
 
 import Login from '../views/Login.vue'

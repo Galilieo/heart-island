@@ -1,4 +1,7 @@
 <script setup>
+// 心情详情弹窗。默认展示心情/时间/内容/AI 回复；
+// 点"编辑"切到编辑模式（chip + textarea），保存后由父级负责调 store.update。
+// editing 状态留在组件内部，关闭/切换记录时自动重置。
 import { ref, watch, computed } from 'vue'
 import BaseDialog from '../ui/BaseDialog.vue'
 import BaseTag from '../ui/BaseTag.vue'

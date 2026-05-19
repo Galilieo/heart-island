@@ -1,4 +1,6 @@
 <script setup>
+// 新增心情的表单卡。心情类型用 6 个 chip（命中后高亮对应颜色）+ 大段 textarea。
+// 表单值通过 v-model:mood-type / v-model:content 由父级管理，自身不持有状态。
 import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'

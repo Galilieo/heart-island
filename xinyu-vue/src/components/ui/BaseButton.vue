@@ -1,4 +1,6 @@
 <script setup>
+// 通用按钮。支持 6 种 variant（primary/soft/ghost/danger/plain/link）
+// 和 3 种 size（sm/md/lg），loading 时显示自旋指示器并禁用点击。
 defineProps({
   variant: {
     type: String,
