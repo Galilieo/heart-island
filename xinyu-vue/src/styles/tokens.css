@@ -1,0 +1,98 @@
+:root {
+  /* 背景 */
+  --bg-base: #fdfaf3;
+  --bg-soft: #f6efe1;
+  --bg-card: #ffffff;
+  --bg-overlay: rgba(47, 42, 36, 0.32);
+
+  /* 文字 */
+  --ink-1: #2f2a24;
+  --ink-2: #6b6357;
+  --ink-3: #a39c8e;
+  --ink-inverse: #fdfaf3;
+
+  /* 线条 */
+  --line: #ece4d4;
+  --line-strong: #d8cdb6;
+
+  /* 品牌色（薄荷青） */
+  --brand: #6fa9a4;
+  --brand-deep: #4d8580;
+  --brand-soft: #e4f0ee;
+
+  /* 强调色（杏粉） */
+  --accent: #d98c7a;
+  --accent-soft: #f8e2da;
+
+  /* 状态色 */
+  --warn: #d4a24a;
+  --warn-soft: #fbecc8;
+  --danger: #c66a6a;
+  --danger-soft: #f8dada;
+  --success: #6aa17a;
+  --success-soft: #dfeede;
+
+  /* 心情色 */
+  --joy: #f3b95f;
+  --joy-soft: #fdecca;
+  --calm: #9bc1bc;
+  --calm-soft: #e1efee;
+  --sad: #8fa5c4;
+  --sad-soft: #e1e8f1;
+  --angry: #d48a7a;
+  --angry-soft: #f5dcd5;
+  --tired: #b3a89a;
+  --tired-soft: #ebe5dc;
+
+  /* 字体 */
+  --font-sans: "MiSans", "Source Han Sans SC", "PingFang SC",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Smiley Sans", "ZCOOL KuaiLe", "MiSans", var(--font-sans);
+
+  /* 字号 */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-base: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 36px;
+
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  /* 圆角 */
+  --radius-1: 6px;
+  --radius-2: 12px;
+  --radius-3: 18px;
+  --radius-4: 24px;
+  --radius-pill: 999px;
+
+  /* 阴影（暖色调） */
+  --shadow-sm: 0 2px 6px rgba(120, 98, 60, 0.06);
+  --shadow-md: 0 12px 28px rgba(120, 98, 60, 0.10);
+  --shadow-lg: 0 22px 50px rgba(120, 98, 60, 0.14);
+  --shadow-inset: inset 0 0 0 1px var(--line);
+  --shadow-focus: 0 0 0 3px rgba(111, 169, 164, 0.22);
+
+  /* 动效 */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 140ms;
+  --t-base: 220ms;
+  --t-slow: 360ms;
+
+  /* 层级 */
+  --z-dropdown: 100;
+  --z-header: 200;
+  --z-dialog: 1000;
+  --z-toast: 2000;
+}
