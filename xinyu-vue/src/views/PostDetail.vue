@@ -154,8 +154,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppShell width="narrow">
-    <div class="detail">
+  <AppShell>
+    <div class="container detail">
       <button type="button" class="detail__back" @click="goBack">
         <span aria-hidden="true">←</span> 返回社区
       </button>
