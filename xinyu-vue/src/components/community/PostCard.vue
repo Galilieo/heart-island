@@ -59,10 +59,13 @@ const isOwner = computed(
       </div>
     </header>
 
-    <p
-      class="pc__content"
-      :class="variant === 'card' ? 'clamp-3' : ''"
-    >{{ post.content }}</p>
+    <div class="pc__body">
+      <span v-if="variant === 'detail'" class="pc__quote" aria-hidden="true">“</span>
+      <p
+        class="pc__content"
+        :class="variant === 'card' ? 'clamp-3' : ''"
+      >{{ post.content }}</p>
+    </div>
 
     <footer class="pc__actions" @click.stop>
       <button
@@ -164,16 +167,49 @@ const isOwner = computed(
   justify-content: flex-end;
 }
 
-.pc__content {
+.pc__body {
+  position: relative;
   margin: 8px 0 14px;
+}
+
+.pc__content {
+  position: relative;
+  margin: 0;
   color: var(--ink-1);
   line-height: 1.85;
   font-size: var(--fs-md);
   white-space: pre-wrap;
 }
 
+/* 详情态：内容更松、更大；左上角悬一个奶油色引号当装饰 */
+.pc--detail .pc__body {
+  padding: 14px 12px 18px 64px;
+  background: linear-gradient(135deg, var(--bg-soft), transparent 70%);
+  border-radius: var(--radius-2);
+}
+
 .pc--detail .pc__content {
   font-size: var(--fs-lg);
+  line-height: 1.95;
+}
+
+.pc__quote {
+  position: absolute;
+  left: 8px;
+  top: -18px;
+  font-family: var(--font-display);
+  font-size: 96px;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.28;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 详情卡再加一条虚线分隔，让底部 action 区域不那么"贴" */
+.pc--detail .pc__actions {
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-strong);
 }
 
 .pc__actions {
