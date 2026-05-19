@@ -58,6 +58,6 @@ defineProps({
   padding: 28px 0;
 }
 
-.shell__main--narrow :slotted(*) { max-width: 760px; margin-left: auto; margin-right: auto; }
+.shell__main--narrow :slotted(*) { max-width: 960px; margin-left: auto; margin-right: auto; }
 .shell__main--wide   :slotted(*) { max-width: none; }
 </style>
