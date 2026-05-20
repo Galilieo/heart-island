@@ -62,6 +62,11 @@ async function setScope(mine) {
   await doFetchPosts()
 }
 
+async function setSort(sort) {
+  communityStore.setSort(sort)
+  await doFetchPosts()
+}
+
 async function handlePublish(payload) {
   const res = await doPublish(payload)
   if (res.ok) {
@@ -146,19 +151,35 @@ onMounted(async () => {
             <p class="post-page__kicker">帖子</p>
             <h2 class="post-page__list-title">{{ selectedTopicName }}</h2>
           </div>
-          <div class="post-page__scope">
-            <button
-              type="button"
-              class="scope-chip"
-              :class="{ 'is-active': !filters.mine }"
-              @click="setScope(false)"
-            >全部</button>
-            <button
-              type="button"
-              class="scope-chip"
-              :class="{ 'is-active': filters.mine }"
-              @click="setScope(true)"
-            >我的</button>
+          <div class="post-page__controls">
+            <div class="post-page__scope">
+              <button
+                type="button"
+                class="scope-chip"
+                :class="{ 'is-active': filters.sort === 'latest' }"
+                @click="setSort('latest')"
+              >最新</button>
+              <button
+                type="button"
+                class="scope-chip"
+                :class="{ 'is-active': filters.sort === 'hot' }"
+                @click="setSort('hot')"
+              >最热</button>
+            </div>
+            <div class="post-page__scope">
+              <button
+                type="button"
+                class="scope-chip"
+                :class="{ 'is-active': !filters.mine }"
+                @click="setScope(false)"
+              >全部</button>
+              <button
+                type="button"
+                class="scope-chip"
+                :class="{ 'is-active': filters.mine }"
+                @click="setScope(true)"
+              >我的</button>
+            </div>
           </div>
         </header>
 
@@ -266,6 +287,12 @@ onMounted(async () => {
 .post-page__list-title {
   margin: 4px 0 0;
   font-size: var(--fs-xl);
+}
+
+.post-page__controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .post-page__scope {

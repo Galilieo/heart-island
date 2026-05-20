@@ -16,7 +16,8 @@ export const useCommunityStore = defineStore('community', () => {
 
   const filters = reactive({
     topicId: null,
-    mine: false
+    mine: false,
+    sort: 'latest' // latest | hot
   })
 
   async function fetchTopics() {
@@ -29,7 +30,8 @@ export const useCommunityStore = defineStore('community', () => {
   async function fetchPosts() {
     const res = await communityApi.postList({
       topicId: filters.topicId ?? undefined,
-      mine: filters.mine || undefined
+      mine: filters.mine || undefined,
+      sort: filters.sort || undefined
     })
     if (res.ok) posts.value = res.data || []
     return res
@@ -41,6 +43,10 @@ export const useCommunityStore = defineStore('community', () => {
 
   function setMineFilter(mine) {
     filters.mine = mine
+  }
+
+  function setSort(sort) {
+    filters.sort = sort
   }
 
   async function publishPost(payload) {
@@ -138,6 +144,7 @@ export const useCommunityStore = defineStore('community', () => {
     replies.value = []
     filters.topicId = null
     filters.mine = false
+    filters.sort = 'latest'
   }
 
   return {
@@ -150,6 +157,7 @@ export const useCommunityStore = defineStore('community', () => {
     fetchPosts,
     setTopicFilter,
     setMineFilter,
+    setSort,
     publishPost,
     updatePost,
     removePost,
