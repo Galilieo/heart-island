@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -56,6 +57,34 @@ public class CommunityPostService {
         }
 
         return posts;
+    }
+
+    /**
+     * 查询当前用户收藏的帖子，按收藏时间倒序。
+     * 已被删除/隐藏的帖子会自动跳过。
+     */
+    public List<CommunityPost> listFavorites(Long userId) {
+        QueryWrapper<Favorite> favQuery = new QueryWrapper<>();
+        favQuery.eq("user_id", userId);
+        favQuery.orderByDesc("create_time");
+
+        List<Favorite> favorites = favoriteMapper.selectList(favQuery);
+
+        List<CommunityPost> result = new ArrayList<>();
+
+        for (Favorite favorite : favorites) {
+            CommunityPost post = communityPostMapper.selectById(favorite.getPostId());
+
+            if (post == null || post.getStatus() == null || post.getStatus() == 0) {
+                continue;
+            }
+
+            post.setLiked(isLiked(post.getId(), userId));
+            post.setFavorited(true);
+            result.add(post);
+        }
+
+        return result;
     }
 
     public Boolean add(CommunityPostAddDTO dto, Long userId){

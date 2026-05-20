@@ -11,6 +11,7 @@ export const useCommunityStore = defineStore('community', () => {
   const topics = ref([])
 
   const posts = ref([])
+  const favorites = ref([])
   const currentPost = ref(null)
   const replies = ref([])
 
@@ -34,6 +35,12 @@ export const useCommunityStore = defineStore('community', () => {
       sort: filters.sort || undefined
     })
     if (res.ok) posts.value = res.data || []
+    return res
+  }
+
+  async function fetchFavorites() {
+    const res = await communityApi.myFavorites()
+    if (res.ok) favorites.value = res.data || []
     return res
   }
 
@@ -105,6 +112,10 @@ export const useCommunityStore = defineStore('community', () => {
       if (currentPost.value && currentPost.value.id === post.id) {
         currentPost.value.favorited = next
       }
+      // 取消收藏后，从收藏列表里移除这条
+      if (!next) {
+        favorites.value = favorites.value.filter((p) => p.id !== post.id)
+      }
     }
     return res
   }
@@ -142,6 +153,7 @@ export const useCommunityStore = defineStore('community', () => {
     posts.value = []
     currentPost.value = null
     replies.value = []
+    favorites.value = []
     filters.topicId = null
     filters.mine = false
     filters.sort = 'latest'
@@ -150,11 +162,13 @@ export const useCommunityStore = defineStore('community', () => {
   return {
     topics,
     posts,
+    favorites,
     currentPost,
     replies,
     filters,
     fetchTopics,
     fetchPosts,
+    fetchFavorites,
     setTopicFilter,
     setMineFilter,
     setSort,

@@ -42,6 +42,13 @@ public class CommunityPostController {
         return Result.success(posts);
     }
 
+    @GetMapping("/favorites")
+    public Result<List<CommunityPost>> favorites(@RequestHeader("token") String token){
+        Long userId = jwtUtil.getUserId(token);
+        List<CommunityPost> posts = communityPostService.listFavorites(userId);
+        return Result.success(posts);
+    }
+
     @PostMapping("/add")
     public Result<?> add(@RequestBody CommunityPostAddDTO dto,
                          @RequestHeader("token") String token){

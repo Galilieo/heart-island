@@ -10,6 +10,11 @@ export const communityApi = {
     return unwrap(request.get('/community/post/list', { params }))
   },
 
+  // 当前用户收藏的帖子列表
+  myFavorites() {
+    return unwrap(request.get('/community/post/favorites'))
+  },
+
   postDetail(id) {
     return unwrap(request.get('/community/post/detail', { params: { id } }))
   },

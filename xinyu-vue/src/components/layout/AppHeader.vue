@@ -40,7 +40,8 @@ async function handleLogout() {
 
 const navItems = [
   { label: '心情', to: '/home', match: ['/home'] },
-  { label: '社区', to: '/posts', match: ['/posts', '/community'] }
+  { label: '社区', to: '/posts', match: ['/posts', '/community'] },
+  { label: '收藏', to: '/favorites', match: ['/favorites'] }
 ]
 
 function isActive(item) {
