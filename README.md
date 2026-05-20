@@ -59,6 +59,9 @@
 - 退出登录
 - 前端请求自动携带 token
 - 后端通过 token 解析当前用户
+- 修改昵称
+- 修改密码（校验原密码）
+- 个人资料页
 
 ### 心情记录
 
@@ -289,6 +292,8 @@ http://localhost:5173
 | --- | --- | --- | --- |
 | 用户注册 | POST | `/user/register` | 新用户注册 |
 | 用户登录 | POST | `/user/login` | 登录成功后返回用户信息和 token |
+| 修改昵称 | POST | `/user/update-profile` | 修改当前用户昵称 |
+| 修改密码 | POST | `/user/update-password` | 校验原密码后修改密码 |
 | 查询心情记录 | GET | `/mood/list` | 分页查询当前登录用户的心情记录，支持条件筛选，并返回 AI 回复 |
 | 新增心情记录 | POST | `/mood/add` | 新增当前登录用户的心情记录，并生成 AI 回复 |
 | 查看心情详情 | GET | `/mood/detail/{id}` | 查看当前用户的指定心情记录和 AI 回复 |
