@@ -21,7 +21,7 @@ public class MoodRecordController {
     private JwtUtil jwtUtil;
 
     @PostMapping("/add")
-    public Result<Boolean> add(@RequestHeader(required = false) String token,
+    public Result<Boolean> add(@RequestHeader(value = "token", required = false) String token,
                                @RequestBody MoodRecord moodRecord) {
         if (token == null || token.trim().isEmpty()) {
             return Result.error("请先登录");
@@ -48,7 +48,7 @@ public class MoodRecordController {
     }
 
     @GetMapping("/list")
-    public Result<Page<MoodRecord>> list(@RequestHeader(required = false) String token,
+    public Result<Page<MoodRecord>> list(@RequestHeader(value = "token", required = false) String token,
                                          @RequestParam(required = false) String moodType,
                                          @RequestParam(required = false) String startDate,
                                          @RequestParam(required = false) String endDate,
@@ -79,7 +79,7 @@ public class MoodRecordController {
     }
 
     @DeleteMapping("/delete/{id}")
-    public Result<Boolean> delete(@RequestHeader(required = false) String token,
+    public Result<Boolean> delete(@RequestHeader(value = "token", required = false) String token,
                                   @PathVariable Long id) {
         if (token == null || token.trim().isEmpty()) {
             return Result.error("请先登录");
@@ -99,7 +99,7 @@ public class MoodRecordController {
         return Result.success("删除成功", true);
     }
     @GetMapping("/detail/{id}")
-    public Result<MoodRecord> detail(@RequestHeader(required = false) String token,
+    public Result<MoodRecord> detail(@RequestHeader(value = "token", required = false) String token,
                                     @PathVariable Long id) {
         if(token ==null||token.trim().isEmpty()){
             return Result.error("请先登录");
@@ -120,7 +120,7 @@ public class MoodRecordController {
     }
 
     @PutMapping("/update/{id}")
-    public Result<Boolean> update(@RequestHeader(required = false) String token,
+    public Result<Boolean> update(@RequestHeader(value = "token", required = false) String token,
                                   @PathVariable Long id,
                                   @RequestBody MoodRecord moodRecord) {
         if (token == null || token.trim().isEmpty()) {
@@ -146,7 +146,7 @@ public class MoodRecordController {
     }
 
     @GetMapping("/trend/recent7")
-    public Result<MoodTrendVO> recentSevenDaysTrend(@RequestHeader(required = false) String token) {
+    public Result<MoodTrendVO> recentSevenDaysTrend(@RequestHeader(value = "token", required = false) String token) {
         if (token == null || token.trim().isEmpty()) {
             return Result.error("请先登录");
         }

@@ -1,17 +1,17 @@
 package com.xinyu.dto;
 
-public class CommunityReplyAddDTO {
+public class CommunityReplyUpdateDTO {
 
-    private Long postId;
+    private Long id;
 
     private String content;
 
-    public Long getPostId() {
-        return postId;
+    public Long getId() {
+        return id;
     }
 
-    public void setPostId(Long postId) {
-        this.postId = postId;
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getContent() {

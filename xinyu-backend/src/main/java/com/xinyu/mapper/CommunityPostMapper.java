@@ -1,4 +1,9 @@
 package com.xinyu.mapper;
 
-public class CommunityPostMapper {
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.xinyu.entity.CommunityPost;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface CommunityPostMapper extends BaseMapper<CommunityPost> {
 }

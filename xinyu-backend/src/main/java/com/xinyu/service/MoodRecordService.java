@@ -27,6 +27,8 @@ public class MoodRecordService {
     private MoodRecordMapper moodRecordMapper;
 
     public Boolean add(MoodRecord moodRecord) {
+        moodRecord.setStatus(1);
+
         int insertRows = moodRecordMapper.insert(moodRecord);
         if (insertRows <= 0) {
             return false;
@@ -52,6 +54,7 @@ public class MoodRecordService {
     public List<MoodRecord> listByUserId(Long userId) {
         QueryWrapper<MoodRecord> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("user_id", userId);
+        queryWrapper.eq("status", 1);
         queryWrapper.orderByDesc("create_time");
 
         return moodRecordMapper.selectList(queryWrapper);
@@ -67,7 +70,13 @@ public class MoodRecordService {
         if(!moodRecord.getUserId().equals(userId)){
             return false;
         }
-        int rows = moodRecordMapper.deleteById(id);
+
+        if (moodRecord.getStatus() != null && moodRecord.getStatus() == 0) {
+            return false;
+        }
+
+        moodRecord.setStatus(0);
+        int rows = moodRecordMapper.updateById(moodRecord);
         return rows > 0;
     }
     public Page<MoodRecord> listByCondition(Long userId,
@@ -78,6 +87,7 @@ public class MoodRecordService {
                                             Long pageSize) {
         QueryWrapper<MoodRecord> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("user_id", userId);
+        queryWrapper.eq("status", 1);
 
         if(moodType != null && !moodType.trim().isEmpty()) {
             queryWrapper.eq("mood_type", moodType);
@@ -105,6 +115,10 @@ public class MoodRecordService {
             return null;
         }
 
+        if (moodRecord.getStatus() != null && moodRecord.getStatus() == 0) {
+            return null;
+        }
+
         if(!moodRecord.getUserId().equals(userId)){
             return  null;
         }
@@ -116,6 +130,10 @@ public class MoodRecordService {
         MoodRecord dbRecord = moodRecordMapper.selectById(id);
 
         if(dbRecord==null){
+            return false;
+        }
+
+        if (dbRecord.getStatus() != null && dbRecord.getStatus() == 0) {
             return false;
         }
 
@@ -151,6 +169,7 @@ public class MoodRecordService {
 
         QueryWrapper<MoodRecord> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("user_id", userId);
+        queryWrapper.eq("status", 1);
         queryWrapper.ge("create_time", startTime);
         queryWrapper.orderByDesc("create_time");
 

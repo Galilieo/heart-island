@@ -14,6 +14,7 @@ public class MoodRecord {
     private String moodType;
     private String content;
     private String aiReply;
+    private Integer status;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -61,8 +62,16 @@ public class MoodRecord {
         return createTime;
     }
 
+    public Integer getStatus() {
+        return status;
+    }
+
     public void setCreateTime(LocalDateTime createTime) {
         this.createTime = createTime;
+    }
+
+    public void setStatus(Integer status) {
+        this.status = status;
     }
 
     public LocalDateTime getUpdateTime() {
