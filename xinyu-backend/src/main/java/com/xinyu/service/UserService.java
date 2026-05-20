@@ -57,4 +57,40 @@ public class UserService {
     public User getById(Long id) {
         return userMapper.selectById(id);
     }
+
+    /**
+     * 修改昵称。返回更新后的用户，用户不存在时返回 null。
+     */
+    public User updateNickname(Long userId, String nickname) {
+        User user = userMapper.selectById(userId);
+
+        if (user == null) {
+            return null;
+        }
+
+        user.setNickname(nickname.trim());
+        userMapper.updateById(user);
+
+        return user;
+    }
+
+    /**
+     * 修改密码。先校验原密码，成功返回 null，失败返回错误提示文案。
+     */
+    public String updatePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userMapper.selectById(userId);
+
+        if (user == null) {
+            return "用户不存在";
+        }
+
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            return "原密码不正确";
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userMapper.updateById(user);
+
+        return null;
+    }
 }

@@ -10,6 +10,7 @@ import Register from '../views/Register.vue'
 import PostList from '../views/PostList.vue'
 import PostDetail from '../views/PostDetail.vue'
 import Favorites from '../views/Favorites.vue'
+import Profile from '../views/Profile.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -17,7 +18,8 @@ const routes = [
   { path: '/register', component: Register },
   { path: '/posts', component: PostList, meta: { requiresAuth: true } },
   { path: '/community/post/:id', component: PostDetail, meta: { requiresAuth: true } },
-  { path: '/favorites', component: Favorites, meta: { requiresAuth: true } }
+  { path: '/favorites', component: Favorites, meta: { requiresAuth: true } },
+  { path: '/profile', component: Profile, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({

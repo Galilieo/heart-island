@@ -54,6 +54,20 @@ export const useUserStore = defineStore('user', () => {
     return await userApi.register(payload)
   }
 
+  // 修改昵称：成功后同步本地 loginUser 和 localStorage
+  async function updateProfile(payload) {
+    const res = await userApi.updateProfile(payload)
+    if (res.ok && res.data) {
+      loginUser.value = { ...loginUser.value, ...res.data }
+      localStorage.setItem(USER_KEY, JSON.stringify(loginUser.value))
+    }
+    return res
+  }
+
+  async function updatePassword(payload) {
+    return await userApi.updatePassword(payload)
+  }
+
   function logout() {
     setSession(null)
   }
@@ -64,6 +78,8 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     login,
     register,
+    updateProfile,
+    updatePassword,
     logout,
     setSession
   }

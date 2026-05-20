@@ -1,6 +1,8 @@
 package com.xinyu.controller;
 
 import com.xinyu.common.Result;
+import com.xinyu.dto.UserPasswordUpdateDTO;
+import com.xinyu.dto.UserProfileUpdateDTO;
 import com.xinyu.entity.User;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
@@ -72,6 +74,53 @@ public class UserController {
         LoginVO loginVO =new LoginVO(userVO,token);
 
         return Result.success("登录成功", loginVO);
+    }
+
+    @PostMapping("/update-profile")
+    public Result<UserVO> updateProfile(@RequestBody UserProfileUpdateDTO dto,
+                                        @RequestHeader("token") String token) {
+        if (dto.getNickname() == null || dto.getNickname().trim().isEmpty()) {
+            return Result.error("昵称不能为空");
+        }
+
+        if (dto.getNickname().trim().length() > 50) {
+            return Result.error("昵称不能超过50个字");
+        }
+
+        Long userId = jwtUtil.getUserId(token);
+        User user = userService.updateNickname(userId, dto.getNickname());
+
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+
+        UserVO userVO = new UserVO(user.getId(), user.getUsername(), user.getNickname());
+        return Result.success("修改成功", userVO);
+    }
+
+    @PostMapping("/update-password")
+    public Result<Boolean> updatePassword(@RequestBody UserPasswordUpdateDTO dto,
+                                          @RequestHeader("token") String token) {
+        if (dto.getOldPassword() == null || dto.getOldPassword().trim().isEmpty()) {
+            return Result.error("请输入原密码");
+        }
+
+        if (dto.getNewPassword() == null || dto.getNewPassword().trim().isEmpty()) {
+            return Result.error("请输入新密码");
+        }
+
+        if (dto.getNewPassword().length() < 6) {
+            return Result.error("新密码不能少于6位");
+        }
+
+        Long userId = jwtUtil.getUserId(token);
+        String error = userService.updatePassword(userId, dto.getOldPassword(), dto.getNewPassword());
+
+        if (error != null) {
+            return Result.error(error);
+        }
+
+        return Result.success("密码修改成功", true);
     }
 
     @GetMapping("/test/{id}")

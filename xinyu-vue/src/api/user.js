@@ -9,5 +9,15 @@ export const userApi = {
 
   register(payload) {
     return unwrap(request.post('/user/register', payload))
+  },
+
+  // 修改昵称
+  updateProfile(payload) {
+    return unwrap(request.post('/user/update-profile', payload))
+  },
+
+  // 修改密码
+  updatePassword(payload) {
+    return unwrap(request.post('/user/update-password', payload))
   }
 }

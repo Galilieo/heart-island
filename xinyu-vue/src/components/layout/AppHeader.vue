@@ -24,6 +24,11 @@ function closeMenu() {
   menuOpen.value = false
 }
 
+function goProfile() {
+  closeMenu()
+  router.push('/profile')
+}
+
 async function handleLogout() {
   closeMenu()
   const ok = await confirm({
@@ -85,6 +90,10 @@ function isActive(item) {
 
         <transition name="menu">
           <div v-if="menuOpen" class="user__menu" @click.stop>
+            <button type="button" class="user__menu-item" @click="goProfile">
+              个人资料
+            </button>
+            <div class="user__menu-divider" />
             <button type="button" class="user__menu-item" @click="handleLogout">
               退出登录
             </button>
@@ -244,7 +253,17 @@ function isActive(item) {
 
 .user__menu-item:hover {
   background: var(--bg-soft);
+  color: var(--brand-deep);
+}
+
+.user__menu-item:last-child:hover {
   color: var(--danger);
+}
+
+.user__menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
 }
 
 .menu-mask {
