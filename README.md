@@ -2,7 +2,7 @@
 
 心屿是一个基于 Spring Boot、Vue3、MySQL 和 JWT 的前后端分离 Web 应用，围绕个人情绪记录、AI 情绪陪伴和匿名社区表达场景进行设计。
 
-当前版本已经完成用户注册、登录认证、token 携带、心情记录新增、列表查询、详情查看、记录修改、删除、分页筛选、AI 情绪陪伴回复、AI 调用记录保存、最近 7 天心情趋势、统一返回结果和基础异常处理等核心能力，形成了“登录 -> 记录心情 -> 生成 AI 回复 -> 查看记录 -> 筛选记录 -> 管理记录 -> 查看近期趋势”的用户端基础闭环。后续版本将继续扩展匿名社区、后台管理和更完整的情绪统计等模块。
+当前版本已经完成用户注册、登录认证、token 携带、心情记录新增、列表查询、详情查看、记录修改、删除、分页筛选、AI 情绪陪伴回复、AI 调用记录保存、最近 7 天心情趋势，以及匿名社区的发帖、回复、点赞、收藏、话题分类与排序等核心能力，形成了“登录 -> 记录心情 -> 生成 AI 回复 -> 查看与管理记录 -> 查看近期趋势 -> 进入匿名社区互动”的用户端完整闭环。后续版本将继续扩展后台管理和更完整的情绪统计等模块。
 
 ## 项目定位
 
@@ -33,9 +33,9 @@
 
 - Vue 3
 - Vue Router
+- Pinia
 - axios
 - Vite
-- Element Plus
 - localStorage
 
 ### 开发与测试工具
@@ -89,6 +89,21 @@
 - 完整 AI 调用记录保存到 `ai_reply` 表
 - 记录 `model_name`、`prompt`、`reply_content`、`target_type`、`target_id`、`status` 和 `error_message`
 
+### 匿名社区
+
+- 发布匿名帖子（话题、情绪、内容）
+- 帖子列表查询，支持按话题筛选
+- 帖子排序：最新、最热
+- 「全部 / 我的」帖子范围切换
+- 帖子详情查看
+- 修改和删除自己的帖子
+- 发表、修改、删除回复
+- 点赞与取消点赞
+- 收藏与取消收藏
+- 个人收藏页查看收藏的帖子
+- 话题分类与种子数据
+- 前端社区列表页、详情页、收藏页统一视觉风格
+
 ### 工程规范
 
 - 前后端分离架构
@@ -97,18 +112,17 @@
 - 全局异常处理
 - CORS 跨域配置
 - axios 请求封装
+- 前端 Pinia 状态管理、api 层与 composable 抽象
 - 基础接口测试
 
 ## 规划功能
 
 后续版本计划继续完善：
 
-- 匿名社区发帖
-- 评论、点赞、收藏
-- 话题分类
 - 管理员后台
 - 用户管理和内容审核
-- 情绪趋势统计
+- AI 回复记录后台查看
+- 更完整的情绪趋势统计（如最近 30 天）
 - ECharts 图表展示
 - Redis 缓存
 - 部署上线配置
@@ -181,12 +195,16 @@ xinyu-backend
 ```text
 xinyu-vue
 ├─ src
-│  ├─ views        页面，例如登录页、注册页、首页
-│  ├─ router       路由配置
-│  ├─ utils        工具文件，例如 request.js
-│  ├─ components   可复用组件
-│  ├─ App.vue      根组件
-│  └─ main.js      入口文件
+│  ├─ views         页面，例如登录页、首页、社区页、收藏页
+│  ├─ router        路由配置与登录守卫
+│  ├─ api           按业务域划分的接口请求
+│  ├─ stores        Pinia 状态管理（user / mood / community）
+│  ├─ composables   通用逻辑封装（toast / confirm / 异步动作 / 分页）
+│  ├─ components    可复用组件（ui 基础组件、layout、业务组件）
+│  ├─ styles        全局样式与设计 token
+│  ├─ utils         工具文件，例如 request.js
+│  ├─ App.vue       根组件
+│  └─ main.js       入口文件
 └─ package.json
 ```
 
@@ -263,6 +281,8 @@ npm run dev
 http://localhost:5173
 ```
 
+前端接口地址通过 `xinyu-vue/.env.development` 中的 `VITE_API_BASE_URL` 配置，开发环境默认指向 `http://localhost:8080`。
+
 ## 核心接口
 
 | 功能 | 请求方式 | 接口地址 | 说明 |
@@ -275,6 +295,17 @@ http://localhost:5173
 | 修改心情记录 | PUT | `/mood/update/{id}` | 修改当前用户的指定心情记录，并重新生成 AI 回复 |
 | 删除心情记录 | DELETE | `/mood/delete/{id}` | 删除当前用户的指定心情记录 |
 | 最近 7 天趋势 | GET | `/mood/trend/recent7` | 查询当前用户最近 7 天心情概览和心情类型分布 |
+| 话题列表 | GET | `/topic/list` | 查询启用中的社区话题 |
+| 帖子列表 | GET | `/community/post/list` | 查询社区帖子，支持话题筛选、最新/最热排序、我的范围 |
+| 收藏帖子列表 | GET | `/community/post/favorites` | 查询当前用户收藏的帖子 |
+| 帖子详情 | GET | `/community/post/detail` | 查询指定帖子详情 |
+| 发布帖子 | POST | `/community/post/add` | 发布匿名帖子 |
+| 修改帖子 | POST | `/community/post/update` | 修改自己发布的帖子 |
+| 删除帖子 | POST | `/community/post/delete` | 删除自己发布的帖子（逻辑删除） |
+| 点赞 / 取消点赞 | POST | `/community/post/like`、`/community/post/unlike` | 对帖子点赞或取消 |
+| 收藏 / 取消收藏 | POST | `/community/post/favorite`、`/community/post/unfavorite` | 对帖子收藏或取消 |
+| 回复列表 | GET | `/community/reply/list` | 查询指定帖子的回复 |
+| 发表 / 修改 / 删除回复 | POST | `/community/reply/add`、`/community/reply/update`、`/community/reply/delete` | 回复的增改删 |
 
 更完整的接口规划见：
 
@@ -375,14 +406,14 @@ docs/05-接口设计说明书.md
 -> 退出登录
 ```
 
-匿名社区、后台管理和更完整的统计分析属于后续迭代模块，相关设计已经在 `docs` 目录中进行规划。
+匿名社区模块已经完成，包含发帖、回复、点赞、收藏、话题分类与排序。后台管理和更完整的统计分析属于后续迭代模块，相关设计已经在 `docs` 目录中进行规划。
 
 ## 后续迭代路线
 
 ```text
 第一阶段：完善心情记录详情、修改、分页、筛选（已完成）
 第二阶段：接入 AI 回复能力和用户端体验完善（已完成基础版本）
-第三阶段：建设匿名社区模块
+第三阶段：建设匿名社区模块（已完成）
 第四阶段：建设后台管理模块
 第五阶段：完善情绪统计图表
 第六阶段：完善部署、缓存和工程配置
