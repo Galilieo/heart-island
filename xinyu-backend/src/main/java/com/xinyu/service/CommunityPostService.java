@@ -1,6 +1,7 @@
 package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
@@ -227,7 +228,6 @@ public class CommunityPostService {
         return communityPostMapper.updateById(post) > 0;
     }
 
-    @Transactional
     public Boolean update(CommunityPostUpdateDTO dto, Long userId) {
         if(!isTopicAvailable(dto.getTopicId())){
             return false;
@@ -402,7 +402,11 @@ public class CommunityPostService {
                 topicName, post.getMoodType(), post.getContent());
 
         post.setAiReply(result.getReplyContent());
-        communityPostMapper.updateById(post);
+
+        UpdateWrapper<CommunityPost> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", post.getId());
+        updateWrapper.set("ai_reply", result.getReplyContent());
+        communityPostMapper.update(null, updateWrapper);
 
         aiReplyLogService.savePostReply(post.getUserId(), post.getId(), result);
     }
