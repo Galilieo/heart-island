@@ -31,6 +31,20 @@ public class AiReplyLogService {
         aiReplyMapper.insert(aiReply);
     }
 
+    public void savePostReply(Long userId, Long postId, AiReplyResult result) {
+        AiReply aiReply = new AiReply();
+        aiReply.setUserId(userId);
+        aiReply.setTargetType(TARGET_TYPE_POST);
+        aiReply.setTargetId(postId);
+        aiReply.setPrompt(result.getPrompt());
+        aiReply.setReplyContent(result.getReplyContent());
+        aiReply.setModelName(result.getModelName());
+        aiReply.setStatus(Boolean.TRUE.equals(result.getSuccess()) ? 1 : 0);
+        aiReply.setErrorMessage(result.getErrorMessage());
+
+        aiReplyMapper.insert(aiReply);
+    }
+
     public Page<AiReply> pageAdminAiReplies(Long userId,
                                             String targetType,
                                             Integer status,
