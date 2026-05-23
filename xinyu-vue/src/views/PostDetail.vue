@@ -13,6 +13,7 @@ import BaseButton from '../components/ui/BaseButton.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import PostCard from '../components/community/PostCard.vue'
+import PostAiReply from '../components/community/PostAiReply.vue'
 import PostReplyForm from '../components/community/PostReplyForm.vue'
 import PostReplyList from '../components/community/PostReplyList.vue'
 import PostEditDialog from '../components/community/PostEditDialog.vue'
@@ -175,6 +176,8 @@ onMounted(async () => {
           @edit="editOpen = true"
           @delete="handleDeletePost"
         />
+
+        <PostAiReply v-if="currentPost.aiReply" :reply="currentPost.aiReply" />
 
         <PostReplyForm
           ref="replyFormRef"
