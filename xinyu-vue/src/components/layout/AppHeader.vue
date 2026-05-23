@@ -46,7 +46,8 @@ async function handleLogout() {
 const navItems = [
   { label: '心情', to: '/home', match: ['/home'] },
   { label: '社区', to: '/posts', match: ['/posts', '/community'] },
-  { label: '收藏', to: '/favorites', match: ['/favorites'] }
+  { label: '收藏', to: '/favorites', match: ['/favorites'] },
+  { label: '后台', to: '/admin/users', match: ['/admin'], adminOnly: true }
 ]
 
 function isActive(item) {
@@ -64,7 +65,7 @@ function isActive(item) {
 
       <nav class="nav">
         <RouterLink
-          v-for="item in navItems"
+          v-for="item in navItems.filter((item)=> !item.adminOnly ||userStore.loginUser?.role === 'ADMIN')"
           :key="item.to"
           :to="item.to"
           class="nav__item"

@@ -22,9 +22,19 @@ export const useCommunityStore = defineStore('community', () => {
   })
 
   async function fetchTopics() {
-    if (topics.value.length) return { ok: true, data: topics.value }
     const res = await topicApi.list()
-    if (res.ok) topics.value = res.data || []
+
+    if (res.ok) {
+      topics.value = res.data || []
+
+      if (
+        filters.topicId !== null &&
+        !topics.value.some((topic) => topic.id === filters.topicId)
+      ) {
+        filters.topicId = null
+      }
+    }
+
     return res
   }
 

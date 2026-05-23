@@ -2,7 +2,7 @@ package com.xinyu.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
-
+import com.baomidou.mybatisplus.annotation.TableField;
 import java.time.LocalDateTime;
 
 public class Topic {
@@ -16,6 +16,17 @@ public class Topic {
     private Integer status;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    @TableField(exist = false)
+    private Integer postCount;
+
+    public Integer getPostCount() {
+        return postCount;
+    }
+
+    public void setPostCount(Integer postCount) {
+        this.postCount = postCount;
+    }
 
     public Long getId() {
         return id;

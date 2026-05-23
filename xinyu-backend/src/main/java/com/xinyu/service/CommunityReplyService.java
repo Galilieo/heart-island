@@ -1,12 +1,14 @@
 package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.dto.CommunityReplyAddDTO;
 import com.xinyu.dto.CommunityReplyUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
+import com.xinyu.vo.AdminReplyVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,67 @@ public class CommunityReplyService {
         queryWrapper.orderByAsc("create_time");
 
         return communityReplyMapper.selectList(queryWrapper);
+    }
+
+    public Page<AdminReplyVO> pageAdminReplies(Integer status, Long postId, Long userId, String keyword, Long pageNum, Long pageSize) {
+        QueryWrapper<CommunityReply> queryWrapper = new QueryWrapper<>();
+
+        if (status != null) {
+            queryWrapper.eq("status", status);
+        }
+
+        if (postId != null) {
+            queryWrapper.eq("post_id", postId);
+        }
+
+        if (userId != null) {
+            queryWrapper.eq("user_id", userId);
+        }
+
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            queryWrapper.like("content", keyword.trim());
+        }
+
+        queryWrapper.orderByDesc("create_time");
+
+        Page<CommunityReply> replyPage = communityReplyMapper.selectPage(
+                new Page<>(pageNum, pageSize),
+                queryWrapper
+        );
+
+        Page<AdminReplyVO> voPage = new Page<>(
+                replyPage.getCurrent(),
+                replyPage.getSize(),
+                replyPage.getTotal()
+        );
+
+        voPage.setRecords(replyPage.getRecords().stream()
+                .map(reply -> new AdminReplyVO(
+                        String.valueOf(reply.getId()),
+                        String.valueOf(reply.getPostId()),
+                        String.valueOf(reply.getUserId()),
+                        reply.getContent(),
+                        reply.getAnonymousName(),
+                        reply.getStatus(),
+                        reply.getCreateTime(),
+                        reply.getUpdateTime()
+                ))
+                .toList());
+
+        return voPage;
+    }
+
+    public CommunityReply updateAdminStatus(Long id, Integer status) {
+        CommunityReply reply = communityReplyMapper.selectById(id);
+
+        if (reply == null) {
+            return null;
+        }
+
+        reply.setStatus(status);
+        communityReplyMapper.updateById(reply);
+
+        return reply;
     }
 
     @Transactional

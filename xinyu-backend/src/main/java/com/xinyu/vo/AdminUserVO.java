@@ -1,35 +1,36 @@
 package com.xinyu.vo;
 
-public class UserVO {
+import java.time.LocalDateTime;
 
-    private Long id;
+public class AdminUserVO {
+
+    private String id;
     private String username;
     private String nickname;
     private String role;
     private Integer status;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 
-    public UserVO() {
+    public AdminUserVO() {
     }
 
-    public UserVO(Long id, String username, String nickname) {
-        this.id = id;
-        this.username = username;
-        this.nickname = nickname;
-    }
-
-    public UserVO(Long id, String username, String nickname, String role, Integer status) {
+    public AdminUserVO(String id, String username, String nickname, String role, Integer status,
+                       LocalDateTime createTime, LocalDateTime updateTime) {
         this.id = id;
         this.username = username;
         this.nickname = nickname;
         this.role = role;
         this.status = status;
+        this.createTime = createTime;
+        this.updateTime = updateTime;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -63,5 +64,21 @@ public class UserVO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public LocalDateTime getCreateTime() {
+        return createTime;
+    }
+
+    public void setCreateTime(LocalDateTime createTime) {
+        this.createTime = createTime;
+    }
+
+    public LocalDateTime getUpdateTime() {
+        return updateTime;
+    }
+
+    public void setUpdateTime(LocalDateTime updateTime) {
+        this.updateTime = updateTime;
     }
 }

@@ -43,6 +43,7 @@ pnpm-debug.log*
 # IDE
 .idea/
 .vscode/
+.claude/
 *.iml
 *.ipr
 *.iws
@@ -65,6 +66,9 @@ temp/
 # Upload/runtime files
 uploads/
 files/
+
+# Local private deployment notes
+docs/服务器部署速查.md
 docs/12-Java后端知识掌握度统计.md
 docs/13-前端知识掌握度统计.md
 docs/下一个项目目标.md

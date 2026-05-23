@@ -60,10 +60,16 @@ public class UserController {
             return Result.error("账号或密码错误");
         }
 
+        if (Integer.valueOf(0).equals(loginUser.getStatus())) {
+            return Result.error("账号已被禁用");
+        }
+
         UserVO userVO = new UserVO(
                 loginUser.getId(),
                 loginUser.getUsername(),
-                loginUser.getNickname()
+                loginUser.getNickname(),
+                loginUser.getRole(),
+                loginUser.getStatus()
         );
 
         String token= jwtUtil.generateToken(
@@ -94,7 +100,13 @@ public class UserController {
             return Result.error("用户不存在");
         }
 
-        UserVO userVO = new UserVO(user.getId(), user.getUsername(), user.getNickname());
+        UserVO userVO = new UserVO(
+                user.getId(),
+                user.getUsername(),
+                user.getNickname(),
+                user.getRole(),
+                user.getStatus()
+        );
         return Result.success("修改成功", userVO);
     }
 
@@ -134,7 +146,9 @@ public class UserController {
         UserVO userVO = new UserVO(
                 user.getId(),
                 user.getUsername(),
-                user.getNickname()
+                user.getNickname(),
+                user.getRole(),
+                user.getStatus()
         );
 
         return Result.success("查询成功", userVO);

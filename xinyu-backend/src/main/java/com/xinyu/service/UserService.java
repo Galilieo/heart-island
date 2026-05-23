@@ -1,14 +1,18 @@
 package com.xinyu.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.xinyu.entity.User;
 import com.xinyu.mapper.UserMapper;
+import com.xinyu.vo.AdminUserVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class UserService {
+
+    private static final String ROLE_ADMIN = "ADMIN";
 
     @Autowired
     private UserMapper userMapper;
@@ -29,6 +33,8 @@ public class UserService {
         // 注册时，把明文密码加密后再保存
         String encodePassword =passwordEncoder.encode(user.getPassword());
         user.setPassword(encodePassword);
+        user.setRole("USER");
+        user.setStatus(1);
 
         int rows = userMapper.insert(user);
         return rows > 0;
@@ -56,6 +62,56 @@ public class UserService {
 
     public User getById(Long id) {
         return userMapper.selectById(id);
+    }
+
+    public boolean isAdmin(Long userId) {
+        User user = userMapper.selectById(userId);
+        return user != null
+                && ROLE_ADMIN.equals(user.getRole())
+                && Integer.valueOf(1).equals(user.getStatus());
+    }
+
+    public Page<AdminUserVO> pageUsers(String username, Integer status, Long pageNum, Long pageSize) {
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+
+        if (username != null && !username.trim().isEmpty()) {
+            queryWrapper.like("username", username.trim());
+        }
+
+        if (status != null) {
+            queryWrapper.eq("status", status);
+        }
+
+        queryWrapper.orderByDesc("create_time");
+
+        Page<User> userPage = userMapper.selectPage(new Page<>(pageNum, pageSize), queryWrapper);
+        Page<AdminUserVO> voPage = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
+        voPage.setRecords(userPage.getRecords().stream()
+                .map(user -> new AdminUserVO(
+                        String.valueOf(user.getId()),
+                        user.getUsername(),
+                        user.getNickname(),
+                        user.getRole(),
+                        user.getStatus(),
+                        user.getCreateTime(),
+                        user.getUpdateTime()
+                ))
+                .toList());
+
+        return voPage;
+    }
+
+    public User updateStatus(Long userId, Integer status) {
+        User user = userMapper.selectById(userId);
+
+        if (user == null) {
+            return null;
+        }
+
+        user.setStatus(status);
+        userMapper.updateById(user);
+
+        return user;
     }
 
     /**

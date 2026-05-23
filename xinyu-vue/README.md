@@ -1,44 +1,104 @@
 # xinyu-vue
 
-This template should help get you started developing with Vue 3 in Vite.
+心屿项目前端，基于 Vue3 + Vite 开发，包含用户端、匿名社区和后台管理端页面。
 
-## Recommended IDE Setup
+## 技术栈
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- Vue3
+- Vite
+- Pinia
+- Vue Router
+- axios
 
-## Recommended Browser Setup
+## 主要功能
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+- 登录、注册、退出登录
+- 心情记录列表、详情、新增、编辑、删除
+- AI 回复展示
+- 最近 7 天心情趋势
+- 匿名社区帖子、回复、点赞、收藏
+- 帖子 AI 回复展示
+- 后台概览
+- 用户管理、帖子管理、回复管理、话题管理
+- AI 回复记录管理
 
-## Customize configuration
+## 目录说明
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+```text
+src
+├─ api          后端接口封装
+├─ components   公共组件、业务组件和布局组件
+├─ router       路由配置
+├─ stores       Pinia 状态管理
+├─ styles       全局样式
+├─ utils        请求工具和业务工具
+└─ views        页面组件
+```
 
-## Project Setup
+后台公共组件：
+
+```text
+src/components/admin
+├─ AdminTabs.vue
+├─ AdminPageHeader.vue
+└─ AdminFilterActions.vue
+```
+
+## 环境配置
+
+开发环境接口地址在 `.env.development` 中配置：
+
+```text
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+## 本地运行
+
+安装依赖：
 
 ```sh
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+启动开发服务：
 
 ```sh
 npm run dev
 ```
 
-### Compile and Minify for Production
+构建生产包：
 
 ```sh
 npm run build
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+代码检查：
 
 ```sh
 npm run lint
 ```
+
+## 页面路由
+
+| 路由 | 说明 |
+| --- | --- |
+| `/login` | 登录 |
+| `/register` | 注册 |
+| `/` | 心情首页 |
+| `/community` | 社区帖子列表 |
+| `/community/post/:id` | 帖子详情 |
+| `/favorites` | 收藏列表 |
+| `/admin` | 后台概览 |
+| `/admin/users` | 用户管理 |
+| `/admin/posts` | 帖子管理 |
+| `/admin/replies` | 回复管理 |
+| `/admin/topics` | 话题管理 |
+| `/admin/ai-replies` | AI 记录管理 |
+
+## 开发约定
+
+- 页面优先调用 `stores` 中的方法，不直接散落请求逻辑。
+- 接口统一放在 `src/api` 下，按业务域拆分。
+- 登录 token 由请求拦截器统一携带。
+- 后台页面筛选按钮统一使用 `AdminFilterActions`。
+- 后台页头统一使用 `AdminPageHeader`。

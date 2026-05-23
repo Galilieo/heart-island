@@ -55,6 +55,11 @@ public class CommunityPostController {
         if(dto.getTopicId()==null){
             return Result.error("请选择一个话题");
         }
+
+        if(!communityPostService.isTopicAvailable(dto.getTopicId())){
+            return Result.error("话题不存在或以被禁用");
+        }
+
         if (dto.getMoodType() == null || dto.getMoodType().trim().isEmpty()) {
             return Result.error("请选择当前情绪");
         }
@@ -130,6 +135,10 @@ public class CommunityPostController {
                             @RequestHeader("token") String token) {
         if (dto.getId() == null) {
             return Result.error("请选择要修改的帖子");
+        }
+
+        if(!communityPostService.isTopicAvailable(dto.getTopicId())){
+            return Result.error("话题不存在或以被禁用");
         }
 
         if (dto.getTopicId() == null) {
