@@ -251,7 +251,15 @@ public class CommunityPostService {
         post.setMoodType(dto.getMoodType().trim());
         post.setContent(dto.getContent().trim());
 
-        return communityPostMapper.updateById(post) > 0;
+        int rows = communityPostMapper.updateById(post);
+        if (rows <= 0) {
+            return false;
+        }
+
+        // 内容已落库，AI 回复同步重新生成
+        attachAiReply(post);
+
+        return true;
     }
 
     @Transactional
