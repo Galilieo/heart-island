@@ -12,9 +12,13 @@ import com.xinyu.mapper.PostLikeMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.List;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xinyu.vo.AdminPostVO;
+import com.xinyu.entity.Topic;
+import com.xinyu.mapper.TopicMapper;
+import com.xinyu.dto.AiReplyResult;
 
 @Service
 public class CommunityPostService {
@@ -27,6 +31,15 @@ public class CommunityPostService {
 
     @Autowired
     private FavoriteMapper favoriteMapper;
+
+    @Autowired
+    private TopicMapper topicMapper;
+
+    @Autowired
+    private AiReplyService aiReplyService;
+
+    @Autowired
+    private AiReplyLogService aiReplyLogService;
 
     public List<CommunityPost> listByTopicId(Long topicId, Long userId, Boolean mine, String sort) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
@@ -59,6 +72,73 @@ public class CommunityPostService {
         return posts;
     }
 
+    public Page<AdminPostVO> pageAdminPosts(Integer status, Long topicId, Long postId, Long userId, String keyword, Long pageNum, Long pageSize){
+        QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
+
+        if(status != null){
+            queryWrapper.eq("status", status);
+        }
+
+        if(topicId != null){
+            queryWrapper.eq("topic_id", topicId);
+        }
+
+        if(postId != null){
+            queryWrapper.eq("id", postId);
+        }
+
+        if(userId != null){
+            queryWrapper.eq("user_id", userId);
+        }
+
+        if(keyword != null && !keyword.trim().isEmpty()){
+            queryWrapper.like("content", keyword.trim());
+        }
+
+        queryWrapper.orderByDesc("create_time");
+
+        Page<CommunityPost> postPage = communityPostMapper.selectPage(
+                new Page<>(pageNum,pageSize),
+                queryWrapper
+        );
+
+        Page<AdminPostVO> voPage = new Page<>(
+                postPage.getCurrent(),
+                postPage.getSize(),
+                postPage.getTotal()
+        );
+
+        voPage.setRecords(postPage.getRecords().stream()
+                .map(post -> new AdminPostVO(
+                        String.valueOf(post.getId()),
+                        String.valueOf(post.getUserId()),
+                        post.getTopicId(),
+                        post.getMoodType(),
+                        post.getContent(),
+                        post.getAnonymousName(),
+                        post.getReplyCount(),
+                        post.getLikeCount(),
+                        post.getStatus(),
+                        post.getCreateTime(),
+                        post.getUpdateTime()
+                ))
+                .toList());
+
+        return voPage;
+    }
+
+    public CommunityPost updateAdminStatus(Long id,Integer status){
+        CommunityPost post = communityPostMapper.selectById(id);
+
+        if(post == null){
+            return null;
+        }
+
+        post.setStatus(status);
+        communityPostMapper.updateById(post);
+
+        return post;
+    }
     /**
      * 查询当前用户收藏的帖子，按收藏时间倒序。
      * 已被删除/隐藏的帖子会自动跳过。
@@ -86,8 +166,24 @@ public class CommunityPostService {
 
         return result;
     }
+    public Boolean isTopicAvailable(Long topicId){
+        if(topicId == null){
+            return false;
+        }
+
+        Topic topic = topicMapper.selectById(topicId);
+
+        if(topic == null){
+            return false;
+        }
+
+        return topic.getStatus() !=null && topic.getStatus() == 1;
+    }
 
     public Boolean add(CommunityPostAddDTO dto, Long userId){
+        if(!isTopicAvailable(dto.getTopicId())){
+            return false;
+        }
         CommunityPost post = new CommunityPost();
 
         post.setUserId(userId);
@@ -99,7 +195,15 @@ public class CommunityPostService {
         post.setLikeCount(0);
         post.setStatus(1);
 
-        return communityPostMapper.insert(post) > 0;
+        int rows = communityPostMapper.insert(post);
+        if (rows <= 0) {
+            return false;
+        }
+
+        // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
+        attachAiReply(post);
+
+        return true;
     }
 
     @Transactional
@@ -125,6 +229,10 @@ public class CommunityPostService {
 
     @Transactional
     public Boolean update(CommunityPostUpdateDTO dto, Long userId) {
+        if(!isTopicAvailable(dto.getTopicId())){
+            return false;
+        }
+
         CommunityPost post = communityPostMapper.selectById(dto.getId());
 
         if (post == null) {
@@ -268,5 +376,26 @@ public class CommunityPostService {
         post.setFavorited(isFavorited(post.getId(), userId));
 
         return post;
+    }
+
+    /**
+     * 为指定帖子生成 AI 回复并回写到 post.aiReply，
+     * 同时通过 AiReplyLogService 写一行日志。
+     * 失败时使用兜底文案，不抛异常，不阻断主流程。
+     */
+    private void attachAiReply(CommunityPost post) {
+        String topicName = null;
+        Topic topic = topicMapper.selectById(post.getTopicId());
+        if (topic != null) {
+            topicName = topic.getName();
+        }
+
+        AiReplyResult result = aiReplyService.generateReplyForPost(
+                topicName, post.getMoodType(), post.getContent());
+
+        post.setAiReply(result.getReplyContent());
+        communityPostMapper.updateById(post);
+
+        aiReplyLogService.savePostReply(post.getUserId(), post.getId(), result);
     }
 }
