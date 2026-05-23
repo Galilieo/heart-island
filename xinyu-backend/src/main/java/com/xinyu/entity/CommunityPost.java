@@ -21,6 +21,8 @@ public class CommunityPost {
 
     private String content;
 
+    private String aiReply;
+
     private String anonymousName;
 
     private Integer replyCount;
@@ -57,6 +59,10 @@ public class CommunityPost {
 
     public String getContent() {
         return content;
+    }
+
+    public String getAiReply() {
+        return aiReply;
     }
 
     public String getAnonymousName() {
@@ -109,6 +115,10 @@ public class CommunityPost {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public void setAiReply(String aiReply) {
+        this.aiReply = aiReply;
     }
 
     public void setAnonymousName(String anonymousName) {
