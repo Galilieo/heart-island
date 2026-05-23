@@ -43,6 +43,90 @@ public class AiReplyService {
         }
     }
 
+    /**
+     * 为社区帖子生成 AI 回复。和 mood 版的区别：
+     * - prompt 是公开社区语境，不是私人陪伴
+     * - 长度限制 120 字
+     * - 注入话题名以让 AI 知道讨论背景
+     */
+    public AiReplyResult generateReplyForPost(String topicName, String moodType, String content) {
+        String prompt = buildPostPromptText(topicName, moodType, content);
+
+        try {
+            String replyContent = doGenerateReplyForPost(topicName, moodType, content);
+            return AiReplyResult.success(replyContent, prompt, model);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return AiReplyResult.failure(getDefaultReply(), prompt, model, e.getMessage());
+        }
+    }
+
+    private String doGenerateReplyForPost(String topicName, String moodType, String content) {
+        String url = baseUrl + "/chat/completions";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", model);
+        requestBody.put("messages", buildPostMessages(topicName, moodType, content));
+
+        Map<String, Object> thinking = new HashMap<>();
+        thinking.put("type", "disabled");
+        requestBody.put("thinking", thinking);
+
+        // 社区回复要求 120 字内，给的额度比 mood 小
+        requestBody.put("max_tokens", 200);
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(url, requestEntity, Map.class);
+
+        if (response.getBody() == null) {
+            return getDefaultReply();
+        }
+
+        return parseReply(response.getBody());
+    }
+
+    private List<Map<String, String>> buildPostMessages(String topicName, String moodType, String content) {
+        List<Map<String, String>> messages = new ArrayList<>();
+
+        Map<String, String> system = new HashMap<>();
+        system.put("role", "system");
+        system.put("content", buildPostSystemPrompt(topicName, moodType));
+        messages.add(system);
+
+        Map<String, String> user = new HashMap<>();
+        user.put("role", "user");
+        user.put("content", "帖子内容：\n" + content);
+        messages.add(user);
+
+        return messages;
+    }
+
+    private String buildPostSystemPrompt(String topicName, String moodType) {
+        String safeTopic = topicName == null || topicName.trim().isEmpty() ? "未指定话题" : topicName;
+        String safeMood = moodType == null || moodType.trim().isEmpty() ? "未指定心情" : moodType;
+
+        return "你是「心屿」，匿名情绪互助社区里的一位温柔陪伴者。"
+                + "有人在话题「" + safeTopic + "」下匿名发了一段情绪为「" + safeMood + "」的内容。"
+                + "请用不超过 120 字的中文，对这段帖子做一个温和、克制的回应。"
+                + "要求：用「这位朋友」「写下这段话的人」之类的中性指代，"
+                + "不预设性别、不评判、不诊断、不给医疗建议；"
+                + "像在公开社区里轻轻接住对方一句，不要长篇大论；"
+                + "不要逐字引用原话，不要使用列表、表情符号或英文。";
+    }
+
+    /**
+     * 用于记录到 ai_reply 表的 prompt 字段。汇总 system + user 消息。
+     */
+    private String buildPostPromptText(String topicName, String moodType, String content) {
+        return "[system]\n" + buildPostSystemPrompt(topicName, moodType)
+                + "\n\n[user]\n帖子内容：\n" + content;
+    }
+
     private String doGenerateReply(String moodType, String content) {
         String url = baseUrl + "/chat/completions";
 
