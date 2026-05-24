@@ -3,6 +3,7 @@ package com.xinyu.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class User {
@@ -13,6 +14,10 @@ public class User {
     private String username;
     private String password;
     private String nickname;
+    private String gender;
+    private LocalDate birthday;
+    private String bio;
+    private String city;
     private String role;
     private Integer status;
     private LocalDateTime createTime;
@@ -48,6 +53,38 @@ public class User {
 
     public void setNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    public String getGender() {
+        return gender;
+    }
+
+    public void setGender(String gender) {
+        this.gender = gender;
+    }
+
+    public LocalDate getBirthday() {
+        return birthday;
+    }
+
+    public void setBirthday(LocalDate birthday) {
+        this.birthday = birthday;
+    }
+
+    public String getBio() {
+        return bio;
+    }
+
+    public void setBio(String bio) {
+        this.bio = bio;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
     }
 
     public String getRole() {
