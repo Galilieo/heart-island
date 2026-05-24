@@ -143,7 +143,7 @@ defineExpose({ resetAfterSuccess })
   justify-content: flex-end;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .publish__row { grid-template-columns: 1fr; }
 }
 </style>

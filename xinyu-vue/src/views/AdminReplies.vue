@@ -258,13 +258,13 @@ async function handleToggleStatus(reply) {
   margin-top: 18px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .admin-replies__toolbar {
     grid-template-columns: 1fr;
   }
 }
 
-@media (min-width: 721px) and (max-width: 1100px) {
+@media (min-width: 769px) and (max-width: 1100px) {
   .admin-replies__toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

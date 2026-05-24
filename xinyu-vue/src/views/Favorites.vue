@@ -183,7 +183,7 @@ onMounted(async () => {
   gap: 12px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .fav-page__hero-doodles { display: none; }
   .fav-page__hero { padding: 24px; }
   .fav-page__title { font-size: var(--fs-2xl); }

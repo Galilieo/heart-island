@@ -103,7 +103,7 @@ function close() {
   gap: 12px;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .ped__row { grid-template-columns: 1fr; }
 }
 </style>

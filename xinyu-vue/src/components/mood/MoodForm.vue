@@ -144,7 +144,7 @@ const canSubmit = computed(
   margin-bottom: 16px;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .mood-form { position: static; }
 }
 </style>

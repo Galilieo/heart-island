@@ -350,7 +350,7 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .post-page__hero-doodles { display: none; }
   .post-page__hero {
     padding: 24px;

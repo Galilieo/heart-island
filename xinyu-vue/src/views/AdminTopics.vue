@@ -341,7 +341,7 @@ function formatTime(value) {
   font-weight: 700;
 }
 
-@media (min-width: 641px) and (max-width: 1100px) {
+@media (min-width: 769px) and (max-width: 1100px) {
   .admin-topics__toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -351,7 +351,7 @@ function formatTime(value) {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .admin-topics__toolbar {
     grid-template-columns: 1fr;
   }

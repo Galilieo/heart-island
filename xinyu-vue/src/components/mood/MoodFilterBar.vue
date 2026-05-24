@@ -179,7 +179,7 @@ async function applyToday() {
   margin-left: auto;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .filter-bar__field--mood { flex-basis: 170px; }
   .filter-bar__dates { flex-basis: 360px; }
   .filter-bar__quick {
@@ -191,7 +191,7 @@ async function applyToday() {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .filter-bar { align-items: stretch; }
   .filter-bar__field--mood,
   .filter-bar__dates,

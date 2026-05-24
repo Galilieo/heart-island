@@ -95,7 +95,7 @@ defineProps({
 }
 
 /* 小屏关掉这些大涂鸦，免得挤压内容 */
-@media (max-width: 1100px) {
+@media (max-width: 1024px) {
   .shell__ornaments { display: none; }
 }
 

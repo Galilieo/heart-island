@@ -532,7 +532,7 @@ async function handleSavePassword() {
   align-self: flex-start;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .profile__hero {
     padding: 24px;
   }
@@ -546,7 +546,7 @@ async function handleSavePassword() {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .profile__panel :deep(.card__body) {
     padding: 28px 24px;
   }
@@ -562,7 +562,7 @@ async function handleSavePassword() {
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 480px) {
   .profile__stats {
     grid-template-columns: repeat(2, 1fr);
     padding: 12px;
@@ -597,7 +597,7 @@ async function handleSavePassword() {
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 480px) {
   .profile__stats {
     grid-template-columns: 1fr;
   }

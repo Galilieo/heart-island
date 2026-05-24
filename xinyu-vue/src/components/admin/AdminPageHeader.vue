@@ -53,7 +53,7 @@ defineProps({
   font-size: var(--fs-md);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .admin-page-header {
     padding: 24px;
   }

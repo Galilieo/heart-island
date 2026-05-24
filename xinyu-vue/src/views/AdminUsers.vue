@@ -229,7 +229,7 @@ async function handleToggleStatus(user) {
   margin-top: 18px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .admin-users__toolbar {
     grid-template-columns: 1fr;
   }

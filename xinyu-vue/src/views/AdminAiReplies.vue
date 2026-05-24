@@ -403,7 +403,7 @@ function closeDetail() {
   word-break: break-word;
 }
 
-@media (min-width: 641px) and (max-width: 1100px) {
+@media (min-width: 769px) and (max-width: 1100px) {
   .admin-ai-replies__toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -413,7 +413,7 @@ function closeDetail() {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .admin-ai-replies__toolbar {
     grid-template-columns: 1fr;
   }

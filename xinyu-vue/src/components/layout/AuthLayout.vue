@@ -185,7 +185,7 @@ defineProps({
   text-align: center;
 }
 
-@media (max-width: 820px) {
+@media (max-width: 768px) {
   .auth { grid-template-columns: 1fr; }
   .auth__visual {
     min-height: 200px;

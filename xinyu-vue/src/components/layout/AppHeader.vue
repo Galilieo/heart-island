@@ -284,7 +284,7 @@ function isActive(item) {
     transform var(--t-fast) var(--ease-soft);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .app-header__inner { gap: 12px; }
   .brand__name { display: none; }
   .user__name { display: none; }

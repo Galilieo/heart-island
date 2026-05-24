@@ -143,13 +143,13 @@ onMounted(() => {
   font-size: var(--fs-sm);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .admin-dashboard__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .admin-dashboard__grid {
     grid-template-columns: 1fr;
   }

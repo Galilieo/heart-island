@@ -343,7 +343,7 @@ onMounted(() => {
   justify-content: center;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1024px) {
   .home__main {
     grid-template-columns: 1fr;
   }

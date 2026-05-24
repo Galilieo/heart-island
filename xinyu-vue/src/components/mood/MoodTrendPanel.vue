@@ -216,7 +216,7 @@ const hasData = computed(() => (props.trend?.total || 0) > 0)
   border: 1px dashed var(--line-strong);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .trend__stats { grid-template-columns: 1fr 1fr; }
 }
 </style>

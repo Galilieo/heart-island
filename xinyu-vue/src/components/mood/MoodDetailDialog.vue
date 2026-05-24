@@ -210,7 +210,7 @@ function close() {
   margin-bottom: 12px;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .md__moods { grid-template-columns: repeat(3, 1fr); }
 }
 
