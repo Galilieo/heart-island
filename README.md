@@ -35,7 +35,9 @@
 - JWT token 保存与请求自动携带
 - 密码 BCrypt 加密存储
 - 登录后保存用户基础信息
-- 昵称和密码修改
+- 个人资料完善：昵称、性别、生日（推算年龄）、签名、城市
+- 修改密码（BCrypt 校验原密码）
+- 个人资料页：hero 展示 + 4 项数据小条（心情数 / 帖子数 / 收藏数 / 加入天数）
 - 普通用户与管理员角色区分
 - 管理员接口权限校验
 
@@ -180,8 +182,9 @@ http://localhost:5173
 | --- | --- | --- | --- |
 | 用户 | POST | `/user/register` | 注册 |
 | 用户 | POST | `/user/login` | 登录 |
-| 用户 | POST | `/user/update-profile` | 修改昵称 |
+| 用户 | POST | `/user/update-profile` | 修改个人资料（昵称/性别/生日/签名/城市） |
 | 用户 | POST | `/user/update-password` | 修改密码 |
+| 用户 | GET | `/user/profile-stats` | 个人资料页 4 项统计 |
 | 心情 | GET | `/mood/list` | 心情记录分页 |
 | 心情 | POST | `/mood/add` | 新增心情并生成 AI 回复 |
 | 心情 | GET | `/mood/detail/{id}` | 心情详情 |
