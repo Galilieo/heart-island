@@ -6,6 +6,7 @@ import { ref, computed, onMounted } from 'vue'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
+import BaseDateInput from '../components/ui/BaseDateInput.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
@@ -151,26 +152,46 @@ async function handleSavePassword() {
       <!-- 数据小条 -->
       <div class="profile__stats" :class="{ 'is-loading': statsLoading }">
         <div class="profile__stat">
-          <strong>{{ stats.moodCount }}</strong>
-          <span>心情记录</span>
+          <span class="profile__stat-icon">
+            <Doodle name="heart" :size="22" color="currentColor" :stroke-width="2.4" />
+          </span>
+          <div class="profile__stat-body">
+            <strong>{{ stats.moodCount }}</strong>
+            <span>心情记录</span>
+          </div>
         </div>
         <div class="profile__stat">
-          <strong>{{ stats.postCount }}</strong>
-          <span>我的帖子</span>
+          <span class="profile__stat-icon">
+            <Doodle name="wave" :size="22" color="currentColor" :stroke-width="2.4" />
+          </span>
+          <div class="profile__stat-body">
+            <strong>{{ stats.postCount }}</strong>
+            <span>我的帖子</span>
+          </div>
         </div>
         <div class="profile__stat">
-          <strong>{{ stats.favoriteCount }}</strong>
-          <span>收藏</span>
+          <span class="profile__stat-icon">
+            <Doodle name="star" :size="22" color="currentColor" :stroke-width="2.4" />
+          </span>
+          <div class="profile__stat-body">
+            <strong>{{ stats.favoriteCount }}</strong>
+            <span>收藏</span>
+          </div>
         </div>
         <div class="profile__stat">
-          <strong>{{ stats.joinDays }}</strong>
-          <span>已陪伴你（天）</span>
+          <span class="profile__stat-icon">
+            <Doodle name="sun" :size="22" color="currentColor" :stroke-width="2.4" />
+          </span>
+          <div class="profile__stat-body">
+            <strong>{{ stats.joinDays }}<small>天</small></strong>
+            <span>陪伴天数</span>
+          </div>
         </div>
       </div>
 
       <div class="profile__grid">
         <!-- 基本信息 -->
-        <BaseCard padding="lg">
+        <BaseCard padding="lg" class="profile__panel">
           <h2 class="profile__card-title">基本信息</h2>
           <p class="profile__card-desc">昵称会展示在社区里，用户名不可修改。其它字段都可选填。</p>
 
@@ -190,10 +211,10 @@ async function handleSavePassword() {
               label="性别"
               :options="GENDER_OPTIONS"
             />
-            <BaseInput
+            <BaseDateInput
               v-model="birthday"
-              type="date"
               label="生日"
+              hint="可直接输入数字，也可以点右侧日历选择"
             />
             <BaseInput
               v-model="city"
@@ -216,7 +237,7 @@ async function handleSavePassword() {
         </BaseCard>
 
         <!-- 修改密码 -->
-        <BaseCard padding="lg">
+        <BaseCard padding="lg" class="profile__panel profile__panel--password">
           <h2 class="profile__card-title">修改密码</h2>
           <p class="profile__card-desc">为了安全，修改密码需要先验证原密码。</p>
 
@@ -261,6 +282,8 @@ async function handleSavePassword() {
 
 .profile__hero {
   position: relative;
+  width: min(760px, 100%);
+  align-self: center;
   padding: 28px 32px;
   background: linear-gradient(135deg, var(--brand-soft), var(--accent-soft));
   border-radius: var(--radius-4);
@@ -343,14 +366,48 @@ async function handleSavePassword() {
 
 /* 数据小条 */
 .profile__stats {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 14px;
+  gap: 0;
+  width: min(760px, 100%);
+  align-self: center;
+  padding: 12px 16px;
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: var(--radius-3);
+  box-shadow: 0 10px 26px rgba(87, 68, 43, 0.04);
+  overflow: hidden;
   transition: opacity var(--t-fast) var(--ease-soft);
+}
+
+.profile__stats::before {
+  content: '';
+  position: absolute;
+  inset: 22px 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent calc(25% - 0.5px),
+      var(--line) calc(25% - 0.5px),
+      var(--line) calc(25% + 0.5px),
+      transparent calc(25% + 0.5px)
+    ),
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 0.5px),
+      var(--line) calc(50% - 0.5px),
+      var(--line) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    ),
+    linear-gradient(
+      90deg,
+      transparent calc(75% - 0.5px),
+      var(--line) calc(75% - 0.5px),
+      var(--line) calc(75% + 0.5px),
+      transparent calc(75% + 0.5px)
+    );
 }
 
 .profile__stats.is-loading {
@@ -358,39 +415,91 @@ async function handleSavePassword() {
 }
 
 .profile__stat {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  min-height: 88px;
+  padding: 8px 10px;
+}
+
+.profile__stat-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, var(--brand-soft), rgba(248, 226, 218, 0.75));
+  color: var(--brand-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile__stat-body {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 4px;
-  padding: 10px 8px;
-  border-radius: var(--radius-2);
-  background: var(--bg-soft);
+  align-items: center;
+  text-align: center;
+  justify-content: center;
 }
 
 .profile__stat strong {
   font-family: var(--font-display);
-  font-size: var(--fs-2xl);
+  font-size: 32px;
   color: var(--brand-deep);
   font-weight: 700;
   line-height: 1;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
 }
 
-.profile__stat span {
+.profile__stat strong small {
+  margin-left: 3px;
   color: var(--ink-3);
+  font-family: var(--font-sans);
   font-size: var(--fs-xs);
-  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.profile__stat-body span {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .profile__grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 28px;
+  width: min(1040px, 100%);
+  align-self: center;
   align-items: start;
+}
+
+.profile__panel {
+  min-width: 0;
+}
+
+.profile__panel :deep(.card__body) {
+  padding: 34px 40px;
+}
+
+.profile__panel--password {
+  max-width: 460px;
+  width: 100%;
 }
 
 .profile__card-title {
   margin: 0;
-  font-size: var(--fs-xl);
+  font-size: 26px;
+  line-height: 1.2;
 }
 
 .profile__card-desc {
@@ -401,25 +510,132 @@ async function handleSavePassword() {
 }
 
 .profile__form {
-  margin-top: 20px;
+  margin-top: 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+}
+
+.profile__form :deep(.field__control),
+.profile__form :deep(.date-field__control),
+.profile__form :deep(.select__trigger) {
+  min-height: 48px;
+}
+
+.profile__form :deep(.field__label),
+.profile__form :deep(.date-field__label),
+.profile__form :deep(.select__label) {
+  font-size: var(--fs-sm);
 }
 
 .profile__form > :deep(.btn) {
   align-self: flex-start;
 }
 
-@media (max-width: 720px) {
-  .profile__stats {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 980px) {
+  .profile__hero {
+    padding: 24px;
   }
   .profile__grid {
     grid-template-columns: 1fr;
+    width: min(680px, 100%);
+    gap: 18px;
   }
-  .profile__hero {
-    padding: 24px;
+  .profile__panel--password {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile__panel :deep(.card__body) {
+    padding: 28px 24px;
+  }
+  .profile__card-title {
+    font-size: var(--fs-xl);
+  }
+  .profile__form {
+    gap: 16px;
+  }
+  .profile__form > :deep(.btn) {
+    width: 100%;
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 520px) {
+  .profile__stats {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 12px;
+  }
+  .profile__stats::before {
+    inset: 18px 22px;
+    background-image:
+      linear-gradient(
+        90deg,
+        transparent calc(50% - 0.5px),
+        var(--line) calc(50% - 0.5px),
+        var(--line) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px)
+      ),
+      linear-gradient(
+        180deg,
+        transparent calc(50% - 0.5px),
+        var(--line) calc(50% - 0.5px),
+        var(--line) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px)
+      );
+  }
+  .profile__stat {
+    min-height: 94px;
+    padding: 12px 10px;
+  }
+  .profile__stat strong {
+    font-size: 32px;
+  }
+  .profile__stat-body span {
+    font-size: var(--fs-xs);
+  }
+}
+
+@media (max-width: 380px) {
+  .profile__stats {
+    grid-template-columns: 1fr;
+  }
+  .profile__stats::before {
+    inset: 0 20px;
+    background-image:
+      linear-gradient(
+        180deg,
+        transparent calc(25% - 0.5px),
+        var(--line) calc(25% - 0.5px),
+        var(--line) calc(25% + 0.5px),
+        transparent calc(25% + 0.5px)
+      ),
+      linear-gradient(
+        180deg,
+        transparent calc(50% - 0.5px),
+        var(--line) calc(50% - 0.5px),
+        var(--line) calc(50% + 0.5px),
+        transparent calc(50% + 0.5px)
+      ),
+      linear-gradient(
+        180deg,
+        transparent calc(75% - 0.5px),
+        var(--line) calc(75% - 0.5px),
+        var(--line) calc(75% + 0.5px),
+        transparent calc(75% + 0.5px)
+      );
+  }
+  .profile__stat {
+    min-height: 68px;
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 10px 14px;
+    display: flex;
+  }
+  .profile__stat-body {
+    align-items: flex-start;
+    text-align: left;
   }
 }
 </style>

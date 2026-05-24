@@ -1,8 +1,9 @@
 <script setup>
 // 心情列表筛选栏：心情类型 + 起止日期。
 // 自身不发请求，只通过 v-model + @apply/@reset 把意图给父级。
-import { computed } from 'vue'
+import { computed, nextTick } from 'vue'
 import BaseSelect from '../ui/BaseSelect.vue'
+import BaseDateInput from '../ui/BaseDateInput.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import { MOOD_OPTIONS } from '../../utils/mood'
 
@@ -29,11 +30,30 @@ const hasFilter = computed(
   () => props.moodType || props.startDate || props.endDate
 )
 
-function onStart(e) {
-  emit('update:startDate', e.target.value)
+function pad(value) {
+  return String(value).padStart(2, '0')
 }
-function onEnd(e) {
-  emit('update:endDate', e.target.value)
+
+function formatDate(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+async function applyRecent(days) {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(end.getDate() - days + 1)
+  emit('update:startDate', formatDate(start))
+  emit('update:endDate', formatDate(end))
+  await nextTick()
+  emit('apply')
+}
+
+async function applyToday() {
+  const today = formatDate(new Date())
+  emit('update:startDate', today)
+  emit('update:endDate', today)
+  await nextTick()
+  emit('apply')
 }
 </script>
 
@@ -50,19 +70,27 @@ function onEnd(e) {
     </div>
 
     <div class="filter-bar__dates">
-      <input
-        type="date"
+      <BaseDateInput
+        :model-value="startDate"
         class="filter-bar__date"
-        :value="startDate"
-        @input="onStart"
+        placeholder="开始日期"
+        size="sm"
+        @update:model-value="(v) => emit('update:startDate', v)"
       />
       <span class="filter-bar__sep">至</span>
-      <input
-        type="date"
+      <BaseDateInput
+        :model-value="endDate"
         class="filter-bar__date"
-        :value="endDate"
-        @input="onEnd"
+        placeholder="结束日期"
+        size="sm"
+        @update:model-value="(v) => emit('update:endDate', v)"
       />
+    </div>
+
+    <div class="filter-bar__quick">
+      <button type="button" @click="applyToday">今天</button>
+      <button type="button" @click="applyRecent(7)">近7天</button>
+      <button type="button" @click="applyRecent(30)">近30天</button>
     </div>
 
     <div class="filter-bar__actions">
@@ -79,8 +107,8 @@ function onEnd(e) {
 
 <style scoped>
 .filter-bar {
-  display: grid;
-  grid-template-columns: 180px 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   padding: 12px 16px;
@@ -89,28 +117,25 @@ function onEnd(e) {
   border-radius: var(--radius-3);
 }
 
+.filter-bar__field--mood {
+  flex: 0 1 180px;
+}
+
 .filter-bar__dates {
+  flex: 1 1 330px;
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .filter-bar__date {
-  height: 34px;
   flex: 1;
-  min-width: 120px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-2);
-  background: var(--bg-card);
-  color: var(--ink-1);
-  font: inherit;
+  min-width: 112px;
 }
 
-.filter-bar__date:focus {
-  outline: none;
-  border-color: var(--brand);
-  box-shadow: var(--shadow-focus);
+.filter-bar__date :deep(.date-field__control) {
+  padding-right: 10px;
 }
 
 .filter-bar__sep {
@@ -118,15 +143,78 @@ function onEnd(e) {
   font-size: var(--fs-sm);
 }
 
+.filter-bar__quick {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.filter-bar__quick button {
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.filter-bar__quick button:hover {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+
 .filter-bar__actions {
+  flex: 0 0 auto;
   display: flex;
   gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 980px) {
+  .filter-bar__field--mood { flex-basis: 170px; }
+  .filter-bar__dates { flex-basis: 360px; }
+  .filter-bar__quick {
+    order: 3;
+  }
+  .filter-bar__actions {
+    order: 4;
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 720px) {
-  .filter-bar {
-    grid-template-columns: 1fr;
+  .filter-bar { align-items: stretch; }
+  .filter-bar__field--mood,
+  .filter-bar__dates,
+  .filter-bar__quick,
+  .filter-bar__actions {
+    flex: 1 1 100%;
   }
-  .filter-bar__actions { justify-content: flex-end; }
+  .filter-bar__dates {
+    align-items: stretch;
+  }
+  .filter-bar__date {
+    min-width: 0;
+  }
+  .filter-bar__quick {
+    justify-content: space-between;
+    border-radius: var(--radius-2);
+  }
+  .filter-bar__quick button {
+    flex: 1;
+  }
+  .filter-bar__actions {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 </style>
