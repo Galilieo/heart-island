@@ -64,13 +64,7 @@ public class UserController {
             return Result.error("账号已被禁用");
         }
 
-        UserVO userVO = new UserVO(
-                loginUser.getId(),
-                loginUser.getUsername(),
-                loginUser.getNickname(),
-                loginUser.getRole(),
-                loginUser.getStatus()
-        );
+        UserVO userVO = UserVO.fromUser(loginUser);
 
         String token= jwtUtil.generateToken(
                 loginUser.getId(),
@@ -93,21 +87,38 @@ public class UserController {
             return Result.error("昵称不能超过50个字");
         }
 
+        if (dto.getGender() != null && dto.getGender().length() > 20) {
+            return Result.error("性别字段格式异常");
+        }
+
+        if (dto.getBio() != null && dto.getBio().length() > 300) {
+            return Result.error("个性签名不能超过300个字");
+        }
+
+        if (dto.getCity() != null && dto.getCity().length() > 50) {
+            return Result.error("城市不能超过50个字");
+        }
+
         Long userId = jwtUtil.getUserId(token);
-        User user = userService.updateNickname(userId, dto.getNickname());
+        User user = userService.updateProfile(userId, dto);
 
         if (user == null) {
             return Result.error("用户不存在");
         }
 
-        UserVO userVO = new UserVO(
-                user.getId(),
-                user.getUsername(),
-                user.getNickname(),
-                user.getRole(),
-                user.getStatus()
-        );
-        return Result.success("修改成功", userVO);
+        return Result.success("修改成功", UserVO.fromUser(user));
+    }
+
+    @GetMapping("/profile-stats")
+    public Result<com.xinyu.vo.ProfileStatsVO> profileStats(@RequestHeader("token") String token) {
+        Long userId = jwtUtil.getUserId(token);
+        com.xinyu.vo.ProfileStatsVO stats = userService.getProfileStats(userId);
+
+        if (stats == null) {
+            return Result.error("用户不存在");
+        }
+
+        return Result.success(stats);
     }
 
     @PostMapping("/update-password")
@@ -143,15 +154,7 @@ public class UserController {
             return Result.error("用户不存在");
         }
 
-        UserVO userVO = new UserVO(
-                user.getId(),
-                user.getUsername(),
-                user.getNickname(),
-                user.getRole(),
-                user.getStatus()
-        );
-
-        return Result.success("查询成功", userVO);
+        return Result.success("查询成功", UserVO.fromUser(user));
     }
 
 
