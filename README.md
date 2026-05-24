@@ -91,6 +91,13 @@
 - AI 记录管理：按用户、业务类型、状态、关键词筛选，查看详情
 - 后台公共组件拆分：`AdminTabs`、`AdminPageHeader`、`AdminFilterActions`
 
+### 工程与设计
+
+- 自建设计系统：全局 token + 基础组件库（无第三方 UI 库依赖）
+- 全站响应式适配：3 个标准断点（480 / 768 / 1024），集中维护
+- 移动端体验保护：触摸目标 ≥ 40px，输入框 ≥ 16px 防 iOS 自动 zoom
+- composable 抽象通用逻辑：useToast / useConfirm / useAsyncAction / usePagination
+
 ## 项目结构
 
 ```text
