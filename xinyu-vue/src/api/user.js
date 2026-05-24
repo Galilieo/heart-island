@@ -11,7 +11,7 @@ export const userApi = {
     return unwrap(request.post('/user/register', payload))
   },
 
-  // 修改昵称
+  // 修改个人资料（昵称 / 性别 / 生日 / 签名 / 城市）
   updateProfile(payload) {
     return unwrap(request.post('/user/update-profile', payload))
   },
@@ -19,5 +19,10 @@ export const userApi = {
   // 修改密码
   updatePassword(payload) {
     return unwrap(request.post('/user/update-password', payload))
+  },
+
+  // 个人资料页顶部数据小条
+  profileStats() {
+    return unwrap(request.get('/user/profile-stats'))
   }
 }
