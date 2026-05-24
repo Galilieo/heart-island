@@ -1,0 +1,73 @@
+/*
+ * 全站响应式约定与工具类。
+ *
+ * ── 三大断点（约定，CSS 变量在 @media 里不可用）────────
+ *   ≤ 480px   mobile   小手机，超紧凑
+ *   ≤ 768px   tablet   大手机 / 小平板，主断点：栏堆叠、字号缩小
+ *   ≤ 1024px  desktop  平板 / 小笔记本，双栏/三栏退化为单栏
+ *
+ * 开发约定：新写组件请只用这三个断点数字，不要再引入新的中间值。
+ * admin 页面优先在桌面访问，仅保证手机上不出错（可横滚），不作精细优化。
+ */
+
+/* ───── 工具类 ───── */
+
+/* 隐藏 / 仅显示 */
+@media (max-width: 480px) {
+  .hide-on-mobile { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  .hide-on-tablet { display: none !important; }
+}
+
+@media (min-width: 481px) {
+  .only-mobile { display: none !important; }
+}
+
+@media (min-width: 769px) {
+  .only-tablet { display: none !important; }
+}
+
+/* 双栏 → 单栏快捷类（grid / flex 通用） */
+@media (max-width: 768px) {
+  .stack-on-tablet {
+    grid-template-columns: 1fr !important;
+    flex-direction: column !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .stack-on-mobile {
+    grid-template-columns: 1fr !important;
+    flex-direction: column !important;
+  }
+}
+
+/* ───── 全站触摸/字号保护 ───── */
+
+@media (max-width: 768px) {
+  /* iOS 字号 < 16px 时点击 input 会自动放大页面，体验糟糕 */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* 触摸目标最小 40px，按苹果 HIG 建议偏保守 */
+  button,
+  .btn,
+  a.btn {
+    min-height: 40px;
+  }
+}
+
+/* ───── 全站窄屏全局收紧 ───── */
+
+@media (max-width: 480px) {
+  .container,
+  .container-narrow {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
