@@ -290,4 +290,12 @@ function isActive(item) {
   .user__name { display: none; }
   .nav__item { padding: 6px 12px; font-size: var(--fs-sm); }
 }
+
+@media (max-width: 480px) {
+  .app-header__inner { gap: 6px; height: 56px; }
+  .nav { gap: 2px; }
+  .nav__item { padding: 5px 9px; font-size: var(--fs-xs); }
+  .user__caret { display: none; }
+  .user__chip { padding-left: 2px; padding-right: 8px; }
+}
 </style>

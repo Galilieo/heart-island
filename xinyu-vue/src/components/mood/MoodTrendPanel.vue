@@ -219,4 +219,10 @@ const hasData = computed(() => (props.trend?.total || 0) > 0)
 @media (max-width: 768px) {
   .trend__stats { grid-template-columns: 1fr 1fr; }
 }
+
+@media (max-width: 480px) {
+  .trend__stats { grid-template-columns: 1fr; }
+  .trend__row { grid-template-columns: 44px 1fr 28px; gap: 8px; }
+  .trend__row-label { font-size: var(--fs-xs); }
+}
 </style>

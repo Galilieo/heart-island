@@ -357,4 +357,21 @@ onMounted(async () => {
   }
   .post-page__title { font-size: var(--fs-2xl); }
 }
+
+@media (max-width: 480px) {
+  .post-page__hero { padding: 20px; }
+  .post-page__list-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .post-page__controls {
+    justify-content: flex-start;
+  }
+  .post-page__filter-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+}
 </style>

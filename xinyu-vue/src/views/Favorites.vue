@@ -188,4 +188,8 @@ onMounted(async () => {
   .fav-page__hero { padding: 24px; }
   .fav-page__title { font-size: var(--fs-2xl); }
 }
+
+@media (max-width: 480px) {
+  .fav-page__hero { padding: 20px; }
+}
 </style>

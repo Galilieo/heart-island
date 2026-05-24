@@ -350,4 +350,14 @@ onMounted(() => {
 
   .home__hero-doodles { display: none; }
 }
+
+@media (max-width: 480px) {
+  .home__hero { padding: 20px; }
+  .home__greet { font-size: var(--fs-2xl); }
+  .home__list-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
 </style>
