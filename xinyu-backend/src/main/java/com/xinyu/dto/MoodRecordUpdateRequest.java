@@ -1,6 +1,6 @@
 package com.xinyu.dto;
 
-public class MoodRecordAddRequest {
+public class MoodRecordUpdateRequest {
     private String moodType;
     private String content;
 

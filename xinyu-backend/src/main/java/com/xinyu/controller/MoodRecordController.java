@@ -2,6 +2,8 @@ package com.xinyu.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.common.Result;
+import com.xinyu.dto.MoodRecordAddRequest;
+import com.xinyu.dto.MoodRecordUpdateRequest;
 import com.xinyu.entity.MoodRecord;
 import com.xinyu.service.MoodRecordService;
 import com.xinyu.utils.JwtUtil;
@@ -22,20 +24,28 @@ public class MoodRecordController {
 
     @PostMapping("/add")
     public Result<Boolean> add(@RequestHeader(value = "token", required = false) String token,
-                               @RequestBody MoodRecord moodRecord) {
+                               @RequestBody MoodRecordAddRequest request) {
         if (token == null || token.trim().isEmpty()) {
             return Result.error("请先登录");
         }
 
-        if (moodRecord.getMoodType() == null || moodRecord.getMoodType().trim().isEmpty()) {
+        if (request == null) {
+            return Result.error("请求参数不能为空");
+        }
+
+        if (request.getMoodType() == null || request.getMoodType().trim().isEmpty()) {
             return Result.error("心情类型不能为空");
         }
 
-        if (moodRecord.getContent() == null || moodRecord.getContent().trim().isEmpty()) {
+        if (request.getContent() == null || request.getContent().trim().isEmpty()) {
             return Result.error("心情内容不能为空");
         }
 
         Long userId = jwtUtil.getUserId(token);
+
+        MoodRecord moodRecord = new MoodRecord();
+        moodRecord.setMoodType(request.getMoodType());
+        moodRecord.setContent(request.getContent());
         moodRecord.setUserId(userId);
 
         Boolean success = moodRecordService.add(moodRecord);
@@ -122,7 +132,7 @@ public class MoodRecordController {
     @PutMapping("/update/{id}")
     public Result<Boolean> update(@RequestHeader(value = "token", required = false) String token,
                                   @PathVariable Long id,
-                                  @RequestBody MoodRecord moodRecord) {
+                                  @RequestBody MoodRecordUpdateRequest request) {
         if (token == null || token.trim().isEmpty()) {
             return Result.error("请先登录");
         }
@@ -131,11 +141,23 @@ public class MoodRecordController {
             return Result.error("记录id不能为空");
         }
 
-        if(moodRecord.getMoodType()==null||moodRecord.getContent().trim().isEmpty()){
+        if (request == null) {
+            return Result.error("请求参数不能为空");
+        }
+
+        if (request.getMoodType() == null || request.getMoodType().trim().isEmpty()) {
+            return Result.error("心情类型不能为空");
+        }
+
+        if (request.getContent() == null || request.getContent().trim().isEmpty()) {
             return Result.error("心情内容不能为空");
         }
 
         Long userId = jwtUtil.getUserId(token);
+        MoodRecord moodRecord = new MoodRecord();
+        moodRecord.setMoodType(request.getMoodType());
+        moodRecord.setContent(request.getContent());
+
         Boolean success =moodRecordService.update(id,userId,moodRecord);
 
         if (!success) {
