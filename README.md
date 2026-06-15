@@ -25,7 +25,7 @@
 | 前端 | Vue3、Vite、Pinia、Vue Router、axios |
 | AI | DeepSeek API |
 | 数据库 | MySQL |
-| 部署规划 | Linux、Nginx、JDK、Maven、Node.js |
+| 部署 | Linux、Nginx、systemd、MySQL |
 
 ## 已完成功能
 
@@ -103,17 +103,13 @@
 ```text
 heart_island
 ├─ docs
-│  ├─ 01-项目背景与可行性分析.md
-│  ├─ 02-需求分析说明书.md
-│  ├─ 03-系统概要设计说明书.md
-│  ├─ 04-数据库设计说明书.md
-│  ├─ 05-接口设计说明书.md
-│  ├─ 06-详细设计说明书.md
-│  ├─ 07-前端界面与交互设计说明.md
-│  ├─ 08-测试说明书.md
-│  ├─ 09-部署与运行说明.md
-│  ├─ 10-项目总结与后续规划.md
-│  └─ 11-分阶段开发计划.md
+│  ├─ README.md
+│  ├─ project
+│  │  └─ 01-11 项目交付文档
+│  ├─ history
+│  │  └─ 历史设计与实施记录
+│  └─ personal
+│     └─ 本地个人资料，不提交到仓库
 ├─ sql
 │  └─ xinyu.sql
 ├─ xinyu-backend
@@ -155,8 +151,9 @@ sql/xinyu.sql
 
 进入后端目录：
 
-```bash
+```powershell
 cd xinyu-backend
+$env:DB_PASSWORD="你的本地 MySQL 密码"
 mvn spring-boot:run
 ```
 
@@ -183,6 +180,8 @@ http://localhost:5173
 ```
 
 前端接口地址通过 `xinyu-vue/.env.development` 中的 `VITE_API_BASE_URL` 配置。
+
+后端数据库连接也可以通过 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 环境变量覆盖，避免把本地密码写入仓库。
 
 ## 核心接口概览
 
@@ -218,7 +217,7 @@ http://localhost:5173
 | 后台 | PUT | `/admin/topic/{id}` | 编辑话题 |
 | 后台 | GET | `/admin/ai-replies/page` | AI 回复记录分页 |
 
-更完整的接口说明见 [docs/05-接口设计说明书.md](docs/05-接口设计说明书.md)。
+更完整的接口说明见 [docs/project/05-接口设计说明书.md](docs/project/05-接口设计说明书.md)。
 
 ## 运行验证
 
@@ -249,17 +248,19 @@ npm run build
 
 | 文档 | 说明 |
 | --- | --- |
-| `docs/01-项目背景与可行性分析.md` | 项目背景、价值和可行性 |
-| `docs/02-需求分析说明书.md` | 角色、用户故事和功能需求 |
-| `docs/03-系统概要设计说明书.md` | 架构、模块划分和整体设计 |
-| `docs/04-数据库设计说明书.md` | 数据表、字段和关系说明 |
-| `docs/05-接口设计说明书.md` | REST 接口、参数和返回说明 |
-| `docs/06-详细设计说明书.md` | 关键业务流程和实现细节 |
-| `docs/07-前端界面与交互设计说明.md` | 页面结构和交互设计 |
-| `docs/08-测试说明书.md` | 测试范围、测试用例和验收标准 |
-| `docs/09-部署与运行说明.md` | 本地和服务器部署说明 |
-| `docs/10-项目总结与后续规划.md` | 当前成果、亮点和后续方向 |
-| `docs/11-分阶段开发计划.md` | 已完成阶段和后续开发计划 |
+| `docs/project/01-项目背景与可行性分析.md` | 项目背景、价值和可行性 |
+| `docs/project/02-需求分析说明书.md` | 角色、用户故事和功能需求 |
+| `docs/project/03-系统概要设计说明书.md` | 架构、模块划分和整体设计 |
+| `docs/project/04-数据库设计说明书.md` | 数据表、字段和关系说明 |
+| `docs/project/05-接口设计说明书.md` | REST 接口、参数和返回说明 |
+| `docs/project/06-详细设计说明书.md` | 关键业务流程和实现细节 |
+| `docs/project/07-前端界面与交互设计说明.md` | 页面结构和交互设计 |
+| `docs/project/08-测试说明书.md` | 测试范围、测试用例和验收标准 |
+| `docs/project/09-部署与运行说明.md` | 本地和服务器部署说明 |
+| `docs/project/10-项目总结与后续规划.md` | 当前成果、亮点和后续方向 |
+| `docs/project/11-分阶段开发计划.md` | 已完成阶段和后续开发计划 |
+
+完整文档分类与可信度说明见 [docs/README.md](docs/README.md)。
 
 ## 简历表述建议
 
@@ -275,5 +276,5 @@ npm run build
 - 举报、敏感词和内容审核流程
 - AI 回复异步化、重试和限流
 - Redis 缓存热门帖子、话题和统计数据
-- 服务器部署、Nginx 反向代理和线上日志
+- 完善线上日志、Nginx 反向代理和自动化发布流程
 - 单元测试、接口测试和端到端测试补充

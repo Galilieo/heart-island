@@ -170,6 +170,6 @@ Expected: login is rejected.
 
 ## Self-Review
 
-- Spec coverage: covers the first phase 4 foundation from `docs/11-分阶段开发计划.md`: admin role, admin permission recognition, user list, and user enable/disable.
+- Spec coverage: covers the first phase 4 foundation from `docs/project/11-分阶段开发计划.md`: admin role, admin permission recognition, user list, and user enable/disable.
 - Intentional gaps: post audit, reply management, topic management, AI reply management, admin dashboard, and frontend admin pages are later slices.
 - Placeholder scan: no placeholder implementation steps remain.

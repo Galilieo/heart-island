@@ -51,7 +51,6 @@ pnpm-debug.log*
 # Build tool caches
 .gradle/
 .cache/
-.xmind8-runtime/
 
 # Temporary files
 tmp/
@@ -68,24 +67,6 @@ temp/
 uploads/
 files/
 
-# Local private deployment notes
-docs/服务器部署速查.md
-docs/12-Java后端知识掌握度统计.md
-docs/13-前端知识掌握度统计.md
-docs/下一个项目目标.md
-docs/面试准备-项目问答.md
-docs/姜秋雨-简历-前端版.md
-docs/面试准备-全面问答.md
-docs/面试急救小抄.md
-
-# Local career, interview, and learning materials
+# Local personal materials
 AGENTS.md
-docs/两周实习冲刺学习计划.md
-docs/前端实习面试题库与准备纲要.md
-docs/后端为核心的全栈AI应用开发学习路线.md
-docs/姜秋雨-个人项目与求职上下文.md
-docs/姜秋雨-岗位定位与完整学习路线.md
-docs/实习求职与面试系统准备方案.md
-docs/*.xmind
-tools/generate-learning-roadmap-xmind.mjs
-tools/generate-learning-roadmap-xmind8.py
+docs/personal/
