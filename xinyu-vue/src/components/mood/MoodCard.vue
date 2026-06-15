@@ -16,7 +16,7 @@ defineEmits(['detail', 'delete'])
 </script>
 
 <template>
-  <BaseCard padding="md" hoverable class="mood-card">
+  <BaseCard padding="md" hoverable class="mood-card motion-pop-in">
     <div class="mood-card__top">
       <BaseTag :tone="moodTone(mood.moodType)" variant="soft" size="md">
         {{ mood.moodType }}

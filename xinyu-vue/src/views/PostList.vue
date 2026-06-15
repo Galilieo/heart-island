@@ -155,13 +155,13 @@ onMounted(async () => {
             <div class="post-page__scope">
               <button
                 type="button"
-                class="scope-chip"
+                class="scope-chip motion-press"
                 :class="{ 'is-active': filters.sort === 'latest' }"
                 @click="setSort('latest')"
               >最新</button>
               <button
                 type="button"
-                class="scope-chip"
+                class="scope-chip motion-press"
                 :class="{ 'is-active': filters.sort === 'hot' }"
                 @click="setSort('hot')"
               >最热</button>
@@ -169,13 +169,13 @@ onMounted(async () => {
             <div class="post-page__scope">
               <button
                 type="button"
-                class="scope-chip"
+                class="scope-chip motion-press"
                 :class="{ 'is-active': !filters.mine }"
                 @click="setScope(false)"
               >全部</button>
               <button
                 type="button"
-                class="scope-chip"
+                class="scope-chip motion-press"
                 :class="{ 'is-active': filters.mine }"
                 @click="setScope(true)"
               >我的</button>
@@ -183,9 +183,9 @@ onMounted(async () => {
           </div>
         </header>
 
-        <div class="post-page__list">
+        <TransitionGroup name="motion-list" tag="div" class="post-page__list motion-list">
           <template v-if="postsLoading && !posts.length">
-            <SkeletonCard v-for="i in 3" :key="i" avatar rows="3" />
+            <SkeletonCard v-for="i in 3" :key="`post-skeleton-${i}`" avatar rows="3" />
           </template>
 
           <template v-else-if="posts.length">
@@ -203,7 +203,8 @@ onMounted(async () => {
           </template>
 
           <EmptyState
-            v-else
+            v-else-if="!postsLoading"
+            key="post-empty"
             doodle="cloud"
             title="这里还没有帖子"
             hint="换个话题试试，或者点上面的「发布」写下你想说的。"
@@ -212,7 +213,7 @@ onMounted(async () => {
               我来写第一条
             </BaseButton>
           </EmptyState>
-        </div>
+        </TransitionGroup>
       </BaseCard>
     </div>
   </AppShell>
@@ -314,7 +315,9 @@ onMounted(async () => {
   cursor: pointer;
   border-radius: var(--radius-pill);
   transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft);
+    color var(--t-fast) var(--ease-soft),
+    box-shadow var(--t-fast) var(--ease-soft),
+    transform var(--t-fast) var(--ease-soft);
 }
 
 .scope-chip.is-active {

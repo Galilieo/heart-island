@@ -1,20 +1,37 @@
 <script setup>
 // 加载占位卡片。列表请求中显示几个占位，避免空白闪烁。
-defineProps({
+import { onMounted, onUnmounted, shallowRef } from 'vue'
+
+const props = defineProps({
   rows: { type: [Number, String], default: 3 },
-  avatar: Boolean
+  avatar: Boolean,
+  delay: { type: [Number, String], default: 180 }
+})
+
+const visible = shallowRef(false)
+let timer = null
+
+onMounted(() => {
+  timer = window.setTimeout(() => {
+    visible.value = true
+    timer = null
+  }, Number(props.delay))
+})
+
+onUnmounted(() => {
+  if (timer) window.clearTimeout(timer)
 })
 </script>
 
 <template>
-  <div class="skeleton">
-    <div v-if="avatar" class="skeleton__avatar shimmer" />
+  <div class="skeleton" :class="{ 'is-visible': visible }" aria-hidden="true">
+    <div v-if="avatar" class="skeleton__avatar motion-shimmer" />
     <div class="skeleton__lines">
-      <div class="skeleton__line shimmer skeleton__line--title" />
+      <div class="skeleton__line motion-shimmer skeleton__line--title" />
       <div
         v-for="i in Number(rows)"
         :key="i"
-        class="skeleton__line shimmer"
+        class="skeleton__line motion-shimmer"
         :style="{ width: `${85 - i * 6}%` }"
       />
     </div>
@@ -29,6 +46,20 @@ defineProps({
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: var(--radius-3);
+  opacity: 0;
+  transform: translateY(var(--motion-distance-xs));
+  transition:
+    opacity var(--t-base) var(--ease-soft),
+    transform var(--t-base) var(--ease-soft);
+}
+
+.skeleton.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.skeleton:not(.is-visible) .motion-shimmer {
+  animation-play-state: paused;
 }
 
 .skeleton__avatar {
@@ -56,19 +87,4 @@ defineProps({
   height: 16px;
 }
 
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--bg-soft) 0%,
-    #f0e8d6 50%,
-    var(--bg-soft) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s linear infinite;
-}
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
 </style>

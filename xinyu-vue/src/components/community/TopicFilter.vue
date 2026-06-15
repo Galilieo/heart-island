@@ -14,7 +14,7 @@ defineEmits(['select'])
   <div class="topics">
     <button
       type="button"
-      class="topic-chip"
+      class="topic-chip motion-press"
       :class="{ 'is-active': selectedTopicId === null || selectedTopicId === '' }"
       @click="$emit('select', null)"
     >全部</button>
@@ -25,7 +25,7 @@ defineEmits(['select'])
       v-for="topic in topics"
       :key="topic.id"
       type="button"
-      class="topic-chip"
+      class="topic-chip motion-press"
       :class="{ 'is-active': selectedTopicId === topic.id }"
       @click="$emit('select', topic.id)"
     >
@@ -64,6 +64,7 @@ defineEmits(['select'])
   transition: background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft),
     border-color var(--t-fast) var(--ease-soft),
+    box-shadow var(--t-fast) var(--ease-soft),
     transform var(--t-fast) var(--ease-bounce);
 }
 

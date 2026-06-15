@@ -6,7 +6,11 @@ import ConfirmDialog from './components/ui/ConfirmDialog.vue'
 </script>
 
 <template>
-  <router-view />
+  <RouterView v-slot="{ Component, route }">
+    <Transition name="route-fade" mode="out-in">
+      <component :is="Component" :key="route.fullPath" />
+    </Transition>
+  </RouterView>
   <Toast />
   <ConfirmDialog />
 </template>

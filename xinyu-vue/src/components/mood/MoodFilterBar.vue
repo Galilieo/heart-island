@@ -88,9 +88,9 @@ async function applyToday() {
     </div>
 
     <div class="filter-bar__quick">
-      <button type="button" @click="applyToday">今天</button>
-      <button type="button" @click="applyRecent(7)">近7天</button>
-      <button type="button" @click="applyRecent(30)">近30天</button>
+      <button type="button" class="motion-press" @click="applyToday">今天</button>
+      <button type="button" class="motion-press" @click="applyRecent(7)">近7天</button>
+      <button type="button" class="motion-press" @click="applyRecent(30)">近30天</button>
     </div>
 
     <div class="filter-bar__actions">
@@ -165,6 +165,9 @@ async function applyToday() {
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;
+  transition: background var(--t-fast) var(--ease-soft),
+    color var(--t-fast) var(--ease-soft),
+    transform var(--t-fast) var(--ease-soft);
 }
 
 .filter-bar__quick button:hover {

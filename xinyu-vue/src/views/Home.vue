@@ -193,9 +193,9 @@ onMounted(() => {
               @reset="handleResetFilter"
             />
 
-            <div class="home__list-body">
+            <TransitionGroup name="motion-list" tag="div" class="home__list-body motion-list">
               <template v-if="listLoading && !list.length">
-                <SkeletonCard v-for="i in 3" :key="i" rows="3" />
+                <SkeletonCard v-for="i in 3" :key="`mood-skeleton-${i}`" rows="3" />
               </template>
 
               <template v-else-if="list.length">
@@ -211,12 +211,13 @@ onMounted(() => {
               </template>
 
               <EmptyState
-                v-else
+                v-else-if="!listLoading"
+                key="mood-empty"
                 doodle="cloud"
                 title="还没有心情记录"
                 hint="左边写下一点感受，这里就会出现你的第一段记录。"
               />
-            </div>
+            </TransitionGroup>
 
             <div v-if="pages > 1" class="home__pgn">
               <BasePagination

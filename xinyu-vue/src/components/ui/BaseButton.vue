@@ -25,7 +25,7 @@ defineProps({
 <template>
   <button
     :type="type"
-    class="btn"
+    class="btn motion-press"
     :class="[`btn--${variant}`, `btn--${size}`, { 'btn--block': block, 'is-loading': loading }]"
     :disabled="disabled || loading"
   >

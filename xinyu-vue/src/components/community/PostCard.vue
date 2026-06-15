@@ -39,7 +39,7 @@ const isOwner = computed(
   <BaseCard
     :padding="variant === 'detail' ? 'lg' : 'md'"
     :hoverable="variant === 'card'"
-    class="pc"
+    class="pc motion-float-in"
     :class="`pc--${variant}`"
     @click="variant === 'card' ? $emit('open', post.id) : null"
   >
@@ -70,7 +70,7 @@ const isOwner = computed(
     <footer class="pc__actions" @click.stop>
       <button
         type="button"
-        class="pc__action"
+        class="pc__action motion-press"
         :class="{ 'is-active': post.liked }"
         @click="$emit('toggle-like', post)"
       >
@@ -81,7 +81,7 @@ const isOwner = computed(
 
       <button
         type="button"
-        class="pc__action"
+        class="pc__action motion-press"
         :class="{ 'is-active is-fav': post.favorited }"
         @click="$emit('toggle-favorite', post)"
       >
@@ -97,10 +97,10 @@ const isOwner = computed(
       <span class="pc__spacer" />
 
       <template v-if="isOwner && variant === 'detail'">
-        <button type="button" class="pc__action pc__action--soft" @click="$emit('edit', post)">
+        <button type="button" class="pc__action pc__action--soft motion-press" @click="$emit('edit', post)">
           编辑
         </button>
-        <button type="button" class="pc__action pc__action--danger" @click="$emit('delete', post)">
+        <button type="button" class="pc__action pc__action--danger motion-press" @click="$emit('delete', post)">
           删除
         </button>
       </template>
