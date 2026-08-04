@@ -1,7 +1,7 @@
 <script setup>
 // 心情列表筛选栏：心情类型 + 起止日期。
 // 自身不发请求，只通过 v-model + @apply/@reset 把意图给父级。
-import { computed, nextTick } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import BaseSelect from '../ui/BaseSelect.vue'
 import BaseDateInput from '../ui/BaseDateInput.vue'
 import BaseButton from '../ui/BaseButton.vue'
@@ -29,6 +29,13 @@ const moodSelectOptions = [
 const hasFilter = computed(
   () => props.moodType || props.startDate || props.endDate
 )
+const startDateInputRef = ref(null)
+const endDateInputRef = ref(null)
+
+function handleDatePickerOpen(activePicker) {
+  if (activePicker === 'start') endDateInputRef.value?.closePicker()
+  if (activePicker === 'end') startDateInputRef.value?.closePicker()
+}
 
 function pad(value) {
   return String(value).padStart(2, '0')
@@ -71,18 +78,23 @@ async function applyToday() {
 
     <div class="filter-bar__dates">
       <BaseDateInput
+        ref="startDateInputRef"
         :model-value="startDate"
         class="filter-bar__date"
         placeholder="开始日期"
         size="sm"
+        @open="handleDatePickerOpen('start')"
         @update:model-value="(v) => emit('update:startDate', v)"
       />
       <span class="filter-bar__sep">至</span>
       <BaseDateInput
+        ref="endDateInputRef"
         :model-value="endDate"
         class="filter-bar__date"
         placeholder="结束日期"
+        picker-align="end"
         size="sm"
+        @open="handleDatePickerOpen('end')"
         @update:model-value="(v) => emit('update:endDate', v)"
       />
     </div>
@@ -183,8 +195,8 @@ async function applyToday() {
 }
 
 @media (max-width: 1024px) {
-  .filter-bar__field--mood { flex-basis: 170px; }
-  .filter-bar__dates { flex-basis: 360px; }
+  .filter-bar__field--mood { flex: 0 0 170px; }
+  .filter-bar__dates { flex: 1 1 calc(100% - 182px); }
   .filter-bar__quick {
     order: 3;
   }
@@ -218,6 +230,18 @@ async function applyToday() {
   .filter-bar__actions {
     margin-left: 0;
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-bar__dates {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-bar__sep {
+    align-self: center;
+    line-height: 1;
   }
 }
 </style>

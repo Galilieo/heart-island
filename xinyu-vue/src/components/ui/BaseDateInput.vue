@@ -1,7 +1,7 @@
 <script setup>
 // 三段式日期输入：用户只填数字，分隔符由组件固定显示；也可点击日历选择日期。
 // 对外始终输出 YYYY-MM-DD，方便接口筛选和表单提交。
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -11,20 +11,28 @@ const props = defineProps({
   disabled: Boolean,
   placeholder: String,
   size: { type: String, default: 'md' },
-  clearable: { type: Boolean, default: true }
+  clearable: { type: Boolean, default: true },
+  pickerAlign: { type: String, default: 'start' }
 })
 
-const emit = defineEmits(['update:modelValue', 'enter'])
+const emit = defineEmits(['update:modelValue', 'enter', 'open'])
 
 const rootRef = ref(null)
 const yearInputRef = ref(null)
 const monthInputRef = ref(null)
 const dayInputRef = ref(null)
+const calendarButtonRef = ref(null)
+const pickerRef = ref(null)
 const yearPart = ref('')
 const monthPart = ref('')
 const dayPart = ref('')
 const pickerOpen = ref(false)
 const viewDate = ref(getInitialViewDate(props.modelValue))
+const pickerId = `date-picker-${useId()}`
+const pickerPlacement = ref('bottom')
+const pickerStyle = ref({})
+let placementFrame = 0
+let placementListenersAttached = false
 
 watch(
   () => props.modelValue,
@@ -71,6 +79,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleOutside)
+  detachPlacementListeners()
+  cancelAnimationFrame(placementFrame)
 })
 
 function pad(value) {
@@ -237,13 +247,23 @@ function handleSegmentKeydown(part, event) {
 function clear() {
   clearParts()
   emit('update:modelValue', '')
+  if (pickerOpen.value) closePicker({ returnFocus: true })
 }
 
-function togglePicker() {
+async function togglePicker() {
   if (props.disabled) return
+  if (pickerOpen.value) {
+    closePicker({ returnFocus: true })
+    return
+  }
+
   const parsed = parseDate(props.modelValue)
   if (parsed) viewDate.value = new Date(parsed.year, parsed.month - 1, 1)
-  pickerOpen.value = !pickerOpen.value
+  emit('open')
+  pickerOpen.value = true
+  attachPlacementListeners()
+  await nextTick()
+  schedulePickerPlacement()
 }
 
 function shiftMonth(offset) {
@@ -255,7 +275,7 @@ function shiftMonth(offset) {
 function pickDate(value) {
   setPartsFromValue(value)
   emit('update:modelValue', value)
-  pickerOpen.value = false
+  closePicker({ returnFocus: true })
 }
 
 function pickToday() {
@@ -263,7 +283,111 @@ function pickToday() {
 }
 
 function handleOutside(event) {
-  if (!rootRef.value?.contains(event.target)) pickerOpen.value = false
+  if (!rootRef.value?.contains(event.target)) closePicker()
+}
+
+function handlePickerKeydown(event) {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  closePicker({ returnFocus: true })
+}
+
+function attachPlacementListeners() {
+  if (placementListenersAttached) return
+  placementListenersAttached = true
+  document.addEventListener('keydown', handlePickerKeydown)
+  document.addEventListener('scroll', schedulePickerPlacement, true)
+  window.addEventListener('resize', schedulePickerPlacement)
+  window.visualViewport?.addEventListener('resize', schedulePickerPlacement)
+  window.visualViewport?.addEventListener('scroll', schedulePickerPlacement)
+}
+
+function detachPlacementListeners() {
+  if (!placementListenersAttached) return
+  placementListenersAttached = false
+  document.removeEventListener('keydown', handlePickerKeydown)
+  document.removeEventListener('scroll', schedulePickerPlacement, true)
+  window.removeEventListener('resize', schedulePickerPlacement)
+  window.visualViewport?.removeEventListener('resize', schedulePickerPlacement)
+  window.visualViewport?.removeEventListener('scroll', schedulePickerPlacement)
+}
+
+function closePicker({ returnFocus = false } = {}) {
+  if (!pickerOpen.value) return
+  pickerOpen.value = false
+  detachPlacementListeners()
+  cancelAnimationFrame(placementFrame)
+  pickerStyle.value = {}
+
+  if (returnFocus) {
+    nextTick(() => calendarButtonRef.value?.focus())
+  }
+}
+
+defineExpose({ closePicker })
+
+function schedulePickerPlacement() {
+  if (!pickerOpen.value) return
+  cancelAnimationFrame(placementFrame)
+  placementFrame = requestAnimationFrame(updatePickerPlacement)
+}
+
+async function updatePickerPlacement() {
+  const root = rootRef.value
+  const picker = pickerRef.value
+  if (!root || !picker || !pickerOpen.value) return
+
+  const viewport = window.visualViewport
+  const viewportWidth = viewport?.width || window.innerWidth
+  const viewportHeight = viewport?.height || window.innerHeight
+  const viewportTop = viewport?.offsetTop || 0
+  const viewportLeft = viewport?.offsetLeft || 0
+  const margin = 12
+  const gap = 8
+  const rootRect = root.getBoundingClientRect()
+  const safePickerWidth = Math.max(0, Math.min(320, viewportWidth - margin * 2))
+
+  if (
+    rootRect.bottom < viewportTop + margin ||
+    rootRect.top > viewportTop + viewportHeight - margin
+  ) {
+    closePicker()
+    return
+  }
+
+  pickerStyle.value = {
+    ...pickerStyle.value,
+    width: `${safePickerWidth}px`,
+    maxHeight: '',
+    overflowY: ''
+  }
+  await nextTick()
+  if (!pickerOpen.value || pickerRef.value !== picker) return
+
+  const pickerWidth = picker.offsetWidth
+  const minLeft = viewportLeft + margin
+  const maxLeft = viewportLeft + viewportWidth - pickerWidth - margin
+  const preferredLeft = props.pickerAlign === 'end'
+    ? rootRect.right - pickerWidth
+    : rootRect.left
+  const clampedLeft = Math.min(Math.max(preferredLeft, minLeft), Math.max(minLeft, maxLeft))
+
+  const fullHeight = Math.max(picker.scrollHeight, picker.getBoundingClientRect().height)
+  const availableBelow = viewportTop + viewportHeight - rootRect.bottom - gap - margin
+  const availableAbove = rootRect.top - viewportTop - gap - margin
+  const shouldPlaceAbove = fullHeight > availableBelow && availableAbove > availableBelow
+  const availableHeight = Math.max(0, shouldPlaceAbove ? availableAbove : availableBelow)
+  const needsScroll = fullHeight > availableHeight
+
+  pickerPlacement.value = shouldPlaceAbove ? 'top' : 'bottom'
+  pickerStyle.value = {
+    width: `${safePickerWidth}px`,
+    left: `${clampedLeft - rootRect.left}px`,
+    top: shouldPlaceAbove ? 'auto' : 'calc(100% + 8px)',
+    bottom: shouldPlaceAbove ? 'calc(100% + 8px)' : 'auto',
+    maxHeight: needsScroll ? `${Math.floor(availableHeight)}px` : '',
+    overflowY: needsScroll ? 'auto' : ''
+  }
 }
 </script>
 
@@ -327,17 +451,29 @@ function handleOutside(event) {
         ×
       </button>
       <button
+        ref="calendarButtonRef"
         type="button"
         class="date-field__calendar"
-        aria-label="打开日期选择"
+        :aria-label="pickerOpen ? '关闭日期选择' : '打开日期选择'"
         :aria-expanded="pickerOpen"
+        :aria-controls="pickerId"
+        aria-haspopup="dialog"
         :disabled="disabled"
         @click="togglePicker"
       >
         <span class="date-field__calendar-icon" aria-hidden="true"></span>
       </button>
     </span>
-    <div v-if="pickerOpen" class="date-field__picker">
+    <div
+      v-if="pickerOpen"
+      :id="pickerId"
+      ref="pickerRef"
+      class="date-field__picker"
+      role="dialog"
+      aria-label="选择日期"
+      :data-placement="pickerPlacement"
+      :style="pickerStyle"
+    >
       <div class="date-picker__head">
         <button type="button" aria-label="上个月" @click="shiftMonth(-1)">‹</button>
         <strong>{{ monthTitle }}</strong>
@@ -362,13 +498,16 @@ function handleOutside(event) {
             'is-today': day.isToday,
             'is-selected': day.isSelected
           }"
+          :aria-label="day.value"
+          :aria-current="day.isToday ? 'date' : undefined"
+          :aria-pressed="day.isSelected"
           @click="pickDate(day.value)"
         >
           {{ day.day }}
         </button>
       </div>
       <div class="date-picker__foot">
-        <button type="button" @click="clear(); pickerOpen = false">清空</button>
+        <button type="button" @click="clear">清空</button>
         <button type="button" @click="pickToday">今天</button>
       </div>
     </div>
@@ -544,12 +683,13 @@ function handleOutside(event) {
   z-index: calc(var(--z-dropdown) + 10);
   top: calc(100% + 8px);
   left: 0;
-  width: min(320px, 100%);
+  width: min(320px, calc(100vw - 24px));
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-3);
   background: var(--bg-card);
   box-shadow: var(--shadow-md);
+  overscroll-behavior: contain;
 }
 
 .date-picker__head {
