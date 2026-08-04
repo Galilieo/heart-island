@@ -68,5 +68,11 @@ uploads/
 files/
 
 # Local personal materials
-AGENTS.md
 docs/personal/
+
+# Local agent worklog
+AI_WORKLOG/
+
+# Unrelated local study artifacts
+frontend-exam/
+frontend-exam.zip
