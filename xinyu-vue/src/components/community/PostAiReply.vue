@@ -26,7 +26,7 @@ defineProps({
   position: relative;
   padding: 18px 20px 18px 26px;
   background: linear-gradient(135deg, var(--accent-soft), var(--bg-soft));
-  border: 1px solid #f1cdc2;
+  border: 1px solid var(--accent-line);
   border-radius: var(--radius-3);
   overflow: hidden;
 }
@@ -71,7 +71,7 @@ defineProps({
   margin: 0;
   font-size: var(--fs-md);
   font-weight: 700;
-  color: #a45a4a;
+  color: var(--accent-ink);
   letter-spacing: 1px;
 }
 

@@ -63,6 +63,11 @@ defineProps({
   opacity: 0.55;
 }
 
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
 .btn:not(:disabled):active {
   transform: translateY(1px);
 }
@@ -85,13 +90,16 @@ defineProps({
 
 /* primary */
 .btn--primary {
-  background: linear-gradient(135deg, var(--brand) 0%, #84bab6 100%);
+  background: linear-gradient(135deg, var(--sea) 0%, var(--brand) 100%);
   color: #fff;
-  box-shadow: 0 10px 22px rgba(111, 169, 164, 0.28);
+  box-shadow: 0 10px 22px rgba(61, 111, 110, 0.30);
 }
 .btn--primary:not(:disabled):hover {
-  background: linear-gradient(135deg, var(--brand-deep), var(--brand));
-  box-shadow: 0 12px 28px rgba(77, 133, 128, 0.32);
+  background: linear-gradient(135deg, var(--sea-deep), var(--sea));
+  box-shadow: 0 12px 28px rgba(42, 86, 85, 0.34);
+}
+.btn--primary:focus-visible {
+  box-shadow: 0 10px 22px rgba(61, 111, 110, 0.30), var(--shadow-focus);
 }
 
 /* soft */
@@ -100,7 +108,7 @@ defineProps({
   color: var(--brand-deep);
 }
 .btn--soft:not(:disabled):hover {
-  background: #d6e8e5;
+  background: var(--brand-soft-deep);
 }
 
 /* ghost */
@@ -120,7 +128,10 @@ defineProps({
   color: #fff;
   box-shadow: 0 8px 20px rgba(198, 106, 106, 0.26);
 }
-.btn--danger:not(:disabled):hover { background: #b15555; }
+.btn--danger:not(:disabled):hover { background: var(--danger-deep); }
+.btn--danger:focus-visible {
+  box-shadow: 0 8px 20px rgba(198, 106, 106, 0.26), var(--shadow-focus);
+}
 
 /* plain (neutral) */
 .btn--plain {

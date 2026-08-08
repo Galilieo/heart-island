@@ -81,7 +81,7 @@
 }
 
 .motion-pulse {
-  animation: motion-pulse 520ms var(--ease-soft);
+  animation: motion-pulse var(--t-slow) var(--ease-soft);
 }
 
 .motion-shimmer {
@@ -150,4 +150,14 @@
     position: static;
     width: auto;
   }
+}
+
+/* 深夜模式下 skeleton 的高光压暗，避免一道白杠 */
+[data-theme="night"] .motion-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--bg-soft) 0%,
+    rgba(255, 255, 255, 0.12) 42%,
+    var(--bg-soft) 78%
+  );
 }

@@ -1,11 +1,13 @@
 <script setup>
-// 顶部导航条。包含 Logo、心情/社区 两个 Tab、右侧用户菜单。
+// 顶部导航条。包含 Logo、心情/社区 两个 Tab、深夜模式开关、右侧用户菜单。
 // 用户菜单里的"退出登录"会弹确认框，确认后清登录态并跳回登录页。
 import { ref } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { useConfirm } from '../../composables/useConfirm'
 import { useToast } from '../../composables/useToast'
+import { useTheme } from '../../composables/useTheme'
+import Doodle from '../ui/Doodle.vue'
 import logoUrl from '../../assets/logo-xinyu.png'
 
 const router = useRouter()
@@ -13,6 +15,7 @@ const route = useRoute()
 const userStore = useUserStore()
 const { confirm } = useConfirm()
 const toast = useToast()
+const { theme, toggleTheme } = useTheme()
 
 const menuOpen = ref(false)
 
@@ -75,6 +78,36 @@ function isActive(item) {
         </RouterLink>
       </nav>
 
+      <button
+        type="button"
+        class="theme-toggle"
+        :aria-label="theme === 'night' ? '切换到浅色模式' : '切换到深夜模式'"
+        :title="theme === 'night' ? '切换到浅色模式' : '切换到深夜模式'"
+        @click="toggleTheme"
+      >
+        <Doodle
+          v-if="theme === 'night'"
+          name="sun"
+          :size="17"
+          color="var(--gold)"
+          :stroke-width="2.2"
+        />
+        <svg
+          v-else
+          viewBox="0 0 24 24"
+          width="17"
+          height="17"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2z" />
+        </svg>
+      </button>
+
       <div class="user">
         <button
           type="button"
@@ -111,9 +144,10 @@ function isActive(item) {
   position: sticky;
   top: 0;
   z-index: var(--z-header);
-  background: rgba(253, 250, 243, 0.85);
+  background: var(--bg-header);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
+  transition: background var(--t-slow) var(--ease-soft);
 }
 
 .app-header__inner {
@@ -154,6 +188,8 @@ function isActive(item) {
 
 .nav__item {
   position: relative;
+  display: inline-flex;
+  align-items: center;
   padding: 8px 16px;
   border-radius: var(--radius-pill);
   color: var(--ink-2);
@@ -165,14 +201,43 @@ function isActive(item) {
 }
 
 .nav__item:hover {
-  background: var(--brand-soft);
-  color: var(--brand-deep);
+  background: var(--sea-soft);
+  color: var(--sea-deep);
 }
 
 .nav__item.is-active {
-  background: var(--brand);
+  background: linear-gradient(135deg, var(--sea), var(--brand));
   color: #fff;
-  box-shadow: 0 6px 14px rgba(111, 169, 164, 0.28);
+  box-shadow: 0 6px 14px rgba(61, 111, 110, 0.30);
+}
+
+/* 深夜模式开关：浅色时显示月亮（点我去深夜），深夜时显示太阳 */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg-card);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease-soft),
+    box-shadow var(--t-fast) var(--ease-soft),
+    transform var(--t-fast) var(--ease-soft);
+}
+
+.theme-toggle:hover {
+  border-color: var(--brand-soft);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .user {
@@ -285,17 +350,21 @@ function isActive(item) {
 }
 
 @media (max-width: 768px) {
-  .app-header__inner { gap: 12px; }
+  .app-header__inner { gap: 10px; }
   .brand__name { display: none; }
   .user__name { display: none; }
-  .nav__item { padding: 6px 12px; font-size: var(--fs-sm); }
+  .nav__item {
+    min-height: 40px;
+    padding: 6px 13px;
+    font-size: var(--fs-sm);
+  }
 }
 
 @media (max-width: 480px) {
   .app-header__inner { gap: 6px; height: 56px; }
   .nav { gap: 2px; }
-  .nav__item { padding: 5px 9px; font-size: var(--fs-xs); }
+  .nav__item { padding: 6px 10px; font-size: var(--fs-xs); }
   .user__caret { display: none; }
-  .user__chip { padding-left: 2px; padding-right: 8px; }
+  .user__chip { padding-left: 2px; padding-right: 8px; min-height: 44px; }
 }
 </style>

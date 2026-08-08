@@ -104,6 +104,11 @@ function goto(p) {
   border-color: var(--brand-soft);
 }
 
+.pgn__btn:not(:disabled):focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
 .pgn__btn.is-active {
   background: var(--brand);
   color: #fff;

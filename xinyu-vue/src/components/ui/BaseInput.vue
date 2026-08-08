@@ -71,14 +71,23 @@ defineEmits(['update:modelValue', 'enter'])
   box-shadow: var(--shadow-focus);
 }
 
+.field:not(.is-error):not(.is-disabled) .field__control:not(:focus-within):hover {
+  border-color: var(--line-strong);
+}
+
 .field.is-error .field__control {
   border-color: var(--danger);
-  box-shadow: 0 0 0 3px rgba(198, 106, 106, 0.16);
+  box-shadow: var(--shadow-error);
 }
 
 .field.is-disabled .field__control {
   background: var(--bg-soft);
   color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.field.is-disabled input {
+  cursor: not-allowed;
 }
 
 .field input {

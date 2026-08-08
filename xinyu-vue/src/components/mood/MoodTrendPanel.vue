@@ -1,10 +1,9 @@
 <script setup>
-// 7 天情绪小图。顶部 3 个统计块（总数 / 主旋律 / 最近一次），
-// 下方按心情维度展示横向条形，宽度按当前最大计数等比缩放。
-import { computed } from 'vue'
+// 7 天情绪潮汐。头部是大数字总量，中部按心情维度做竖向「潮汐刻度」
+// （胶囊柱高按当前最大计数等比缩放），底部一行手账式摘要：主旋律 / 最近一次。
+import { computed, ref } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTag from '../ui/BaseTag.vue'
-import Doodle from '../ui/Doodle.vue'
 import { moodTone, formatTime, MOOD_OPTIONS } from '../../utils/mood'
 
 const props = defineProps({
@@ -13,6 +12,10 @@ const props = defineProps({
     required: true
   }
 })
+
+// ≤480px 时潮汐刻度默认收起为摘要（总量 + 主旋律行），展开后才看柱图。
+// 纯展示层局部状态，不影响任何数据语义。
+const tideOpen = ref(false)
 
 const maxCount = computed(() => {
   const counts = props.trend?.moodCounts || []
@@ -29,6 +32,11 @@ const orderedCounts = computed(() => {
 })
 
 const hasData = computed(() => (props.trend?.total || 0) > 0)
+
+function barHeight(count) {
+  if (!count) return '4px'
+  return `${Math.max(10, (count / maxCount.value) * 100)}%`
+}
 </script>
 
 <template>
@@ -36,61 +44,67 @@ const hasData = computed(() => (props.trend?.total || 0) > 0)
     <header class="trend__head">
       <div>
         <p class="trend__kicker">最近 7 天</p>
-        <h3 class="trend__title">情绪小记</h3>
+        <h3 class="trend__title">情绪潮汐</h3>
       </div>
-      <Doodle name="wave" :size="40" color="var(--brand)" />
+      <div v-if="hasData" class="trend__total">
+        <strong>{{ trend.total }}</strong>
+        <span>次记录</span>
+      </div>
     </header>
 
-    <div v-if="hasData" class="trend__stats">
-      <div class="trend__stat">
-        <span class="trend__stat-label">记录</span>
-        <strong>{{ trend.total }} <small>次</small></strong>
-      </div>
-      <div class="trend__stat">
-        <span class="trend__stat-label">主旋律</span>
-        <BaseTag
-          v-if="trend.mainMoodType"
-          :tone="moodTone(trend.mainMoodType)"
-          variant="soft"
-          size="md"
-        >{{ trend.mainMoodType }}</BaseTag>
-        <strong v-else>—</strong>
-      </div>
-      <div class="trend__stat">
-        <span class="trend__stat-label">最近一次</span>
-        <BaseTag
-          v-if="trend.lastMoodType"
-          :tone="moodTone(trend.lastMoodType)"
-          variant="outline"
-          size="md"
-        >{{ trend.lastMoodType }}</BaseTag>
-        <strong v-else>—</strong>
-        <span v-if="trend.lastRecordTime" class="trend__stat-sub">
-          {{ formatTime(trend.lastRecordTime) }}
-        </span>
-      </div>
-    </div>
-
-    <div v-if="hasData" class="trend__bars">
-      <div
-        v-for="row in orderedCounts"
-        :key="row.moodType"
-        class="trend__row"
+    <template v-if="hasData">
+      <button
+        type="button"
+        class="trend__toggle"
+        :aria-expanded="tideOpen"
+        @click="tideOpen = !tideOpen"
       >
-        <span class="trend__row-label">{{ row.moodType }}</span>
-        <div class="trend__bar-track">
-          <div
-            class="trend__bar"
-            :class="`trend__bar--${moodTone(row.moodType)}`"
-            :style="{ width: `${(row.count / maxCount) * 100}%` }"
-          />
+        <span>潮汐刻度</span>
+        <span class="trend__toggle-caret" aria-hidden="true">
+          {{ tideOpen ? '收起 ▴' : '展开 ▾' }}
+        </span>
+      </button>
+
+      <div
+        class="trend__tide"
+        :class="{ 'is-open': tideOpen }"
+        role="img"
+        :aria-label="`最近 7 天共 ${trend.total} 次记录：` + orderedCounts.map((r) => `${r.moodType} ${r.count} 次`).join('，')"
+      >
+        <div v-for="row in orderedCounts" :key="row.moodType" class="trend__col">
+          <span class="trend__col-count">{{ row.count }}</span>
+          <span class="trend__col-track">
+            <span
+              class="trend__col-bar"
+              :class="[`trend__col-bar--${moodTone(row.moodType)}`, { 'is-zero': !row.count }]"
+              :style="{ height: barHeight(row.count) }"
+            />
+          </span>
+          <span class="trend__col-label">{{ row.moodType }}</span>
         </div>
-        <span class="trend__row-count">{{ row.count }}</span>
       </div>
-    </div>
+
+      <p class="trend__meta">
+        <template v-if="trend.mainMoodType">
+          <span class="trend__meta-label">主旋律</span>
+          <BaseTag :tone="moodTone(trend.mainMoodType)" variant="soft" size="md">
+            {{ trend.mainMoodType }}
+          </BaseTag>
+        </template>
+        <template v-if="trend.lastMoodType">
+          <span class="trend__meta-label">最近一次</span>
+          <BaseTag :tone="moodTone(trend.lastMoodType)" variant="outline" size="md">
+            {{ trend.lastMoodType }}
+          </BaseTag>
+          <span v-if="trend.lastRecordTime" class="trend__meta-time">
+            {{ formatTime(trend.lastRecordTime) }}
+          </span>
+        </template>
+      </p>
+    </template>
 
     <p v-else class="trend__empty">
-      还没有记录，写下第一段心情，这里就会有你的小图。
+      还没有记录，写下第一段心情，这里就会涨起你的潮汐。
     </p>
   </BaseCard>
 </template>
@@ -98,13 +112,14 @@ const hasData = computed(() => (props.trend?.total || 0) > 0)
 <style scoped>
 .trend__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .trend__kicker {
   margin: 0;
-  color: var(--brand-deep);
+  color: var(--sea-deep);
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 2px;
@@ -115,98 +130,109 @@ const hasData = computed(() => (props.trend?.total || 0) > 0)
   font-size: var(--fs-xl);
 }
 
-.trend__stats {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+.trend__total {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 
-.trend__stat {
-  padding: 12px;
-  background: var(--bg-card);
-  border-radius: var(--radius-2);
-  border: 1px solid var(--line);
+.trend__total strong {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--sea-deep);
+}
+
+/* ── 潮汐刻度折叠开关：仅 ≤480px 出现 ── */
+.trend__toggle {
+  display: none;
+}
+
+/* ── 潮汐刻度：竖向胶囊柱 ── */
+.trend__tide {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.trend__col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
-.trend__stat-label {
+.trend__col-count {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.trend__col-track {
+  height: 72px;
+  width: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  box-shadow: inset 0 0 0 1px var(--line);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.trend__col-bar {
+  width: 100%;
+  border-radius: var(--radius-pill);
+  transition: height var(--t-slow) var(--ease-soft);
+}
+
+.trend__col-bar--joy     { background: var(--joy); }
+.trend__col-bar--calm    { background: var(--calm); }
+.trend__col-bar--warn    { background: var(--warn); }
+.trend__col-bar--sad     { background: var(--sad); }
+.trend__col-bar--tired   { background: var(--tired); }
+.trend__col-bar--neutral { background: var(--ink-3); }
+.trend__col-bar.is-zero  { opacity: 0.25; }
+
+.trend__col-label {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  line-height: 1;
+}
+
+/* ── 手账式摘要行 ── */
+.trend__meta {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-strong);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.trend__meta-label {
   color: var(--ink-3);
   font-size: var(--fs-xs);
   letter-spacing: 1px;
 }
 
-.trend__stat strong {
-  font-size: var(--fs-xl);
-  color: var(--ink-1);
-  font-family: var(--font-display);
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
+.trend__meta-label:not(:first-child) {
+  margin-left: 10px;
 }
 
-.trend__stat strong small {
-  font-size: var(--fs-xs);
+.trend__meta-time {
   color: var(--ink-3);
-  font-weight: 400;
-  margin-left: 2px;
-}
-
-.trend__stat-sub {
   font-size: 11px;
-  color: var(--ink-3);
-}
-
-.trend__bars {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.trend__row {
-  display: grid;
-  grid-template-columns: 48px 1fr 32px;
-  gap: 10px;
-  align-items: center;
-}
-
-.trend__row-label {
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-}
-
-.trend__bar-track {
-  height: 8px;
-  background: var(--bg-card);
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-
-.trend__bar {
-  height: 100%;
-  border-radius: var(--radius-pill);
-  transition: width var(--t-slow) var(--ease-soft);
-}
-
-.trend__bar--joy   { background: var(--joy); }
-.trend__bar--calm  { background: var(--calm); }
-.trend__bar--warn  { background: var(--warn); }
-.trend__bar--sad   { background: var(--sad); }
-.trend__bar--tired { background: var(--tired); }
-.trend__bar--neutral { background: var(--ink-3); }
-
-.trend__row-count {
-  text-align: right;
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
 }
 
 .trend__empty {
-  margin-top: 18px;
+  margin: 18px 0 0;
   padding: 18px;
   text-align: center;
   color: var(--ink-3);
@@ -216,13 +242,40 @@ const hasData = computed(() => (props.trend?.total || 0) > 0)
   border: 1px dashed var(--line-strong);
 }
 
-@media (max-width: 768px) {
-  .trend__stats { grid-template-columns: 1fr 1fr; }
-}
-
 @media (max-width: 480px) {
-  .trend__stats { grid-template-columns: 1fr; }
-  .trend__row { grid-template-columns: 44px 1fr 28px; gap: 8px; }
-  .trend__row-label { font-size: var(--fs-xs); }
+  .trend__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 40px;
+    margin-top: 14px;
+    padding: 0 12px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-2);
+    background: var(--bg-card);
+    color: var(--ink-2);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+
+  .trend__toggle-caret {
+    color: var(--ink-3);
+    font-weight: 600;
+  }
+
+  .trend__tide {
+    display: none;
+  }
+
+  .trend__tide.is-open {
+    display: grid;
+    gap: 4px;
+  }
+
+  .trend__col-track { width: 14px; height: 64px; }
+  .trend__col-label { font-size: 11px; }
 }
 </style>

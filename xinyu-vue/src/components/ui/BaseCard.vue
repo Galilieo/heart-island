@@ -49,8 +49,8 @@ defineProps({
 }
 
 .card--cream  { background: var(--bg-soft); }
-.card--brand  { background: var(--brand-soft); border-color: #d6e8e5; }
-.card--accent { background: var(--accent-soft); border-color: #f1cdc2; }
+.card--brand  { background: var(--brand-soft); border-color: var(--brand-soft-deep); }
+.card--accent { background: var(--accent-soft); border-color: var(--accent-line); }
 
 .card--flat { box-shadow: none; }
 

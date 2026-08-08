@@ -1,7 +1,7 @@
 <script setup>
 // 个人资料页：基本信息（昵称 / 性别 / 生日 / 签名 / 城市） + 修改密码。
-// hero 展示性别、年龄、城市、签名；下方一行 4 个数据小条。
-// 用户名不可改，仅展示。所有逻辑走 userStore + userApi。
+// 头部为一体式名片：身份区 + 数据条；下方用局部 tabs 分层「基本资料 / 账号安全」。
+// 用户名不可改，仅展示。所有逻辑走 userStore + userApi，tabs 只是展示层状态。
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
@@ -74,6 +74,13 @@ onMounted(() => {
   doFetchStats()
 })
 
+/* ───── 局部 tabs：基本资料 / 账号安全（纯展示层状态） ───── */
+const activeTab = ref('profile')
+const TABS = [
+  { key: 'profile', label: '基本资料' },
+  { key: 'security', label: '账号安全' }
+]
+
 /* ───── 基本信息表单 ───── */
 const nickname = ref(userStore.loginUser?.nickname || '')
 const gender = ref(userStore.loginUser?.gender || 'UNDISCLOSED')
@@ -134,68 +141,87 @@ async function handleSavePassword() {
 <template>
   <AppShell width="narrow">
     <div class="container profile">
-      <!-- Hero -->
-      <header class="profile__hero">
-        <div class="profile__id">
-          <span class="profile__avatar">{{ avatarText }}</span>
-          <div class="profile__id-text">
-            <p class="profile__kicker">个人资料</p>
-            <h1 class="profile__name">{{ userStore.loginUser?.nickname || '心屿用户' }}</h1>
-            <p class="profile__username">@{{ username }}</p>
-            <p v-if="heroMeta" class="profile__meta">{{ heroMeta }}</p>
-            <p v-if="heroBio" class="profile__bio">"{{ heroBio }}"</p>
+      <!-- 一体式名片：身份区 + 数据条 -->
+      <header class="profile__masthead">
+        <div class="profile__hero">
+          <div class="profile__id">
+            <span class="profile__avatar">{{ avatarText }}</span>
+            <div class="profile__id-text">
+              <p class="profile__kicker">个人资料</p>
+              <h1 class="profile__name">{{ userStore.loginUser?.nickname || '心屿用户' }}</h1>
+              <p class="profile__username">@{{ username }}</p>
+              <p v-if="heroMeta" class="profile__meta">{{ heroMeta }}</p>
+              <p v-if="heroBio" class="profile__bio">"{{ heroBio }}"</p>
+            </div>
+          </div>
+          <Doodle name="heart" :size="44" color="rgba(217,140,122,0.55)" class="profile__doodle" />
+        </div>
+
+        <div class="profile__stats" :class="{ 'is-loading': statsLoading }">
+          <div class="profile__stat">
+            <span class="profile__stat-icon">
+              <Doodle name="heart" :size="22" color="currentColor" :stroke-width="2.4" />
+            </span>
+            <div class="profile__stat-body">
+              <strong>{{ stats.moodCount }}</strong>
+              <span>心情记录</span>
+            </div>
+          </div>
+          <div class="profile__stat">
+            <span class="profile__stat-icon">
+              <Doodle name="wave" :size="22" color="currentColor" :stroke-width="2.4" />
+            </span>
+            <div class="profile__stat-body">
+              <strong>{{ stats.postCount }}</strong>
+              <span>我的帖子</span>
+            </div>
+          </div>
+          <div class="profile__stat">
+            <span class="profile__stat-icon">
+              <Doodle name="star" :size="22" color="currentColor" :stroke-width="2.4" />
+            </span>
+            <div class="profile__stat-body">
+              <strong>{{ stats.favoriteCount }}</strong>
+              <span>收藏</span>
+            </div>
+          </div>
+          <div class="profile__stat">
+            <span class="profile__stat-icon">
+              <Doodle name="sun" :size="22" color="currentColor" :stroke-width="2.4" />
+            </span>
+            <div class="profile__stat-body">
+              <strong>{{ stats.joinDays }}<small>天</small></strong>
+              <span>陪伴天数</span>
+            </div>
           </div>
         </div>
-        <Doodle name="heart" :size="44" color="rgba(217,140,122,0.55)" class="profile__doodle" />
       </header>
 
-      <!-- 数据小条 -->
-      <div class="profile__stats" :class="{ 'is-loading': statsLoading }">
-        <div class="profile__stat">
-          <span class="profile__stat-icon">
-            <Doodle name="heart" :size="22" color="currentColor" :stroke-width="2.4" />
-          </span>
-          <div class="profile__stat-body">
-            <strong>{{ stats.moodCount }}</strong>
-            <span>心情记录</span>
-          </div>
+      <!-- 设置区：局部 tabs 分层 -->
+      <BaseCard padding="lg" class="profile__panel">
+        <div class="profile__tabs" role="tablist" aria-label="资料设置">
+          <button
+            v-for="tab in TABS"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="profile__tab"
+            :class="{ 'is-active': activeTab === tab.key }"
+            :aria-selected="activeTab === tab.key"
+            @click="activeTab = tab.key"
+          >{{ tab.label }}</button>
         </div>
-        <div class="profile__stat">
-          <span class="profile__stat-icon">
-            <Doodle name="wave" :size="22" color="currentColor" :stroke-width="2.4" />
-          </span>
-          <div class="profile__stat-body">
-            <strong>{{ stats.postCount }}</strong>
-            <span>我的帖子</span>
-          </div>
-        </div>
-        <div class="profile__stat">
-          <span class="profile__stat-icon">
-            <Doodle name="star" :size="22" color="currentColor" :stroke-width="2.4" />
-          </span>
-          <div class="profile__stat-body">
-            <strong>{{ stats.favoriteCount }}</strong>
-            <span>收藏</span>
-          </div>
-        </div>
-        <div class="profile__stat">
-          <span class="profile__stat-icon">
-            <Doodle name="sun" :size="22" color="currentColor" :stroke-width="2.4" />
-          </span>
-          <div class="profile__stat-body">
-            <strong>{{ stats.joinDays }}<small>天</small></strong>
-            <span>陪伴天数</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="profile__grid">
-        <!-- 基本信息 -->
-        <BaseCard padding="lg" class="profile__panel">
-          <h2 class="profile__card-title">基本信息</h2>
+        <!-- 基本资料 -->
+        <section
+          v-show="activeTab === 'profile'"
+          role="tabpanel"
+          aria-label="基本资料"
+          class="profile__pane"
+        >
           <p class="profile__card-desc">昵称会展示在社区里，用户名不可修改。其它字段都可选填。</p>
 
-          <div class="profile__form">
+          <div class="profile__form profile__form--grid">
             <BaseInput
               label="用户名"
               :model-value="username"
@@ -227,21 +253,28 @@ async function handleSavePassword() {
               placeholder="一句话介绍自己"
               :maxlength="300"
               :rows="3"
+              class="profile__span"
             />
-            <BaseButton
-              variant="primary"
-              :loading="savingProfile"
-              @click="handleSaveProfile"
-            >保存资料</BaseButton>
+            <div class="profile__actions profile__span">
+              <BaseButton
+                variant="primary"
+                :loading="savingProfile"
+                @click="handleSaveProfile"
+              >保存资料</BaseButton>
+            </div>
           </div>
-        </BaseCard>
+        </section>
 
-        <!-- 修改密码 -->
-        <BaseCard padding="lg" class="profile__panel profile__panel--password">
-          <h2 class="profile__card-title">修改密码</h2>
+        <!-- 账号安全 -->
+        <section
+          v-show="activeTab === 'security'"
+          role="tabpanel"
+          aria-label="账号安全"
+          class="profile__pane"
+        >
           <p class="profile__card-desc">为了安全，修改密码需要先验证原密码。</p>
 
-          <div class="profile__form">
+          <div class="profile__form profile__form--narrow">
             <BaseInput
               v-model="oldPassword"
               type="password"
@@ -261,14 +294,16 @@ async function handleSavePassword() {
               placeholder="再输入一次新密码"
               @enter="handleSavePassword"
             />
-            <BaseButton
-              variant="primary"
-              :loading="savingPassword"
-              @click="handleSavePassword"
-            >保存密码</BaseButton>
+            <div class="profile__actions">
+              <BaseButton
+                variant="primary"
+                :loading="savingPassword"
+                @click="handleSavePassword"
+              >保存密码</BaseButton>
+            </div>
           </div>
-        </BaseCard>
-      </div>
+        </section>
+      </BaseCard>
     </div>
   </AppShell>
 </template>
@@ -277,16 +312,24 @@ async function handleSavePassword() {
 .profile {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
+}
+
+/* ── 一体式名片：身份区 + 数据条 ── */
+.profile__masthead {
+  width: 100%;
+  align-self: center;
+  border-radius: var(--radius-4);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-card);
+  box-shadow: 0 14px 34px rgba(87, 68, 43, 0.06);
 }
 
 .profile__hero {
   position: relative;
-  width: min(760px, 100%);
-  align-self: center;
-  padding: 28px 32px;
-  background: linear-gradient(135deg, var(--brand-soft), var(--accent-soft));
-  border-radius: var(--radius-4);
+  padding: 30px 36px;
+  background: linear-gradient(135deg, var(--hero-from), var(--hero-to));
   overflow: hidden;
   display: flex;
   justify-content: space-between;
@@ -352,7 +395,7 @@ async function handleSavePassword() {
   font-size: var(--fs-sm);
   font-style: italic;
   line-height: 1.6;
-  max-width: 420px;
+  max-width: 460px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -364,27 +407,21 @@ async function handleSavePassword() {
   flex-shrink: 0;
 }
 
-/* 数据小条 */
+/* 数据小条：名片下半段，与身份区同源一体 */
 .profile__stats {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
-  width: min(760px, 100%);
-  align-self: center;
-  padding: 12px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-3);
-  box-shadow: 0 10px 26px rgba(87, 68, 43, 0.04);
-  overflow: hidden;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
   transition: opacity var(--t-fast) var(--ease-soft);
 }
 
 .profile__stats::before {
   content: '';
   position: absolute;
-  inset: 22px 0;
+  inset: 18px 0;
   pointer-events: none;
   background-image:
     linear-gradient(
@@ -417,10 +454,11 @@ async function handleSavePassword() {
 .profile__stat {
   position: relative;
   z-index: 1;
-  display: grid;
-  place-items: center;
-  gap: 7px;
-  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 72px;
   padding: 8px 10px;
 }
 
@@ -428,7 +466,7 @@ async function handleSavePassword() {
   width: 34px;
   height: 34px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(135deg, var(--brand-soft), rgba(248, 226, 218, 0.75));
+  background: linear-gradient(135deg, var(--brand-soft), var(--accent-soft));
   color: var(--brand-deep);
   display: inline-flex;
   align-items: center;
@@ -440,22 +478,19 @@ async function handleSavePassword() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  align-items: center;
-  text-align: center;
-  justify-content: center;
+  gap: 3px;
+  align-items: flex-start;
 }
 
 .profile__stat strong {
   font-family: var(--font-display);
-  font-size: 32px;
+  font-size: 26px;
   color: var(--brand-deep);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   display: inline-flex;
   align-items: baseline;
-  justify-content: center;
 }
 
 .profile__stat strong small {
@@ -474,46 +509,92 @@ async function handleSavePassword() {
   white-space: nowrap;
 }
 
-.profile__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-  gap: 28px;
-  width: min(1040px, 100%);
-  align-self: center;
-  align-items: start;
-}
-
+/* ── 设置面板 + tabs ── */
+/* 显式宽度：抵消 narrow shell 插槽泄漏进来的 margin-inline:auto，
+   否则 flex 列布局下面板会收缩成 fit-content（桌面只剩 ~536px） */
 .profile__panel {
+  width: 100%;
   min-width: 0;
 }
 
 .profile__panel :deep(.card__body) {
-  padding: 34px 40px;
+  padding: 26px 36px 34px;
 }
 
-.profile__panel--password {
-  max-width: 460px;
-  width: 100%;
+.profile__tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-pill);
 }
 
-.profile__card-title {
-  margin: 0;
-  font-size: 26px;
-  line-height: 1.2;
+.profile__tab {
+  min-height: 40px;
+  padding: 0 22px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: background var(--t-fast) var(--ease-soft),
+    color var(--t-fast) var(--ease-soft),
+    box-shadow var(--t-fast) var(--ease-soft);
+}
+
+.profile__tab.is-active {
+  background: var(--bg-card);
+  color: var(--brand-deep);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile__tab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.profile__pane {
+  margin-top: 18px;
 }
 
 .profile__card-desc {
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--ink-2);
   font-size: var(--fs-sm);
   line-height: 1.7;
 }
 
 .profile__form {
-  margin-top: 24px;
+  margin-top: 20px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* 桌面：基本资料两列成对，签名/操作通栏 */
+.profile__form--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 22px;
+  align-items: start;
+}
+
+/* >=1024px：面板与名片同宽后，拉开列距让两列读宽更平衡 */
+@media (min-width: 1024px) {
+  .profile__form--grid {
+    gap: 20px 28px;
+  }
+}
+
+.profile__span {
+  grid-column: 1 / -1;
+}
+
+/* 密码表单：单列窄读宽，安全感来自留白 */
+.profile__form--narrow {
+  max-width: 420px;
 }
 
 .profile__form :deep(.field__control),
@@ -528,47 +609,42 @@ async function handleSavePassword() {
   font-size: var(--fs-sm);
 }
 
-.profile__form > :deep(.btn) {
-  align-self: flex-start;
-}
-
-@media (max-width: 1024px) {
-  .profile__hero {
-    padding: 24px;
-  }
-  .profile__grid {
-    grid-template-columns: 1fr;
-    width: min(680px, 100%);
-    gap: 18px;
-  }
-  .profile__panel--password {
-    max-width: none;
-  }
+.profile__actions {
+  display: flex;
+  justify-content: flex-start;
 }
 
 @media (max-width: 768px) {
+  .profile__hero {
+    padding: 24px;
+  }
   .profile__panel :deep(.card__body) {
-    padding: 28px 24px;
+    padding: 22px 20px 28px;
   }
-  .profile__card-title {
-    font-size: var(--fs-xl);
+  .profile__tabs {
+    display: flex;
   }
-  .profile__form {
-    gap: 16px;
+  .profile__tab {
+    flex: 1;
+    min-height: 44px;
+    padding: 0 12px;
   }
-  .profile__form > :deep(.btn) {
+  .profile__form--grid {
+    grid-template-columns: 1fr;
+  }
+  .profile__actions :deep(.btn) {
     width: 100%;
     min-height: 48px;
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .profile__stats {
     grid-template-columns: repeat(2, 1fr);
-    padding: 12px;
+    padding: 10px 12px;
   }
   .profile__stats::before {
-    inset: 18px 22px;
+    inset: 16px 20px;
     background-image:
       linear-gradient(
         90deg,
@@ -586,56 +662,9 @@ async function handleSavePassword() {
       );
   }
   .profile__stat {
-    min-height: 94px;
-    padding: 12px 10px;
-  }
-  .profile__stat strong {
-    font-size: 32px;
-  }
-  .profile__stat-body span {
-    font-size: var(--fs-xs);
-  }
-}
-
-@media (max-width: 480px) {
-  .profile__stats {
-    grid-template-columns: 1fr;
-  }
-  .profile__stats::before {
-    inset: 0 20px;
-    background-image:
-      linear-gradient(
-        180deg,
-        transparent calc(25% - 0.5px),
-        var(--line) calc(25% - 0.5px),
-        var(--line) calc(25% + 0.5px),
-        transparent calc(25% + 0.5px)
-      ),
-      linear-gradient(
-        180deg,
-        transparent calc(50% - 0.5px),
-        var(--line) calc(50% - 0.5px),
-        var(--line) calc(50% + 0.5px),
-        transparent calc(50% + 0.5px)
-      ),
-      linear-gradient(
-        180deg,
-        transparent calc(75% - 0.5px),
-        var(--line) calc(75% - 0.5px),
-        var(--line) calc(75% + 0.5px),
-        transparent calc(75% + 0.5px)
-      );
-  }
-  .profile__stat {
-    min-height: 68px;
-    flex-direction: row;
+    min-height: 76px;
     justify-content: flex-start;
     padding: 10px 14px;
-    display: flex;
-  }
-  .profile__stat-body {
-    align-items: flex-start;
-    text-align: left;
   }
 }
 </style>

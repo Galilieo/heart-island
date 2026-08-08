@@ -11,12 +11,12 @@ export const moodApi = {
     return unwrap(request.get(`/mood/detail/${id}`))
   },
 
-  create({ moodType, content }) {
-    return unwrap(request.post('/mood/add', { moodType, content }))
+  create({ moodType, content, needAiReply = true }) {
+    return unwrap(request.post('/mood/add', { moodType, content, needAiReply }))
   },
 
-  update(id, { moodType, content }) {
-    return unwrap(request.put(`/mood/update/${id}`, { moodType, content }))
+  update(id, { moodType, content, needAiReply = true }) {
+    return unwrap(request.put(`/mood/update/${id}`, { moodType, content, needAiReply }))
   },
 
   remove(id) {

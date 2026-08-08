@@ -34,6 +34,7 @@ const { list, total, pages, selected, filters, pagination, trend } =
 
 const moodType = ref('')
 const content = ref('')
+const needAiReply = ref(true)
 const detailLoadingId = ref(null)
 const deletingId = ref(null)
 const detailOpen = ref(false)
@@ -64,12 +65,12 @@ const { run: doFetchTrend } = useAsyncAction(
 )
 
 const { run: doAdd, loading: adding } = useAsyncAction(
-  () => moodStore.add({ moodType: moodType.value, content: content.value.trim() }),
-  { successMsg: '记录成功，心屿回复已生成', errorMsg: '新增失败，请检查后端或 AI 服务' }
+  () => moodStore.add({ moodType: moodType.value, content: content.value.trim(), needAiReply: needAiReply.value }),
+  { successMsg: () => (needAiReply.value ? '记录成功，心屿回复已生成' : '记录成功'), errorMsg: '新增失败，请检查后端或 AI 服务' }
 )
 
 const { run: doUpdate, loading: updating } = useAsyncAction(
-  (payload) => moodStore.update(payload.id, { moodType: payload.moodType, content: payload.content }),
+  (payload) => moodStore.update(payload.id, { moodType: payload.moodType, content: payload.content, needAiReply: payload.needAiReply }),
   { successMsg: '已保存修改' }
 )
 
@@ -162,19 +163,19 @@ onMounted(() => {
       </header>
 
       <div class="home__main">
-        <section class="home__left">
+        <section class="home__compose">
           <MoodForm
             v-model:mood-type="moodType"
             v-model:content="content"
+            v-model:need-ai-reply="needAiReply"
             :adding="adding"
             @submit="handleAdd"
           />
         </section>
 
-        <section class="home__right">
-          <MoodTrendPanel :trend="trend" />
+        <MoodTrendPanel :trend="trend" class="home__tide" />
 
-          <BaseCard padding="md" class="home__list">
+        <BaseCard padding="md" class="home__list">
             <header class="home__list-head">
               <div>
                 <p class="home__list-kicker">记录册</p>
@@ -228,7 +229,6 @@ onMounted(() => {
               />
             </div>
           </BaseCard>
-        </section>
       </div>
 
       <MoodDetailDialog
@@ -246,15 +246,21 @@ onMounted(() => {
 .home {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
 }
 
+/* ── 首屏问候：暖奶油渐变 + 漂浮涂鸦 ── */
 .home__hero {
   position: relative;
   padding: 28px 32px;
-  background: linear-gradient(135deg, var(--brand-soft), var(--accent-soft));
+  background: linear-gradient(135deg, var(--hero-from), var(--hero-to));
   border-radius: var(--radius-4);
   overflow: hidden;
+}
+
+.home__hero-text {
+  position: relative;
+  z-index: 1;
 }
 
 .home__kicker {
@@ -297,17 +303,28 @@ onMounted(() => {
 .hd-2 { position: absolute; top: 40%; right: 26%; }
 .hd-3 { position: absolute; top: 18%; right: 10%; transform: rotate(15deg); }
 
+/* ── 桌面：书写区(固定列) + 潮汐 + 记录册 ── */
 .home__main {
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: 400px minmax(0, 1fr);
+  gap: 22px;
   align-items: start;
 }
 
-.home__right {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.home__compose {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  min-width: 0;
+  /* 拉满行高，sticky 的表单才有滚动行程（否则 align-items:start 把它压成内容高，浮不动） */
+  align-self: stretch;
+}
+
+.home__tide {
+  grid-column: 2;
+}
+
+.home__list {
+  grid-column: 2;
   min-width: 0;
 }
 
@@ -344,21 +361,58 @@ onMounted(() => {
   justify-content: center;
 }
 
+/* ── 平板：书写与潮汐并排，记录册通栏，不是简单堆叠 ── */
 @media (max-width: 1024px) {
   .home__main {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  }
+
+  .home__compose {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .home__tide {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .home__list {
+    grid-column: 1 / 3;
+    grid-row: 2;
   }
 
   .home__hero-doodles { display: none; }
 }
 
-@media (max-width: 480px) {
-  .home__hero { padding: 20px; }
+/* ── 平板（≤768px）：仍保持「书写 | 潮汐」双栏，记录册通栏，不做机械堆叠 ── */
+@media (max-width: 768px) {
+  .home { gap: 18px; }
+
+  .home__hero { padding: 24px; }
   .home__greet { font-size: var(--fs-2xl); }
+  .home__sub { font-size: var(--fs-sm); }
+
+  .home__main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
   .home__list-head {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+  }
+}
+
+/* ── 小手机（≤480px）：才退回单列纵向流 ── */
+@media (max-width: 480px) {
+  .home__hero { padding: 20px; }
+
+  .home__main { grid-template-columns: 1fr; }
+
+  .home__compose,
+  .home__tide,
+  .home__list {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
 </style>

@@ -85,7 +85,13 @@ const { state, accept, reject } = _confirmState()
   font-size: var(--fs-md);
   font-weight: 600;
   transition: transform var(--t-fast) var(--ease-soft),
-    background var(--t-fast) var(--ease-soft);
+    background var(--t-fast) var(--ease-soft),
+    box-shadow var(--t-fast) var(--ease-soft);
+}
+
+.confirm-actions button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .btn-plain {
@@ -111,7 +117,7 @@ const { state, accept, reject } = _confirmState()
   box-shadow: 0 8px 20px rgba(198, 106, 106, 0.28);
 }
 .btn-danger:hover {
-  background: #b15555;
+  background: var(--danger-deep);
 }
 
 .confirm-enter-from,

@@ -15,16 +15,11 @@ defineProps({
 
 <template>
   <div class="shell">
-    <!-- 背景装饰层：浮在内容下方、不接收点击 -->
+    <!-- 背景装饰层：克制的海边元素（波 / 云 / 日光），浮在内容下方、不接收点击 -->
     <div class="shell__ornaments" aria-hidden="true">
-      <Doodle name="cloud" :size="120" color="rgba(111,169,164,0.18)" class="orn orn-1" />
-      <Doodle name="leaf"  :size="90"  color="rgba(155,193,188,0.22)" class="orn orn-2" />
-      <Doodle name="star"  :size="64"  color="rgba(217,140,122,0.22)" class="orn orn-3" />
-      <Doodle name="wave"  :size="140" color="rgba(143,165,196,0.18)" class="orn orn-4" />
-      <Doodle name="sun"   :size="80"  color="rgba(243,185,95,0.22)"  class="orn orn-5" />
-      <Doodle name="plant" :size="110" color="rgba(111,169,164,0.18)" class="orn orn-6" />
-      <Doodle name="heart" :size="60"  color="rgba(217,140,122,0.22)" class="orn orn-7" />
-      <Doodle name="cup"   :size="78"  color="rgba(155,193,188,0.18)" class="orn orn-8" />
+      <Doodle name="wave" :size="170" color="rgba(61,111,110,0.13)" class="orn orn-1" />
+      <Doodle name="cloud" :size="104" color="rgba(61,111,110,0.10)" class="orn orn-2" />
+      <Doodle name="sun"  :size="68"  color="rgba(238,194,127,0.22)" class="orn orn-3" />
     </div>
 
     <AppHeader v-if="!noHeader" />
@@ -64,7 +59,7 @@ defineProps({
   opacity: 0.5;
 }
 
-/* 散点装饰：固定定位，全屏铺，缓慢漂浮 */
+/* 散点装饰：固定定位，贴边，缓慢漂浮 */
 .shell__ornaments {
   position: fixed;
   inset: 0;
@@ -72,26 +67,31 @@ defineProps({
   z-index: 0;
 }
 
-.orn {
-  position: absolute;
-  animation: orn-drift 18s ease-in-out infinite alternate;
+/* 底部海面薄雾，给页面一个“岸” */
+.shell::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 200px;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(42, 86, 85, 0.10), transparent);
+  z-index: 0;
 }
 
-/* 左侧 */
-.orn-1 { top: 12%;  left: 4%;  animation-delay: 0s; }
-.orn-2 { top: 42%;  left: 7%;  animation-delay: 3s; }
-.orn-3 { top: 70%;  left: 3%;  animation-delay: 6s; transform: rotate(-12deg); }
-.orn-6 { bottom: 6%; left: 12%; animation-delay: 4s; }
+.orn {
+  position: absolute;
+  animation: orn-drift 22s ease-in-out infinite alternate;
+}
 
-/* 右侧 */
-.orn-4 { top: 18%;   right: 5%; animation-delay: 2s; }
-.orn-5 { top: 52%;   right: 4%; animation-delay: 5s; }
-.orn-7 { top: 78%;   right: 9%; animation-delay: 7s; }
-.orn-8 { bottom: 12%; right: 3%; animation-delay: 1s; transform: rotate(8deg); }
+.orn-1 { bottom: 4%;  left: 2%;  }
+.orn-2 { top: 14%;   right: 3%; animation-delay: 4s; }
+.orn-3 { top: 46%;   right: 6%; animation-delay: 8s; }
 
 @keyframes orn-drift {
   from { transform: translateY(0) rotate(0deg); }
-  to   { transform: translateY(-12px) rotate(4deg); }
+  to   { transform: translateY(-10px) rotate(3deg); }
 }
 
 /* 小屏关掉这些大涂鸦，免得挤压内容 */

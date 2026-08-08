@@ -25,6 +25,25 @@ const emit = defineEmits(['edit-submit', 'delete'])
 const editingId = ref(null)
 const editContent = ref('')
 
+/* ───── 前端分页：后端一次返回全部回复，列表太长时先收起来 ───── */
+const INITIAL_COUNT = 5
+const PAGE_STEP = 10
+const visibleCount = ref(INITIAL_COUNT)
+
+const visibleReplies = computed(() => props.replies.slice(0, visibleCount.value))
+const remaining = computed(() => props.replies.length - visibleCount.value)
+const collapsible = computed(
+  () => remaining.value <= 0 && props.replies.length > INITIAL_COUNT
+)
+
+function loadMore() {
+  visibleCount.value += PAGE_STEP
+}
+
+function collapse() {
+  visibleCount.value = INITIAL_COUNT
+}
+
 const canSave = computed(
   () => editContent.value.trim().length > 0 && editContent.value.length <= 500
 )
@@ -65,7 +84,7 @@ async function saveEdit(reply) {
 
     <template v-else-if="replies.length">
       <BaseCard
-        v-for="r in replies"
+        v-for="r in visibleReplies"
         :key="r.id"
         padding="md"
         class="rl__item"
@@ -119,6 +138,23 @@ async function saveEdit(reply) {
 
         <p v-else class="rl__content">{{ r.content }}</p>
       </BaseCard>
+
+      <div v-if="remaining > 0 || collapsible" class="rl__more">
+        <BaseButton
+          v-if="remaining > 0"
+          variant="ghost"
+          size="sm"
+          block
+          @click="loadMore"
+        >展开更多回复（还有 {{ remaining }} 条）</BaseButton>
+        <BaseButton
+          v-else
+          variant="ghost"
+          size="sm"
+          block
+          @click="collapse"
+        >收起回复</BaseButton>
+      </div>
     </template>
 
     <EmptyState
@@ -214,11 +250,16 @@ async function saveEdit(reply) {
 
 .rl__op:hover { background: var(--line); }
 
+.rl__op:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
 .rl__op:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .rl__op--danger:hover {
   background: var(--danger-soft);
-  color: #a83a3a;
+  color: var(--danger-ink);
 }
 
 .rl__content {
@@ -227,6 +268,11 @@ async function saveEdit(reply) {
   line-height: 1.8;
   font-size: var(--fs-md);
   white-space: pre-wrap;
+}
+
+.rl__more {
+  display: flex;
+  flex-direction: column;
 }
 
 .rl__edit {

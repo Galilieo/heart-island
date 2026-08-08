@@ -1,6 +1,6 @@
 <script setup>
 // 登录/注册页共用的两栏布局。
-// 左：漂浮涂鸦 + slogan；右：白色表单卡（slot 放具体表单）。
+// 整页一张暖色画布：渐变 + 漂浮涂鸦铺满全屏，slogan 在左下，表单卡浮在右侧。
 // 窄屏自动堆叠成单列。
 import Doodle from '../ui/Doodle.vue'
 import logoUrl from '../../assets/logo-xinyu.png'
@@ -15,16 +15,16 @@ defineProps({
 
 <template>
   <div class="auth">
-    <aside class="auth__visual">
-      <div class="auth__doodles">
-        <Doodle name="cloud" :size="80" color="rgba(111,169,164,0.4)" class="d d-1" />
-        <Doodle name="star"  :size="44" color="rgba(217,140,122,0.5)" class="d d-2" />
-        <Doodle name="leaf"  :size="60" color="rgba(155,193,188,0.55)" class="d d-3" />
-        <Doodle name="sun"   :size="56" color="rgba(243,185,95,0.55)"  class="d d-4" />
-        <Doodle name="wave"  :size="120" color="rgba(143,165,196,0.35)" class="d d-5" />
-        <Doodle name="heart" :size="40" color="rgba(217,140,122,0.45)" class="d d-6" />
-      </div>
+    <div class="auth__doodles" aria-hidden="true">
+      <Doodle name="cloud" :size="80" color="rgba(111,169,164,0.4)" class="d d-1" />
+      <Doodle name="sun"   :size="56" color="rgba(243,185,95,0.55)"  class="d d-2" />
+      <Doodle name="leaf"  :size="60" color="rgba(155,193,188,0.55)" class="d d-3" />
+      <Doodle name="wave"  :size="120" color="rgba(143,165,196,0.35)" class="d d-4" />
+      <Doodle name="star"  :size="44" color="rgba(217,140,122,0.5)" class="d d-5" />
+      <Doodle name="heart" :size="40" color="rgba(217,140,122,0.45)" class="d d-6" />
+    </div>
 
+    <aside class="auth__visual">
       <blockquote class="auth__slogan">
         “{{ slogan }}”
       </blockquote>
@@ -54,24 +54,19 @@ defineProps({
 </template>
 
 <style scoped>
+/* 统一画布：渐变铺满整页，左右没有分界线 */
 .auth {
+  position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  background: var(--bg-base);
-}
-
-.auth__visual {
-  position: relative;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 48px;
   background:
-    radial-gradient(circle at 30% 30%, rgba(111, 169, 164, 0.22), transparent 50%),
-    radial-gradient(circle at 75% 65%, rgba(217, 140, 122, 0.18), transparent 50%),
-    linear-gradient(135deg, #f6efe1 0%, #fdfaf3 60%, #f0e6d3 100%);
+    radial-gradient(circle at 22% 24%, rgba(111, 169, 164, 0.20), transparent 46%),
+    radial-gradient(circle at 82% 70%, rgba(217, 140, 122, 0.14), transparent 50%),
+    radial-gradient(circle at 60% 8%, rgba(243, 185, 95, 0.10), transparent 42%),
+    linear-gradient(135deg, var(--bg-warm-from) 0%, var(--bg-warm-mid) 55%, var(--bg-warm-to) 100%);
 }
 
 .auth__doodles {
@@ -84,23 +79,31 @@ defineProps({
   position: absolute;
   animation: drift 10s ease-in-out infinite alternate;
 }
-.d-1 { top: 8%;  left: 12%; }
-.d-2 { top: 20%; right: 18%; animation-delay: 1.2s; }
-.d-3 { top: 50%; left: 8%;  animation-delay: 0.6s; }
-.d-4 { top: 18%; left: 48%; animation-delay: 2.4s; }
-.d-5 { bottom: 18%; left: 22%; animation-delay: 1.8s; }
-.d-6 { bottom: 36%; right: 12%; animation-delay: 0.3s; }
+/* 左侧一簇 + 右侧零星两点，让两边都有呼吸感 */
+.d-1 { top: 8%;  left: 6%; }
+.d-2 { top: 14%; left: 26%; animation-delay: 2.4s; }
+.d-3 { top: 52%; left: 4%;  animation-delay: 0.6s; }
+.d-4 { bottom: 12%; left: 14%; animation-delay: 1.8s; }
+.d-5 { top: 12%; right: 7%; animation-delay: 1.2s; }
+.d-6 { bottom: 24%; right: 10%; animation-delay: 0.3s; }
 
 @keyframes drift {
   from { transform: translateY(0) rotate(-2deg); }
   to   { transform: translateY(-12px) rotate(2deg); }
 }
 
-.auth__slogan {
+.auth__visual {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 48px;
+}
+
+.auth__slogan {
   margin: 0;
-  max-width: 320px;
+  max-width: 340px;
   color: var(--ink-1);
   font-family: var(--font-display);
   font-size: var(--fs-2xl);
@@ -109,8 +112,6 @@ defineProps({
 }
 
 .auth__sign {
-  position: relative;
-  z-index: 1;
   margin-top: 12px;
   color: var(--ink-3);
   font-size: var(--fs-sm);
@@ -118,6 +119,8 @@ defineProps({
 }
 
 .auth__panel {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -185,13 +188,31 @@ defineProps({
   text-align: center;
 }
 
+/* 窄屏：单列堆叠，slogan 区压成一条横幅，表单卡收紧，
+   目标是 390×844 内注册页（3 输入框）完整落进首屏 */
 @media (max-width: 768px) {
   .auth { grid-template-columns: 1fr; }
   .auth__visual {
-    min-height: 200px;
-    padding: 24px;
+    min-height: 148px;
+    padding: 20px 24px;
   }
-  .auth__slogan { font-size: var(--fs-xl); }
-  .auth__panel { padding: 24px 18px 36px; }
+  .auth__slogan { font-size: var(--fs-lg); max-width: 300px; }
+  .auth__sign { margin-top: 6px; }
+  /* 手机上涂鸦只留左上角两个，避免和表单抢注意力 */
+  .d-3, .d-4, .d-6 { display: none; }
+  .auth__panel {
+    padding: 20px 18px 28px;
+    align-items: flex-start;
+  }
+  .auth__card { padding: 24px 22px; }
+  .auth__brand {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 12px;
+  }
+  .auth__title { margin-top: 6px; font-size: var(--fs-2xl); }
+  .auth__subtitle { margin-top: 6px; font-size: var(--fs-sm); }
+  .auth__body { margin-top: 20px; gap: 12px; }
+  .auth__footer { margin-top: 14px; }
 }
 </style>

@@ -244,4 +244,9 @@ onMounted(async () => {
   color: var(--brand-deep);
   border-color: var(--brand-soft);
 }
+
+.detail__back:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
 </style>

@@ -1,12 +1,13 @@
 <script setup>
 // 心情详情弹窗。默认展示心情/时间/内容/AI 回复；
-// 点"编辑"切到编辑模式（chip + textarea），保存后由父级负责调 store.update。
+// 点"编辑"切到编辑模式（chip + textarea + 回复开关），保存后由父级负责调 store.update。
 // editing 状态留在组件内部，关闭/切换记录时自动重置。
 import { ref, watch, computed } from 'vue'
 import BaseDialog from '../ui/BaseDialog.vue'
 import BaseTag from '../ui/BaseTag.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
+import BaseSwitch from '../ui/BaseSwitch.vue'
 import { MOOD_OPTIONS, moodTone, formatTime } from '../../utils/mood'
 
 const props = defineProps({
@@ -20,6 +21,7 @@ const emit = defineEmits(['update:modelValue', 'update', 'close'])
 const editing = ref(false)
 const editMoodType = ref('')
 const editContent = ref('')
+const editNeedAiReply = ref(true)
 
 watch(
   () => props.mood,
@@ -28,6 +30,8 @@ watch(
     if (m) {
       editMoodType.value = m.moodType || ''
       editContent.value = m.content || ''
+      // 开关默认反映现状：有回复则开，没有则关
+      editNeedAiReply.value = !!m.aiReply
     }
   },
   { immediate: true }
@@ -45,6 +49,7 @@ function startEdit() {
   editing.value = true
   editMoodType.value = props.mood.moodType || ''
   editContent.value = props.mood.content || ''
+  editNeedAiReply.value = !!props.mood.aiReply
 }
 
 function cancelEdit() {
@@ -52,6 +57,7 @@ function cancelEdit() {
   if (props.mood) {
     editMoodType.value = props.mood.moodType || ''
     editContent.value = props.mood.content || ''
+    editNeedAiReply.value = !!props.mood.aiReply
   }
 }
 
@@ -59,7 +65,8 @@ function save() {
   emit('update', {
     id: props.mood.id,
     moodType: editMoodType.value,
-    content: editContent.value.trim()
+    content: editContent.value.trim(),
+    needAiReply: editNeedAiReply.value
   })
 }
 
@@ -119,6 +126,9 @@ function close() {
           :disabled="updating"
           placeholder="编辑心情内容"
         />
+        <div class="md__options">
+          <BaseSwitch v-model="editNeedAiReply" label="让心屿回应我" :disabled="updating" />
+        </div>
       </section>
     </div>
 
@@ -130,7 +140,7 @@ function close() {
       <template v-else>
         <BaseButton variant="plain" :disabled="updating" @click="cancelEdit">取消</BaseButton>
         <BaseButton variant="primary" :loading="updating" :disabled="!canSave" @click="save">
-          {{ updating ? '心屿正在重写回复…' : '保存修改' }}
+          {{ updating ? (editNeedAiReply ? '心屿正在重写回复…' : '正在保存…') : '保存修改' }}
         </BaseButton>
       </template>
     </template>
@@ -175,7 +185,7 @@ function close() {
 .md__block--ai {
   position: relative;
   background: linear-gradient(135deg, var(--accent-soft), var(--bg-soft));
-  border-color: #f1cdc2;
+  border-color: var(--accent-line);
 }
 
 .md__block--ai::before {
@@ -201,6 +211,12 @@ function close() {
   margin: 0 0 12px;
   font-size: var(--fs-md);
   color: var(--ink-2);
+}
+
+.md__options {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .md__moods {
@@ -237,10 +253,10 @@ function close() {
   font-weight: 700;
 }
 
-.mood-chip--joy.is-active   { background: var(--joy-soft); color: #a06b1e; }
-.mood-chip--calm.is-active  { background: var(--calm-soft); color: #3f6f6a; }
-.mood-chip--warn.is-active  { background: var(--warn-soft); color: #946200; }
-.mood-chip--sad.is-active   { background: var(--sad-soft); color: #45597a; }
-.mood-chip--tired.is-active { background: var(--tired-soft); color: #6e6557; }
+.mood-chip--joy.is-active   { background: var(--joy-soft); color: var(--joy-ink); }
+.mood-chip--calm.is-active  { background: var(--calm-soft); color: var(--calm-ink); }
+.mood-chip--warn.is-active  { background: var(--warn-soft); color: var(--warn-ink); }
+.mood-chip--sad.is-active   { background: var(--sad-soft); color: var(--sad-ink); }
+.mood-chip--tired.is-active { background: var(--tired-soft); color: var(--tired-ink); }
 .mood-chip--neutral.is-active { background: var(--brand-soft); color: var(--brand-deep); }
 </style>

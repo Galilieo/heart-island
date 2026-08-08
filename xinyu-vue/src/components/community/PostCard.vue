@@ -243,12 +243,12 @@ const isOwner = computed(
 
 .pc__action.is-active {
   background: var(--accent-soft);
-  color: #a45a4a;
+  color: var(--accent-ink);
 }
 
 .pc__action.is-fav {
   background: var(--joy-soft);
-  color: #a06b1e;
+  color: var(--joy-ink);
 }
 
 .pc__action--ghost {
@@ -264,11 +264,11 @@ const isOwner = computed(
   background: var(--brand-soft);
   color: var(--brand-deep);
 }
-.pc__action--soft:hover { background: #d6e8e5; }
+.pc__action--soft:hover { background: var(--brand-soft-deep); }
 
 .pc__action--danger:hover {
   background: var(--danger-soft);
-  color: #a83a3a;
+  color: var(--danger-ink);
 }
 
 .pc__action-ico {

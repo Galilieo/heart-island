@@ -1,7 +1,7 @@
 <script setup>
 // 社区帖子列表页。
 //   - 顶部 hero + 话题胶囊筛选（TopicFilter）
-//   - 可折叠的发帖表单（PostPublishForm）
+//   - 发帖走弹窗（BaseDialog + PostPublishForm），点「+ 发布」打开
 //   - 帖子卡列表 + 全部/我的切换
 // 点卡片跳详情页；点赞/收藏在卡片上原地完成（走 communityStore 的乐观更新）。
 import { ref, onMounted, computed } from 'vue'
@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import BaseDialog from '../components/ui/BaseDialog.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
@@ -113,38 +114,31 @@ onMounted(async () => {
         </div>
       </header>
 
-      <BaseCard padding="md" class="post-page__filter">
-        <header class="post-page__filter-head">
-          <div>
-            <p class="post-page__kicker post-page__kicker--inline">话题</p>
-            <h3 class="post-page__filter-title">想看哪一个方向？</h3>
-          </div>
-          <BaseButton
-            variant="primary"
-            size="sm"
-            @click="showPublish = !showPublish"
-          >
-            {{ showPublish ? '收起' : '+ 发布' }}
-          </BaseButton>
-        </header>
-        <TopicFilter
-          :topics="topics"
-          :selected-topic-id="filters.topicId"
-          @select="selectTopic"
-        />
-      </BaseCard>
+      <div class="post-page__body">
+        <aside class="post-page__rail">
+          <BaseCard padding="md" class="post-page__filter">
+            <header class="post-page__filter-head">
+              <div>
+                <p class="post-page__kicker post-page__kicker--inline">话题</p>
+                <h3 class="post-page__filter-title">想看哪一个方向？</h3>
+              </div>
+              <BaseButton
+                variant="primary"
+                size="sm"
+                @click="showPublish = true"
+              >
+                + 发布
+              </BaseButton>
+            </header>
+            <TopicFilter
+              :topics="topics"
+              :selected-topic-id="filters.topicId"
+              @select="selectTopic"
+            />
+          </BaseCard>
+        </aside>
 
-      <transition name="publish">
-        <PostPublishForm
-          v-if="showPublish"
-          ref="publishRef"
-          :topics="topics"
-          :default-topic-id="filters.topicId"
-          :submitting="publishing"
-          @submit="handlePublish"
-        />
-      </transition>
-
+        <section class="post-page__content">
       <BaseCard padding="md">
         <header class="post-page__list-head">
           <div>
@@ -215,6 +209,23 @@ onMounted(async () => {
           </EmptyState>
         </TransitionGroup>
       </BaseCard>
+        </section>
+      </div>
+
+      <BaseDialog
+        v-model="showPublish"
+        title="发布新帖子"
+        width="md"
+        :persistent="publishing"
+      >
+        <PostPublishForm
+          ref="publishRef"
+          :topics="topics"
+          :default-topic-id="filters.topicId"
+          :submitting="publishing"
+          @submit="handlePublish"
+        />
+      </BaseDialog>
     </div>
   </AppShell>
 </template>
@@ -224,6 +235,46 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* ── 杂志式双栏：左栏话题/发布（吸附），右栏信息流 ── */
+.post-page__body {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.post-page__rail {
+  position: sticky;
+  top: 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  /* 关键：rail 吸附后内容若高于视口，发布表单下半截会永远滚不到。
+     限高 + 内部滚动，保证表单任何部分都够得着。 */
+  max-height: calc(100dvh - 104px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* 桌面 rail：话题竖向整行，更像稳定的导航栏 */
+.post-page__rail :deep(.topics) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.post-page__rail :deep(.topic-chip) {
+  width: 100%;
+  justify-content: flex-start;
+  height: 40px;
+  padding: 0 16px;
+}
+
+.post-page__content {
+  min-width: 0;
 }
 
 .post-page__hero {
@@ -326,31 +377,35 @@ onMounted(async () => {
   box-shadow: var(--shadow-sm);
 }
 
+.scope-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
 .post-page__list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.publish-enter-from,
-.publish-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-  max-height: 0;
-}
+@media (max-width: 1024px) {
+  .post-page__body {
+    grid-template-columns: 1fr;
+  }
+  .post-page__rail {
+    position: static;
+  }
 
-.publish-enter-to,
-.publish-leave-from {
-  opacity: 1;
-  max-height: 800px;
-}
-
-.publish-enter-active,
-.publish-leave-active {
-  transition: opacity var(--t-base) var(--ease-soft),
-    transform var(--t-base) var(--ease-soft),
-    max-height var(--t-slow) var(--ease-soft);
-  overflow: hidden;
+  /* 回到横向：rail 吸附失效后，话题恢复胶囊流 */
+  .post-page__rail :deep(.topics) {
+    flex-direction: row;
+    align-items: center;
+  }
+  .post-page__rail :deep(.topic-chip) {
+    width: auto;
+    height: 34px;
+    padding: 0 14px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -359,6 +414,55 @@ onMounted(async () => {
     padding: 24px;
   }
   .post-page__title { font-size: var(--fs-2xl); }
+
+  /* 手机：话题区压缩为一行横滑 chips；右缘渐隐/peek 提示可滑，
+     滚到底（is-at-end）或无需滚动时提示消失，话题一个不少 */
+  .post-page__filter :deep(.card__body) {
+    padding: 14px 16px;
+  }
+  .post-page__filter-head {
+    margin-bottom: 10px;
+  }
+  .post-page__filter-title {
+    font-size: var(--fs-md);
+  }
+  .post-page__rail :deep(.topics-wrap) {
+    margin: 0 -16px;
+  }
+  .post-page__rail :deep(.topics-wrap)::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 52px;
+    background: linear-gradient(90deg, transparent, var(--bg-card) 76%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--t-base) var(--ease-soft);
+  }
+  .post-page__rail :deep(.topics-wrap.is-scrollable:not(.is-at-end))::after {
+    opacity: 1;
+  }
+  .post-page__rail :deep(.topics) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 2px 16px 4px;
+    scroll-padding-right: 56px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .post-page__rail :deep(.topics)::-webkit-scrollbar {
+    display: none;
+  }
+  .post-page__rail :deep(.topic-chip) {
+    flex-shrink: 0;
+    height: 40px;
+  }
+  .scope-chip {
+    min-height: 40px;
+    padding: 0 16px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -371,10 +475,10 @@ onMounted(async () => {
   .post-page__controls {
     justify-content: flex-start;
   }
+  /* 手机保持头部单行：标题 + 发布按钮同行，不再纵向堆叠 */
   .post-page__filter-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
+    flex-direction: row;
+    align-items: center;
   }
 }
 </style>

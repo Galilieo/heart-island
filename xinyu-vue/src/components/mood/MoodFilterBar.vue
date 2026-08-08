@@ -29,6 +29,10 @@ const moodSelectOptions = [
 const hasFilter = computed(
   () => props.moodType || props.startDate || props.endDate
 )
+
+// ≤768px 时筛选区默认收起为一条摘要行，展开后才显示控件（页面内局部状态）
+const open = ref(false)
+
 const startDateInputRef = ref(null)
 const endDateInputRef = ref(null)
 
@@ -66,6 +70,18 @@ async function applyToday() {
 
 <template>
   <div class="filter-bar">
+    <button
+      type="button"
+      class="filter-bar__toggle"
+      :aria-expanded="open"
+      @click="open = !open"
+    >
+      <span>筛选记录</span>
+      <span v-if="hasFilter" class="filter-bar__toggle-dot" aria-hidden="true" />
+      <span class="filter-bar__toggle-caret" aria-hidden="true">{{ open ? '收起 ▴' : '展开 ▾' }}</span>
+    </button>
+
+    <div class="filter-bar__body" :class="{ 'is-open': open }">
     <div class="filter-bar__field filter-bar__field--mood">
       <BaseSelect
         :model-value="moodType"
@@ -114,11 +130,16 @@ async function applyToday() {
         @click="emit('reset')"
       >重置</BaseButton>
     </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.filter-bar {
+.filter-bar__toggle {
+  display: none;
+}
+
+.filter-bar__body {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -207,7 +228,51 @@ async function applyToday() {
 }
 
 @media (max-width: 768px) {
-  .filter-bar { align-items: stretch; }
+  .filter-bar__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius-3);
+    background: var(--bg-soft);
+    color: var(--ink-2);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .filter-bar__toggle-dot {
+    width: 7px;
+    height: 7px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .filter-bar__toggle-caret {
+    margin-left: auto;
+    color: var(--ink-3);
+    font-size: var(--fs-xs);
+  }
+
+  .filter-bar__toggle-dot + .filter-bar__toggle-caret {
+    margin-left: 10px;
+  }
+
+  .filter-bar__body {
+    display: none;
+  }
+
+  .filter-bar__body.is-open {
+    display: flex;
+    margin-top: 8px;
+  }
+
+  .filter-bar__body { align-items: stretch; }
   .filter-bar__field--mood,
   .filter-bar__dates,
   .filter-bar__quick,

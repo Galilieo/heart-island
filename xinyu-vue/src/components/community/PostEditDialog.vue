@@ -6,6 +6,7 @@ import BaseDialog from '../ui/BaseDialog.vue'
 import BaseSelect from '../ui/BaseSelect.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
+import BaseSwitch from '../ui/BaseSwitch.vue'
 import { MOOD_OPTIONS } from '../../utils/mood'
 
 const props = defineProps({
@@ -20,6 +21,7 @@ const emit = defineEmits(['update:modelValue', 'save'])
 const topicId = ref('')
 const moodType = ref('')
 const content = ref('')
+const needAiReply = ref(true)
 
 watch(
   () => props.post,
@@ -28,6 +30,8 @@ watch(
       topicId.value = p.topicId ?? ''
       moodType.value = p.moodType ?? ''
       content.value = p.content ?? ''
+      // 开关默认反映现状：有回复则开，没有则关
+      needAiReply.value = !!p.aiReply
     }
   },
   { immediate: true }
@@ -54,7 +58,8 @@ function save() {
     id: props.post.id,
     topicId: topicId.value,
     moodType: moodType.value,
-    content: content.value.trim()
+    content: content.value.trim(),
+    needAiReply: needAiReply.value
   })
 }
 
@@ -83,6 +88,9 @@ function close() {
         :disabled="saving"
         placeholder="重新写一下你想说的"
       />
+      <div class="ped__options">
+        <BaseSwitch v-model="needAiReply" label="让心屿回应我" :disabled="saving" />
+      </div>
     </div>
 
     <template #footer>
@@ -101,6 +109,11 @@ function close() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.ped__options {
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 768px) {

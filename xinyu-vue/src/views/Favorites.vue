@@ -75,7 +75,7 @@ onMounted(async () => {
         </div>
       </header>
 
-      <BaseCard padding="md">
+      <BaseCard padding="md" class="fav-page__board">
         <header class="fav-page__list-head">
           <div>
             <p class="fav-page__kicker">收藏夹</p>
@@ -128,7 +128,7 @@ onMounted(async () => {
 .fav-page__hero {
   position: relative;
   padding: 28px 32px;
-  background: linear-gradient(135deg, var(--joy-soft), var(--accent-soft));
+  background: linear-gradient(135deg, var(--hero-fav-from), var(--hero-fav-to));
   border-radius: var(--radius-4);
   overflow: hidden;
   display: flex;
@@ -181,6 +181,25 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* ── 桌面：收藏墙双列卡格，限宽居中让少量内容也有稳定节奏；空状态通栏 ── */
+@media (min-width: 769px) {
+  .fav-page__board {
+    width: min(980px, 100%);
+    align-self: center;
+  }
+
+  .fav-page__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .fav-page__list > .empty {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 768px) {

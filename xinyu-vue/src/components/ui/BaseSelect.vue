@@ -227,6 +227,10 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-focus);
 }
 
+.field__control:not(:disabled):not(.is-open):not(:focus-visible):hover {
+  border-color: var(--line-strong);
+}
+
 .field__control--sm { height: 34px; font-size: var(--fs-sm); }
 .field__control--md { height: 42px; }
 .field__control--lg { height: 48px; font-size: var(--fs-lg); }
@@ -304,7 +308,7 @@ onBeforeUnmount(() => {
 }
 
 .bs-option.is-selected.is-active {
-  background: #d6e8e5;
+  background: var(--brand-soft-deep);
 }
 
 .bs-option__text {

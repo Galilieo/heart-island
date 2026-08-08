@@ -19,6 +19,7 @@
   --brand: #6fa9a4;
   --brand-deep: #4d8580;
   --brand-soft: #e4f0ee;
+  --brand-soft-deep: #d6e8e5;
 
   /* 强调色（杏粉） */
   --accent: #d98c7a;
@@ -28,9 +29,20 @@
   --warn: #d4a24a;
   --warn-soft: #fbecc8;
   --danger: #c66a6a;
+  --danger-deep: #b15555;
   --danger-soft: #f8dada;
   --success: #6aa17a;
   --success-soft: #dfeede;
+
+  /* 场景色（心屿 · 潮汐之窗：深夜青天空 / 海面 / 地平线雾金） */
+  --abyss: #1d3f45;
+  --abyss-deep: #16323a;
+  --sea: #3d6f6e;
+  --sea-deep: #2a5655;
+  --sea-soft: #dceceb;
+  --gold: #eec27f;
+  --gold-soft: #f7e3bd;
+  --ink-on-sea: #f6f1e4;
 
   /* 心情色 */
   --joy: #f3b95f;
@@ -82,6 +94,7 @@
   --shadow-lg: 0 22px 50px rgba(120, 98, 60, 0.14);
   --shadow-inset: inset 0 0 0 1px var(--line);
   --shadow-focus: 0 0 0 3px rgba(111, 169, 164, 0.22);
+  --shadow-error: 0 0 0 3px rgba(198, 106, 106, 0.16);
 
   /* 动效 */
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -95,4 +108,102 @@
   --z-header: 200;
   --z-dialog: 1000;
   --z-toast: 2000;
+
+  /* 柔底上的文字色（与各 *-soft 配套，深夜模式下会反转） */
+  --joy-ink: #a06b1e;
+  --calm-ink: #3f6f6a;
+  --sad-ink: #45597a;
+  --angry-ink: #8b4a3d;
+  --tired-ink: #6e6557;
+  --warn-ink: #946200;
+  --danger-ink: #a83a3a;
+  --success-ink: #2f6a45;
+  --accent-ink: #a45a4a;
+
+  /* 场景补充 */
+  --accent-line: #f1cdc2;
+  --bg-header: rgba(253, 250, 243, 0.85);
+  --bg-warm-from: #f6efe1;
+  --bg-warm-mid: #fdfaf3;
+  --bg-warm-to: #f3ead8;
+
+  /* hero 问候横幅渐变（浅色：薄荷青 → 杏粉） */
+  --hero-from: var(--brand-soft);
+  --hero-to: var(--accent-soft);
+
+  /* 收藏页横幅渐变（浅色：蜜黄 → 杏粉） */
+  --hero-fav-from: var(--joy-soft);
+  --hero-fav-to: var(--accent-soft);
+}
+
+/* ══════════ 深夜模式：<html data-theme="night"> 时整套覆盖 ══════════ */
+/* 方向：更暗、去饱和、低对比——像深夜海面，不是发光的水族箱 */
+[data-theme="night"] {
+  --bg-base: #08161b;
+  --bg-soft: #0f2228;
+  --bg-card: #122a30;
+  --bg-overlay: rgba(4, 10, 13, 0.62);
+
+  --ink-1: #dcd9ce;
+  --ink-2: #93a59f;
+  --ink-3: #647672;
+  --ink-inverse: #08161b;
+
+  --line: #1e3339;
+  --line-strong: #2a454c;
+
+  --brand: #679b95;
+  --brand-deep: #8bb2ac;
+  --brand-soft: #1a3339;
+  --brand-soft-deep: #203c42;
+
+  --accent: #c08a7a;
+  --accent-soft: #332722;
+  --accent-line: #42332d;
+
+  --warn: #bb9752;
+  --warn-soft: #2e2618;
+  --danger: #b57070;
+  --danger-deep: #c48585;
+  --danger-soft: #352524;
+  --success: #659475;
+  --success-soft: #1e2d23;
+
+  --sea: #3a6563;
+  --sea-deep: #84aca6;
+  --sea-soft: #1a2e33;
+  --gold-soft: #332a19;
+
+  --joy-soft: #2c2416;
+  --calm-soft: #1a2b29;
+  --sad-soft: #202933;
+  --angry-soft: #2e221f;
+  --tired-soft: #252119;
+
+  --joy-ink: #cfa265;
+  --calm-ink: #85aba5;
+  --sad-ink: #8899b2;
+  --angry-ink: #bd8a7a;
+  --tired-ink: #a1978a;
+  --warn-ink: #bb9c5c;
+  --danger-ink: #c08282;
+  --success-ink: #77a086;
+  --accent-ink: #c08a7a;
+
+  --bg-header: rgba(8, 22, 27, 0.85);
+  --bg-warm-from: #0f2228;
+  --bg-warm-mid: #08161b;
+  --bg-warm-to: #11262c;
+
+  /* 深夜 hero：青色系内渐变，不与暖棕混色 */
+  --hero-from: #14272d;
+  --hero-to: #1b343b;
+  --hero-fav-from: #152a30;
+  --hero-fav-to: #1e383d;
+
+  --shadow-sm: 0 2px 6px rgba(2, 6, 8, 0.42);
+  --shadow-md: 0 12px 28px rgba(2, 6, 8, 0.5);
+  --shadow-lg: 0 22px 50px rgba(2, 6, 8, 0.56);
+  --shadow-focus: 0 0 0 3px rgba(103, 155, 149, 0.28);
+  --shadow-error: 0 0 0 3px rgba(181, 112, 112, 0.22);
 }

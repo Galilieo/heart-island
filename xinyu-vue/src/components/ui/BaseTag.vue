@@ -1,6 +1,7 @@
 <script setup>
 // 标签。tone 决定配色（含 5 种心情色 joy/calm/sad/angry/tired），
 // variant 决定填充方式（soft 柔底 / solid 实色 / outline 描边）。
+// soft/outline 的文字色走 *-ink 令牌，深夜模式下自动反转变亮。
 defineProps({
   tone: {
     type: String,
@@ -61,15 +62,15 @@ defineProps({
 /* tone color tables */
 .tag--neutral.tag--soft { background: var(--bg-soft); color: var(--ink-2); }
 .tag--brand.tag--soft   { background: var(--brand-soft); color: var(--brand-deep); }
-.tag--accent.tag--soft  { background: var(--accent-soft); color: #a45a4a; }
-.tag--warn.tag--soft    { background: var(--warn-soft); color: #946200; }
-.tag--danger.tag--soft  { background: var(--danger-soft); color: #a83a3a; }
-.tag--success.tag--soft { background: var(--success-soft); color: #2f6a45; }
-.tag--joy.tag--soft     { background: var(--joy-soft); color: #a06b1e; }
-.tag--calm.tag--soft    { background: var(--calm-soft); color: #3f6f6a; }
-.tag--sad.tag--soft     { background: var(--sad-soft); color: #45597a; }
-.tag--angry.tag--soft   { background: var(--angry-soft); color: #8b4a3d; }
-.tag--tired.tag--soft   { background: var(--tired-soft); color: #6e6557; }
+.tag--accent.tag--soft  { background: var(--accent-soft); color: var(--accent-ink); }
+.tag--warn.tag--soft    { background: var(--warn-soft); color: var(--warn-ink); }
+.tag--danger.tag--soft  { background: var(--danger-soft); color: var(--danger-ink); }
+.tag--success.tag--soft { background: var(--success-soft); color: var(--success-ink); }
+.tag--joy.tag--soft     { background: var(--joy-soft); color: var(--joy-ink); }
+.tag--calm.tag--soft    { background: var(--calm-soft); color: var(--calm-ink); }
+.tag--sad.tag--soft     { background: var(--sad-soft); color: var(--sad-ink); }
+.tag--angry.tag--soft   { background: var(--angry-soft); color: var(--angry-ink); }
+.tag--tired.tag--soft   { background: var(--tired-soft); color: var(--tired-ink); }
 
 /* solid */
 .tag--solid { color: #fff; }
@@ -89,10 +90,10 @@ defineProps({
 .tag--outline { background: transparent; }
 .tag--neutral.tag--outline { color: var(--ink-2); border-color: var(--line-strong); }
 .tag--brand.tag--outline   { color: var(--brand-deep); border-color: var(--brand-soft); }
-.tag--accent.tag--outline  { color: var(--accent); border-color: var(--accent-soft); }
-.tag--joy.tag--outline     { color: #a06b1e; border-color: var(--joy-soft); }
-.tag--calm.tag--outline    { color: #3f6f6a; border-color: var(--calm-soft); }
-.tag--sad.tag--outline     { color: #45597a; border-color: var(--sad-soft); }
-.tag--angry.tag--outline   { color: #8b4a3d; border-color: var(--angry-soft); }
-.tag--tired.tag--outline   { color: #6e6557; border-color: var(--tired-soft); }
+.tag--accent.tag--outline  { color: var(--accent-ink); border-color: var(--accent-soft); }
+.tag--joy.tag--outline     { color: var(--joy-ink); border-color: var(--joy-soft); }
+.tag--calm.tag--outline    { color: var(--calm-ink); border-color: var(--calm-soft); }
+.tag--sad.tag--outline     { color: var(--sad-ink); border-color: var(--sad-soft); }
+.tag--angry.tag--outline   { color: var(--angry-ink); border-color: var(--angry-soft); }
+.tag--tired.tag--outline   { color: var(--tired-ink); border-color: var(--tired-soft); }
 </style>
