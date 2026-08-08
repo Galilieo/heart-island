@@ -202,7 +202,10 @@ public class CommunityPostService {
         }
 
         // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
-        attachAiReply(post);
+        // 用户选择不要 AI 回复时跳过生成（也不写调用日志）。
+        if (!Boolean.FALSE.equals(dto.getNeedAiReply())) {
+            attachAiReply(post);
+        }
 
         return true;
     }
@@ -254,6 +257,16 @@ public class CommunityPostService {
         int rows = communityPostMapper.updateById(post);
         if (rows <= 0) {
             return false;
+        }
+
+        if (Boolean.FALSE.equals(dto.getNeedAiReply())) {
+            // 用户选择不要 AI 回复：清掉已有回复，不重新生成、不写日志
+            UpdateWrapper<CommunityPost> clearReply = new UpdateWrapper<>();
+            clearReply.eq("id", post.getId());
+            clearReply.set("ai_reply", null);
+            communityPostMapper.update(null, clearReply);
+            post.setAiReply(null);
+            return true;
         }
 
         // 内容已落库，AI 回复同步重新生成

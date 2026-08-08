@@ -1,6 +1,7 @@
 package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.dto.AiReplyResult;
 import com.xinyu.entity.MoodRecord;
@@ -32,6 +33,11 @@ public class MoodRecordService {
         int insertRows = moodRecordMapper.insert(moodRecord);
         if (insertRows <= 0) {
             return false;
+        }
+
+        // 用户选择不要 AI 回复：只保存记录，不生成、不写调用日志
+        if (Boolean.FALSE.equals(moodRecord.getNeedAiReply())) {
+            return true;
         }
 
         AiReplyResult aiReplyResult = aiReplyService.generateReplyResult(
@@ -143,6 +149,20 @@ public class MoodRecordService {
 
         dbRecord.setMoodType(moodRecord.getMoodType());
         dbRecord.setContent(moodRecord.getContent());
+
+        if (Boolean.FALSE.equals(moodRecord.getNeedAiReply())) {
+            // 用户选择不要 AI 回复：清掉已有回复，不重新生成、不写日志。
+            // 注意 updateById 默认忽略 null 字段，ai_reply 要用 UpdateWrapper 显式置 NULL。
+            dbRecord.setAiReply(null);
+            int rows = moodRecordMapper.updateById(dbRecord);
+            if (rows > 0) {
+                UpdateWrapper<MoodRecord> clearReply = new UpdateWrapper<>();
+                clearReply.eq("id", dbRecord.getId());
+                clearReply.set("ai_reply", null);
+                moodRecordMapper.update(null, clearReply);
+            }
+            return rows > 0;
+        }
 
         AiReplyResult aiReplyResult = aiReplyService.generateReplyResult(
                 moodRecord.getMoodType(),

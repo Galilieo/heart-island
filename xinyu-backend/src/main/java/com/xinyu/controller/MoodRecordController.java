@@ -47,6 +47,7 @@ public class MoodRecordController {
         moodRecord.setMoodType(request.getMoodType());
         moodRecord.setContent(request.getContent());
         moodRecord.setUserId(userId);
+        moodRecord.setNeedAiReply(request.getNeedAiReply());
 
         Boolean success = moodRecordService.add(moodRecord);
 
@@ -157,6 +158,7 @@ public class MoodRecordController {
         MoodRecord moodRecord = new MoodRecord();
         moodRecord.setMoodType(request.getMoodType());
         moodRecord.setContent(request.getContent());
+        moodRecord.setNeedAiReply(request.getNeedAiReply());
 
         Boolean success =moodRecordService.update(id,userId,moodRecord);
 

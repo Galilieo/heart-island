@@ -1,6 +1,7 @@
 package com.xinyu.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 
 import java.time.LocalDateTime;
@@ -80,5 +81,17 @@ public class MoodRecord {
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    /** 是否需要 AI 回复（仅请求传输用，不入库）。缺省 true，兼容旧客户端。 */
+    @TableField(exist = false)
+    private Boolean needAiReply = true;
+
+    public Boolean getNeedAiReply() {
+        return needAiReply;
+    }
+
+    public void setNeedAiReply(Boolean needAiReply) {
+        this.needAiReply = needAiReply;
     }
 }
