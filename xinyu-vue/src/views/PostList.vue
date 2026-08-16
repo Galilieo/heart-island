@@ -399,9 +399,10 @@ onMounted(async () => {
     overflow: visible;
   }
 
-  /* 回到横向：rail 吸附失效后，话题恢复胶囊流 */
+  /* 回到横向换行：rail 不再是侧栏，话题全部可见可点 */
   .post-page__rail :deep(.topics) {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
   }
   .post-page__rail :deep(.topic-chip) {
@@ -418,8 +419,7 @@ onMounted(async () => {
   }
   .post-page__title { font-size: var(--fs-2xl); }
 
-  /* 手机：话题区压缩为一行横滑 chips；右缘渐隐/peek 提示可滑，
-     滚到底（is-at-end）或无需滚动时提示消失，话题一个不少 */
+  /* 手机：话题区收紧内边距；chips 自动换行、全部可见（见 TopicFilter） */
   .post-page__filter :deep(.card__body) {
     padding: 14px 16px;
   }
@@ -429,37 +429,7 @@ onMounted(async () => {
   .post-page__filter-title {
     font-size: var(--fs-md);
   }
-  .post-page__rail :deep(.topics-wrap) {
-    margin: 0 -16px;
-  }
-  .post-page__rail :deep(.topics-wrap)::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 52px;
-    background: linear-gradient(90deg, transparent, var(--bg-card) 76%);
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity var(--t-base) var(--ease-soft);
-  }
-  .post-page__rail :deep(.topics-wrap.is-scrollable:not(.is-at-end))::after {
-    opacity: 1;
-  }
-  .post-page__rail :deep(.topics) {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    padding: 2px 16px 4px;
-    scroll-padding-right: 56px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .post-page__rail :deep(.topics)::-webkit-scrollbar {
-    display: none;
-  }
   .post-page__rail :deep(.topic-chip) {
-    flex-shrink: 0;
     height: 40px;
   }
   .scope-chip {

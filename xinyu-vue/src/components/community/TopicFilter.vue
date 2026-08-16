@@ -1,48 +1,20 @@
 <script setup>
 // 话题胶囊筛选器。第一个"全部"对应 topicId=null，
 // 点击发 @select(topicId)，自身不知道当前的列表，纯展示。
-// 窄屏单行横滑时通过 is-scrollable / is-at-end 暴露滚动状态，
-// 由外层（PostList）决定右缘渐隐/peek 提示，滚到底提示消失。
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-
-const props = defineProps({
+// 所有宽度下都自动换行展示——话题永远全部可见、可点，
+// 不做横向滚动隐藏（鼠标用户滚不了横排，等于选不到）。
+defineProps({
   topics: { type: Array, default: () => [] },
   selectedTopicId: { type: [String, Number, null], default: null },
   loading: Boolean
 })
 
 defineEmits(['select'])
-
-const listRef = ref(null)
-const canScroll = ref(false)
-const atEnd = ref(true)
-
-function updateScrollState() {
-  const el = listRef.value
-  if (!el) return
-  canScroll.value = el.scrollWidth > el.clientWidth + 1
-  atEnd.value = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4
-}
-
-// 话题异步到达后宽度才确定，需要重新测量
-watch(() => props.topics.length, () => nextTick(updateScrollState))
-
-onMounted(() => {
-  updateScrollState()
-  window.addEventListener('resize', updateScrollState)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateScrollState)
-})
 </script>
 
 <template>
-  <div
-    class="topics-wrap"
-    :class="{ 'is-scrollable': canScroll, 'is-at-end': atEnd }"
-  >
-    <div ref="listRef" class="topics" @scroll.passive="updateScrollState">
+  <div class="topics-wrap">
+    <div class="topics">
       <button
         type="button"
         class="topic-chip motion-press"
@@ -109,6 +81,11 @@ onBeforeUnmount(() => {
   border-color: var(--brand-soft);
   background: var(--brand-soft);
   color: var(--brand-deep);
+}
+
+.topic-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 .topic-chip.is-active {

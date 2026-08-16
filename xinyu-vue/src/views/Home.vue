@@ -361,39 +361,30 @@ onMounted(() => {
   justify-content: center;
 }
 
-/* ── 平板：书写与潮汐并排，记录册通栏，不是简单堆叠 ── */
+/* ── ≤1024px：单列堆叠（书写 → 潮汐 → 记录册）。
+      不要半吊子双栏——潮汐卡很短，右栏会空出一大片 ── */
 @media (max-width: 1024px) {
   .home__main {
-    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+    grid-template-columns: 1fr;
   }
 
-  .home__compose {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .home__tide {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
+  .home__compose,
+  .home__tide,
   .home__list {
-    grid-column: 1 / 3;
-    grid-row: 2;
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .home__hero-doodles { display: none; }
 }
 
-/* ── 平板（≤768px）：仍保持「书写 | 潮汐」双栏，记录册通栏，不做机械堆叠 ── */
+/* ── ≤768px：延续单列，只收字号与间距 ── */
 @media (max-width: 768px) {
   .home { gap: 18px; }
 
   .home__hero { padding: 24px; }
   .home__greet { font-size: var(--fs-2xl); }
   .home__sub { font-size: var(--fs-sm); }
-
-  .home__main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 
   .home__list-head {
     flex-direction: column;
