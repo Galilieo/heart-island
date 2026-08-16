@@ -185,6 +185,11 @@ const MOOD_ICONS = {
 }
 
 @media (max-width: 1024px) {
-  .mood-form { position: static; }
+  /* 非桌面布局不吸附，也不需要限高内滚（否则卡片出内部滚动条） */
+  .mood-form {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
 }
 </style>

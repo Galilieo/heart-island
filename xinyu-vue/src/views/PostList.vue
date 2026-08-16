@@ -394,6 +394,9 @@ onMounted(async () => {
   }
   .post-page__rail {
     position: static;
+    /* 堆叠布局不需要限高内滚 */
+    max-height: none;
+    overflow: visible;
   }
 
   /* 回到横向：rail 吸附失效后，话题恢复胶囊流 */
