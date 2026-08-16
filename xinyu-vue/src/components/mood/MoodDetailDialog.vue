@@ -228,6 +228,7 @@ function close() {
 
 @media (max-width: 768px) {
   .md__moods { grid-template-columns: repeat(3, 1fr); }
+  .md__moods .mood-chip { min-height: 44px; }
 }
 
 .mood-chip {

@@ -255,6 +255,13 @@ async function saveEdit(reply) {
   box-shadow: var(--shadow-focus);
 }
 
+@media (max-width: 768px) {
+  .rl__op {
+    min-height: 44px;
+    padding: 0 14px;
+  }
+}
+
 .rl__op:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .rl__op--danger:hover {

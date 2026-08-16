@@ -126,4 +126,12 @@ function goto(p) {
   background: transparent;
   cursor: default;
 }
+
+/* 移动端触控目标补足 */
+@media (max-width: 768px) {
+  .pgn__btn {
+    min-width: 44px;
+    height: 44px;
+  }
+}
 </style>

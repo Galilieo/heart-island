@@ -29,7 +29,8 @@ const toast = useToast()
 <style scoped>
 .toast-stack {
   position: fixed;
-  top: 24px;
+  /* 低于 64px 的吸顶导航，避免遮住导航项 */
+  top: 76px;
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-toast);

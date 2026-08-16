@@ -158,6 +158,7 @@ const isOwner = computed(
   margin: 2px 0 0;
   color: var(--ink-3);
   font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 
 .pc__tags {
