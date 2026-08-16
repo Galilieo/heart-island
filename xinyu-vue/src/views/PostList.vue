@@ -430,10 +430,10 @@ onMounted(async () => {
     font-size: var(--fs-md);
   }
   .post-page__rail :deep(.topic-chip) {
-    height: 40px;
+    height: 44px;
   }
   .scope-chip {
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 16px;
   }
 }

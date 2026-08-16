@@ -282,4 +282,11 @@ const isOwner = computed(
 }
 
 .pc__spacer { flex: 1; }
+
+/* 移动端触控目标补足到 44px */
+@media (max-width: 768px) {
+  .pc__action {
+    min-height: 44px;
+  }
+}
 </style>

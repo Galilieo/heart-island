@@ -10,7 +10,7 @@ const state = reactive({
 let seq = 0
 
 // 新增一条 toast，duration 毫秒后自动消失；duration=0 表示不自动消失
-function push(type, message, duration = 2400) {
+function push(type, message, duration = 3500) {
   const id = ++seq
   state.items.push({ id, type, message })
 

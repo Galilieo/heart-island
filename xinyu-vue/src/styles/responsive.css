@@ -54,11 +54,11 @@
     font-size: 16px;
   }
 
-  /* 触摸目标最小 40px，按苹果 HIG 建议偏保守 */
+  /* 触摸目标最小 44px（苹果 HIG / Material 建议值） */
   button,
   .btn,
   a.btn {
-    min-height: 40px;
+    min-height: 44px;
   }
 }
 

@@ -54,20 +54,23 @@ function goLogin() {
   >
     <BaseInput
       v-model="username"
-      placeholder="用户名"
+      label="用户名"
+      placeholder="登录用的账号名"
       size="lg"
       @enter="handleRegister"
     />
     <BaseInput
       v-model="password"
       type="password"
-      placeholder="密码"
+      label="密码"
+      placeholder="至少 6 位"
       size="lg"
       @enter="handleRegister"
     />
     <BaseInput
       v-model="nickname"
-      placeholder="昵称（其他人会看到）"
+      label="昵称"
+      placeholder="其他人会看到的名字"
       size="lg"
       @enter="handleRegister"
     />

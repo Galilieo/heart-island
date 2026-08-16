@@ -354,9 +354,13 @@ function isActive(item) {
   .brand__name { display: none; }
   .user__name { display: none; }
   .nav__item {
-    min-height: 40px;
+    min-height: 44px;
     padding: 6px 13px;
     font-size: var(--fs-sm);
+  }
+  .theme-toggle {
+    width: 44px;
+    height: 44px;
   }
 }
 

@@ -52,14 +52,16 @@ function goRegister() {
   >
     <BaseInput
       v-model="username"
-      placeholder="用户名"
+      label="用户名"
+      placeholder="请输入用户名"
       size="lg"
       @enter="handleLogin"
     />
     <BaseInput
       v-model="password"
       type="password"
-      placeholder="密码"
+      label="密码"
+      placeholder="请输入密码"
       size="lg"
       @enter="handleLogin"
     />

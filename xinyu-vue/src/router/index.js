@@ -37,12 +37,18 @@ const routes = [
   {
     path: '/admin/topics', component: AdminTopics, meta: { requiresAuth: true, requiresAdmin: true }
   },
-  { path: '/admin/ai-replies', name: 'AdminAiReplies', component: AdminAiReplies, meta: { requiresAuth: true, requiresAdmin: true } }
+  { path: '/admin/ai-replies', name: 'AdminAiReplies', component: AdminAiReplies, meta: { requiresAuth: true, requiresAdmin: true } },
+  // 兜底：未知路由按登录态送回首页或登录页（由守卫接管）
+  { path: '/:pathMatch(.*)*', redirect: '/home' }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  // 返回时恢复滚动位置，前进新页面回到顶部
+  scrollBehavior(to, from, savedPosition) {
+    return savedPosition || { top: 0 }
+  }
 })
 
 router.beforeEach((to) => {
