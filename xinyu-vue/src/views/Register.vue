@@ -16,6 +16,7 @@ const toast = useToast()
 
 const username = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const nickname = ref('')
 
 const { run: submit, loading } = useAsyncAction(
@@ -30,7 +31,9 @@ const { run: submit, loading } = useAsyncAction(
 
 async function handleRegister() {
   if (!username.value.trim()) return toast.warn('请输入用户名')
-  if (!password.value.trim()) return toast.warn('请输入密码')
+  if (!password.value) return toast.warn('请输入密码')
+  if (password.value.length < 6) return toast.warn('密码不能少于 6 位')
+  if (password.value !== confirmPassword.value) return toast.warn('两次输入的密码不一致')
   if (!nickname.value.trim()) return toast.warn('请输入昵称')
 
   const res = await submit()
@@ -64,6 +67,14 @@ function goLogin() {
       type="password"
       label="密码"
       placeholder="至少 6 位"
+      size="lg"
+      @enter="handleRegister"
+    />
+    <BaseInput
+      v-model="confirmPassword"
+      type="password"
+      label="确认密码"
+      placeholder="再输入一次密码"
       size="lg"
       @enter="handleRegister"
     />
