@@ -13,7 +13,7 @@ import Doodle from '../ui/Doodle.vue'
     <div class="container app-footer__beian">
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">鄂ICP备2026025921号-1</a>
       <span aria-hidden="true">·</span>
-      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=42028102000306" target="_blank" rel="noopener noreferrer">鄂公网安备42028102000306号</a>
+      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=42028102000306" target="_blank" rel="noopener noreferrer"><img src="/beian-ghs.png" alt="" class="beian-badge" />鄂公网安备42028102000306号</a>
     </div>
   </footer>
 </template>
@@ -50,5 +50,12 @@ import Doodle from '../ui/Doodle.vue'
 
 .app-footer__beian a:hover {
   text-decoration: underline;
+}
+
+.beian-badge {
+  width: 13px;
+  height: 13px;
+  margin-right: 4px;
+  vertical-align: -2px;
 }
 </style>

@@ -54,7 +54,7 @@ defineProps({
     <p class="auth__beian">
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">鄂ICP备2026025921号-1</a>
       <span aria-hidden="true">·</span>
-      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=42028102000306" target="_blank" rel="noopener noreferrer">鄂公网安备42028102000306号</a>
+      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=42028102000306" target="_blank" rel="noopener noreferrer"><img src="/beian-ghs.png" alt="" class="beian-badge" />鄂公网安备42028102000306号</a>
     </p>
   </div>
 </template>
@@ -216,6 +216,13 @@ defineProps({
 
 .auth__beian a:hover {
   text-decoration: underline;
+}
+
+.beian-badge {
+  width: 13px;
+  height: 13px;
+  margin-right: 4px;
+  vertical-align: -2px;
 }
 
 /* 窄屏：单列堆叠，slogan 区压成一条横幅，表单卡收紧，
