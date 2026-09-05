@@ -98,7 +98,7 @@ async function handleToggleStatus(reply) {
     <div class="container admin-replies">
       <AdminPageHeader
         title="回复管理"
-        desc="查看社区回复，隐藏不合适的互动内容。"
+        desc="查找帖子回复，隐藏或恢复展示。"
       />
 
       <AdminTabs />
@@ -198,7 +198,7 @@ async function handleToggleStatus(reply) {
         <EmptyState
           v-else
           title="暂无回复"
-          hint="当前没有查询到社区回复。"
+          hint="没有找到匹配的回复，可以调整筛选条件后再查。"
         />
       </BaseCard>
     </div>

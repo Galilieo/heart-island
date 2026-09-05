@@ -45,7 +45,7 @@ request.interceptors.response.use(
     } else if (error.code === 'ECONNABORTED') {
       error.userMessage = '请求超时，请稍后再试'
     } else {
-      error.userMessage = '网络连接失败，请检查后端是否启动'
+      error.userMessage = '暂时连接不上，请检查网络或稍后再试'
     }
 
     return Promise.reject(error)

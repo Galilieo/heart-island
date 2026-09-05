@@ -51,7 +51,7 @@ const greeting = computed(() => {
 const todaySubtitle = computed(() => {
   const last = trend.value?.lastMoodType
   if (last) return `上一次你写下的是「${last}」，今天感觉怎么样？`
-  return '把心里漂浮的那一点点感受，慢慢落下来。'
+  return '今天过得怎么样？想说的都可以记下来。'
 })
 
 const { run: doFetchList, loading: listLoading } = useAsyncAction(
@@ -66,7 +66,7 @@ const { run: doFetchTrend } = useAsyncAction(
 
 const { run: doAdd, loading: adding } = useAsyncAction(
   () => moodStore.add({ moodType: moodType.value, content: content.value.trim(), needAiReply: needAiReply.value }),
-  { successMsg: () => (needAiReply.value ? '记录成功，心屿回复已生成' : '记录成功'), errorMsg: '新增失败，请检查后端或 AI 服务' }
+  { successMsg: () => (needAiReply.value ? '记录成功，AI 回复已生成' : '记录成功'), errorMsg: '暂时没能保存，请稍后再试' }
 )
 
 const { run: doUpdate, loading: updating } = useAsyncAction(
@@ -216,7 +216,7 @@ onMounted(() => {
                 key="mood-empty"
                 doodle="cloud"
                 title="还没有心情记录"
-                hint="左边写下一点感受，这里就会出现你的第一段记录。"
+                hint="写下心情并保存后，就能在这里回看。"
               />
             </TransitionGroup>
 

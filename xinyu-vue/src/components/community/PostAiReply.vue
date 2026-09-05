@@ -11,7 +11,7 @@ defineProps({
     <header class="ai-card__head">
       <span class="ai-card__avatar" aria-hidden="true">心</span>
       <div class="ai-card__title">
-        <p class="ai-card__name">心屿 · AI 陪伴</p>
+        <p class="ai-card__name">心屿 · AI 回复</p>
         <p class="ai-card__hint">这条回复由 AI 自动生成，不代表平台立场</p>
       </div>
     </header>

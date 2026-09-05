@@ -34,13 +34,13 @@ defineExpose({ reset })
 
 <template>
   <BaseCard padding="md" tone="cream" class="reply-form">
-    <p class="reply-form__title">写下你的共鸣</p>
+    <p class="reply-form__title">回复这条帖子</p>
     <BaseTextarea
       v-model="content"
       :rows="3"
       :maxlength="500"
       :disabled="submitting"
-      placeholder="留一句温柔的回应，被看见就是被陪伴。"
+      placeholder="说说你的想法，或聊聊类似的经历。"
     />
     <div class="reply-form__foot">
       <BaseButton

@@ -44,7 +44,7 @@ function barHeight(count) {
     <header class="trend__head">
       <div>
         <p class="trend__kicker">最近 7 天</p>
-        <h3 class="trend__title">情绪潮汐</h3>
+        <h3 class="trend__title">最近的心情统计</h3>
       </div>
       <div v-if="hasData" class="trend__total">
         <strong>{{ trend.total }}</strong>
@@ -59,7 +59,7 @@ function barHeight(count) {
         :aria-expanded="tideOpen"
         @click="tideOpen = !tideOpen"
       >
-        <span>潮汐刻度</span>
+        <span>各类心情的记录次数</span>
         <span class="trend__toggle-caret" aria-hidden="true">
           {{ tideOpen ? '收起 ▴' : '展开 ▾' }}
         </span>
@@ -86,7 +86,7 @@ function barHeight(count) {
 
       <p class="trend__meta">
         <template v-if="trend.mainMoodType">
-          <span class="trend__meta-label">主旋律</span>
+          <span class="trend__meta-label">记得最多</span>
           <BaseTag :tone="moodTone(trend.mainMoodType)" variant="soft" size="md">
             {{ trend.mainMoodType }}
           </BaseTag>
@@ -104,7 +104,7 @@ function barHeight(count) {
     </template>
 
     <p v-else class="trend__empty">
-      还没有记录，写下第一段心情，这里就会涨起你的潮汐。
+      最近 7 天还没有记录。记下心情后，可以在这里查看统计。
     </p>
   </BaseCard>
 </template>

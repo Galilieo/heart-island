@@ -146,7 +146,7 @@ function formatTime(value) {
     <div class="container admin-topics">
       <AdminPageHeader
         title="话题管理"
-        desc="维护社区话题分类，控制用户发布帖子时可选择的内容方向。"
+        desc="新增或编辑话题，设置发帖时可选的话题和排列顺序。"
       />
 
       <AdminTabs />
@@ -232,7 +232,7 @@ function formatTime(value) {
         <EmptyState
           v-else
           title="暂无话题"
-          hint="当前没有查询到社区话题。"
+          hint="没有找到匹配的话题，可以调整筛选条件，或新增一个话题。"
         />
       </BaseCard>
 

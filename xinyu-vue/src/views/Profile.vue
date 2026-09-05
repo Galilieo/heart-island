@@ -191,7 +191,7 @@ async function handleSavePassword() {
             </span>
             <div class="profile__stat-body">
               <strong>{{ stats.joinDays }}<small>天</small></strong>
-              <span>陪伴天数</span>
+              <span>加入心屿</span>
             </div>
           </div>
         </div>

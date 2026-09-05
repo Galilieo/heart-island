@@ -98,7 +98,7 @@ async function handleToggleStatus(post) {
     <div class="container admin-posts">
       <AdminPageHeader
         title="帖子管理"
-        desc="查看社区帖子，后续可以在这里隐藏或恢复内容。"
+        desc="查找社区帖子，隐藏或恢复展示。"
       />
 
       <AdminTabs />
@@ -202,7 +202,7 @@ async function handleToggleStatus(post) {
         <EmptyState
           v-else
           title="暂无帖子"
-          hint="当前没有查询到社区帖子。"
+          hint="没有找到匹配的帖子，可以调整筛选条件后再查。"
         />
       </BaseCard>
     </div>

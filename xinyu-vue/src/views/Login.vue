@@ -47,8 +47,8 @@ function goRegister() {
   <AuthLayout
     kicker="欢迎回来"
     title="心屿"
-    subtitle="把今天的情绪放慢一点，继续回到自己的节奏里。"
-    slogan="情绪没有对错，只是想被看见。"
+    subtitle="记记今天的心情，也看看大家的近况。"
+    slogan="今天过得怎么样？"
   >
     <BaseInput
       v-model="username"

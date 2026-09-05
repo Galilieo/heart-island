@@ -107,7 +107,7 @@ function closeDetail() {
     <div class="container admin-ai-replies">
       <AdminPageHeader
         title="AI 回复记录"
-        desc="查看 AI 调用日志，排查回复生成状态、失败原因和关联业务记录。"
+        desc="查看 AI 回复、失败原因，以及对应的心情记录或帖子。"
       />
 
       <AdminTabs />
@@ -198,7 +198,7 @@ function closeDetail() {
         <EmptyState
           v-else
           title="暂无 AI 回复记录"
-          hint="当前没有查询到 AI 调用日志。"
+          hint="没有找到匹配的调用记录，可以调整筛选条件后再查。"
         />
 
         <div v-if="aiRepliesTotal > 0" class="admin-ai-replies__pager">
@@ -264,7 +264,7 @@ function closeDetail() {
           </div>
 
           <section class="admin-ai-replies__detail-section">
-            <h3>Prompt</h3>
+            <h3>提示词</h3>
             <p>{{ currentRecord.prompt || '-' }}</p>
           </section>
 

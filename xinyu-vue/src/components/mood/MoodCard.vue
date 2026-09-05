@@ -43,13 +43,13 @@ const aiOpen = ref(false)
         :aria-expanded="aiOpen"
         @click="aiOpen = !aiOpen"
       >
-        <span class="dot" aria-hidden="true" /> 心屿回复
+        <span class="dot" aria-hidden="true" /> AI 回复
         <span class="mood-card__ai-caret" aria-hidden="true">
           {{ aiOpen ? '收起 ▴' : '展开 ▾' }}
         </span>
       </button>
       <p class="mood-card__ai-text clamp-2">
-        {{ mood.aiReply || '心屿还在为你写回信…' }}
+        {{ mood.aiReply || '暂无 AI 回复' }}
       </p>
     </div>
 

@@ -102,8 +102,8 @@ function close() {
       </section>
 
       <section class="md__block md__block--ai">
-        <h4>心屿回复</h4>
-        <p>{{ mood.aiReply || '暂无心屿回复' }}</p>
+        <h4>AI 回复</h4>
+        <p>{{ mood.aiReply || '暂无 AI 回复' }}</p>
       </section>
 
       <section v-if="editing" class="md__edit">
@@ -127,7 +127,7 @@ function close() {
           placeholder="编辑心情内容"
         />
         <div class="md__options">
-          <BaseSwitch v-model="editNeedAiReply" label="让心屿回应我" :disabled="updating" />
+          <BaseSwitch v-model="editNeedAiReply" label="需要 AI 回复" :disabled="updating" />
         </div>
       </section>
     </div>
@@ -140,7 +140,7 @@ function close() {
       <template v-else>
         <BaseButton variant="plain" :disabled="updating" @click="cancelEdit">取消</BaseButton>
         <BaseButton variant="primary" :loading="updating" :disabled="!canSave" @click="save">
-          {{ updating ? (editNeedAiReply ? '心屿正在重写回复…' : '正在保存…') : '保存修改' }}
+          {{ updating ? (editNeedAiReply ? 'AI 正在生成回复…' : '正在保存…') : '保存修改' }}
         </BaseButton>
       </template>
     </template>

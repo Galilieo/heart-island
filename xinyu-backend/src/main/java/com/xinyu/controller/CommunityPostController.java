@@ -57,7 +57,7 @@ public class CommunityPostController {
         }
 
         if(!communityPostService.isTopicAvailable(dto.getTopicId())){
-            return Result.error("话题不存在或以被禁用");
+            return Result.error("话题不存在或已被禁用");
         }
 
         if (dto.getMoodType() == null || dto.getMoodType().trim().isEmpty()) {
@@ -138,7 +138,7 @@ public class CommunityPostController {
         }
 
         if(!communityPostService.isTopicAvailable(dto.getTopicId())){
-            return Result.error("话题不存在或以被禁用");
+            return Result.error("话题不存在或已被禁用");
         }
 
         if (dto.getTopicId() == null) {

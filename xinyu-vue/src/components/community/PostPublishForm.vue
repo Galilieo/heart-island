@@ -61,7 +61,7 @@ defineExpose({ resetAfterSuccess })
 
 <template>
   <div class="publish">
-    <p class="publish__desc">内容会以匿名身份展示，请放心表达，但也尽量温柔。</p>
+    <p class="publish__desc">帖子会匿名展示。聊聊你的近况，也请尊重不同的感受。</p>
 
     <div class="publish__row">
       <BaseSelect
@@ -83,11 +83,11 @@ defineExpose({ resetAfterSuccess })
       :rows="5"
       :maxlength="800"
       :disabled="submitting"
-      placeholder="今天发生了什么？你想匿名说点什么？"
+      placeholder="最近有什么想和大家聊聊的？"
     />
 
     <div class="publish__foot">
-      <BaseSwitch v-model="needAiReply" label="让心屿回应我" :disabled="submitting" />
+      <BaseSwitch v-model="needAiReply" label="需要 AI 回复" :disabled="submitting" />
       <BaseButton
         variant="primary"
         :loading="submitting"

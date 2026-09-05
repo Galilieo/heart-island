@@ -37,13 +37,13 @@ const MOOD_ICONS = {
   <BaseCard padding="lg" class="mood-form">
     <header class="mood-form__head">
       <div>
-        <p class="mood-form__kicker">此刻 · 岛上天气</p>
-        <h2 class="mood-form__title">把此刻放下来</h2>
+        <p class="mood-form__kicker">心情日记</p>
+        <h2 class="mood-form__title">现在心情怎么样？</h2>
       </div>
       <Doodle name="heart" :size="36" color="var(--accent)" />
     </header>
 
-    <p class="mood-form__desc">写下一点真实感受，心屿会给你一段轻轻的回应。</p>
+    <p class="mood-form__desc">记件小事，或者说说现在的感受，写几句就好。</p>
 
     <div class="mood-form__moods" role="group" aria-label="选择心情类型">
       <button
@@ -73,7 +73,7 @@ const MOOD_ICONS = {
     <div class="mood-form__options">
       <BaseSwitch
         :model-value="needAiReply"
-        label="让心屿回应我"
+        label="需要 AI 回复"
         :disabled="adding"
         @update:model-value="(v) => $emit('update:needAiReply', v)"
       />
@@ -87,7 +87,7 @@ const MOOD_ICONS = {
       block
       @click="$emit('submit')"
     >
-      {{ adding ? (needAiReply ? '心屿正在生成回复…' : '正在记录…') : '记录今天的心情' }}
+      {{ adding ? (needAiReply ? 'AI 正在生成回复…' : '正在保存…') : '保存这条心情' }}
     </BaseButton>
   </BaseCard>
 </template>

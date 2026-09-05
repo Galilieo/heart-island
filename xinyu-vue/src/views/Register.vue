@@ -50,10 +50,10 @@ function goLogin() {
 
 <template>
   <AuthLayout
-    kicker="新的开始"
+    kicker="欢迎来到心屿"
     title="创建账号"
-    subtitle="给自己的心情留一个安静的位置，从今天开始慢慢记录。"
-    slogan="慢一点，没有关系。"
+    subtitle="注册后就能记心情、发帖子，和大家聊聊。"
+    slogan="开心的、烦心的，都可以写。"
   >
     <BaseInput
       v-model="username"

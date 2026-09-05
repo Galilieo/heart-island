@@ -63,9 +63,9 @@ onMounted(async () => {
       <header class="fav-page__hero">
         <div>
           <p class="fav-page__kicker">我的收藏</p>
-          <h1 class="fav-page__title">收藏的心声</h1>
+          <h1 class="fav-page__title">想再看看的帖子</h1>
           <p class="fav-page__sub">
-            那些让你想停一停的帖子，都收在这里。
+            之前收藏的帖子，随时可以回来翻翻。
           </p>
         </div>
         <div class="fav-page__hero-doodles" aria-hidden="true">
@@ -106,7 +106,7 @@ onMounted(async () => {
             v-else
             doodle="star"
             title="还没有收藏的帖子"
-            hint="在社区里看到有共鸣的内容，点一下收藏，就会出现在这里。"
+            hint="看到想留着的帖子，点一下「收藏」就能存到这里。"
           >
             <BaseButton variant="primary" size="sm" @click="router.push('/posts')">
               去社区逛逛

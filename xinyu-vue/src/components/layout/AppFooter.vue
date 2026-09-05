@@ -7,7 +7,7 @@ import Doodle from '../ui/Doodle.vue'
   <footer class="app-footer">
     <div class="container app-footer__inner">
       <Doodle name="leaf" :size="20" color="var(--ink-3)" />
-      <span>心屿 · 把今天的情绪放慢一点</span>
+      <span>心屿 · 记心情，聊日常</span>
       <Doodle name="leaf" :size="20" color="var(--ink-3)" style="transform: scaleX(-1)" />
     </div>
     <div class="container app-footer__beian">

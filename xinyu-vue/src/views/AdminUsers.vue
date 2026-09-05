@@ -87,7 +87,7 @@ async function handleToggleStatus(user) {
     <div class="container admin-users">
       <AdminPageHeader
         title="用户管理"
-        desc="查看用户列表，后续可以在这里启用或禁用账号。"
+        desc="查找用户，启用或禁用账号。"
       />
 
       <AdminTabs />
@@ -169,7 +169,7 @@ async function handleToggleStatus(user) {
         <EmptyState
           v-else
           title="暂无用户"
-          hint="当前没有查询到用户数据。"
+          hint="没有找到匹配的用户，可以调整筛选条件后再查。"
         />
       </BaseCard>
     </div>

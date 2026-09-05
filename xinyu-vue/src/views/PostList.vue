@@ -102,9 +102,9 @@ onMounted(async () => {
       <header class="post-page__hero">
         <div>
           <p class="post-page__kicker">匿名社区</p>
-          <h1 class="post-page__title">情绪互助广场</h1>
+          <h1 class="post-page__title">大家最近怎么样</h1>
           <p class="post-page__sub">
-            在不暴露身份的前提下，看看大家如何安放自己的情绪。
+            聊聊日常、说说烦恼，也听听别人的故事。
           </p>
         </div>
         <div class="post-page__hero-doodles" aria-hidden="true">
@@ -120,7 +120,7 @@ onMounted(async () => {
             <header class="post-page__filter-head">
               <div>
                 <p class="post-page__kicker post-page__kicker--inline">话题</p>
-                <h3 class="post-page__filter-title">想看哪一个方向？</h3>
+                <h3 class="post-page__filter-title">想聊什么？</h3>
               </div>
               <BaseButton
                 variant="primary"

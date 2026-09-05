@@ -161,7 +161,7 @@ async function saveEdit(reply) {
       v-else
       doodle="leaf"
       title="还没有人回复"
-      hint="留下第一句，被看见就是被陪伴。"
+      hint="有什么想对作者说的，可以写一条回复。"
     />
   </div>
 </template>

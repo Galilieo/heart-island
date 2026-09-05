@@ -9,7 +9,7 @@ defineProps({
   kicker: String,
   title: String,
   subtitle: String,
-  slogan: { type: String, default: '把今天的情绪放慢一点。' }
+  slogan: { type: String, default: '今天过得怎么样？' }
 })
 </script>
 
