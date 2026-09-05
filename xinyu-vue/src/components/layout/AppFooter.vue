@@ -35,15 +35,20 @@ import Doodle from '../ui/Doodle.vue'
 
 .app-footer__beian {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 4px 10px;
   margin-top: 10px;
   color: var(--ink-3);
   font-size: var(--fs-xs);
 }
 
 .app-footer__beian a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
   color: inherit;
   text-decoration: none;
 }
@@ -55,7 +60,6 @@ import Doodle from '../ui/Doodle.vue'
 .beian-badge {
   width: 13px;
   height: 13px;
-  margin-right: 4px;
-  vertical-align: -2px;
+  flex-shrink: 0;
 }
 </style>

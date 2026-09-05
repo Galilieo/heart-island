@@ -203,13 +203,20 @@ defineProps({
   z-index: 1;
   margin: 0;
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 4px 10px;
+  padding: 0 16px;
   color: var(--ink-3);
   font-size: var(--fs-xs);
 }
 
 .auth__beian a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
   color: inherit;
   text-decoration: none;
 }
@@ -221,8 +228,7 @@ defineProps({
 .beian-badge {
   width: 13px;
   height: 13px;
-  margin-right: 4px;
-  vertical-align: -2px;
+  flex-shrink: 0;
 }
 
 /* 窄屏：单列堆叠，slogan 区压成一条横幅，表单卡收紧，
@@ -238,7 +244,7 @@ defineProps({
   /* 手机上涂鸦只留左上角两个，避免和表单抢注意力 */
   .d-3, .d-4, .d-6 { display: none; }
   .auth__panel {
-    padding: 20px 18px 28px;
+    padding: 20px 18px 64px;
     align-items: flex-start;
   }
   .auth__card { padding: 24px 22px; }
