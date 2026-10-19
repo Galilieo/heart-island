@@ -51,11 +51,6 @@ defineProps({
       </div>
     </section>
 
-    <p class="auth__beian">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">鄂ICP备2026025921号-1</a>
-      <span aria-hidden="true">·</span>
-      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=42028102000306" target="_blank" rel="noopener noreferrer"><img src="/beian-ghs.png" alt="" class="beian-badge" />鄂公网安备42028102000306号</a>
-    </p>
   </div>
 </template>
 
@@ -63,8 +58,7 @@ defineProps({
 /* 统一画布：渐变铺满整页，左右没有分界线 */
 .auth {
   position: relative;
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: inherit;
   display: grid;
   grid-template-columns: 1fr 1fr;
   overflow: hidden;
@@ -192,43 +186,6 @@ defineProps({
 .auth__footer {
   margin-top: 18px;
   text-align: center;
-}
-
-/* 备案行：绝对定位在整页底部，不参与两栏布局，保持克制 */
-.auth__beian {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 10px;
-  z-index: 1;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px 10px;
-  padding: 0 16px;
-  color: var(--ink-3);
-  font-size: var(--fs-xs);
-}
-
-.auth__beian a {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-  color: inherit;
-  text-decoration: none;
-}
-
-.auth__beian a:hover {
-  text-decoration: underline;
-}
-
-.beian-badge {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
 }
 
 /* 窄屏：单列堆叠，slogan 区压成一条横幅，表单卡收紧，

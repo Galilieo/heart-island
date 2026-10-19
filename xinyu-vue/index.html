@@ -5,9 +5,65 @@
     <link rel="icon" type="image/png" href="/src/assets/logo-xinyu.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>心屿</title>
+    <!-- 备案区随 HTML 直接返回，不依赖 Vue 或 JavaScript 加载。 -->
+    <style>
+      :root { --site-filing-height: 44px; }
+      body { margin: 0; }
+      /* 登录页与静态备案区共用背景，避免页脚出现独立色带。 */
+      body:has(#app .auth) {
+        background:
+          radial-gradient(circle at 22% 24%, rgba(111, 169, 164, 0.20), transparent 46%),
+          radial-gradient(circle at 82% 70%, rgba(217, 140, 122, 0.14), transparent 50%),
+          radial-gradient(circle at 60% 8%, rgba(243, 185, 95, 0.10), transparent 42%),
+          linear-gradient(135deg, var(--bg-warm-from) 0%, var(--bg-warm-mid) 55%, var(--bg-warm-to) 100%);
+        background-attachment: fixed;
+      }
+      #app .auth { background: transparent; }
+      #app {
+        min-height: calc(100vh - var(--site-filing-height));
+        min-height: calc(100dvh - var(--site-filing-height));
+      }
+      .site-filing {
+        box-sizing: border-box;
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 6px 20px;
+        min-height: var(--site-filing-height);
+        padding: 12px 16px;
+        color: var(--ink-3, #746f63);
+        font: 12px/20px system-ui, sans-serif;
+      }
+      .site-filing a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        color: inherit;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .site-filing a:hover { text-decoration: underline; }
+      .site-filing img {
+        display: block;
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      @media (max-width: 600px) {
+        :root { --site-filing-height: 70px; }
+        .site-filing { flex-direction: column; }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <footer class="site-filing" aria-label="网站备案信息">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">鄂ICP备2026025921号-1</a>
+      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=42028102000306" target="_blank" rel="noopener noreferrer"><img src="/beian-ghs.png" alt="" width="14" height="14">鄂公网安备42028102000306号</a>
+    </footer>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

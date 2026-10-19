@@ -28,10 +28,6 @@ body {
     color var(--t-slow) var(--ease-soft);
 }
 
-#app {
-  min-height: 100vh;
-}
-
 h1,
 h2,
 h3,

@@ -38,7 +38,7 @@ defineProps({
 
 <style scoped>
 .shell {
-  min-height: 100vh;
+  min-height: inherit;
   display: flex;
   flex-direction: column;
   position: relative;
