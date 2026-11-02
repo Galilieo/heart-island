@@ -4,6 +4,7 @@
 // 登录/注册页不用这个，它们用 AuthLayout。
 import AppHeader from './AppHeader.vue'
 import AppFooter from './AppFooter.vue'
+import AppBottomNav from './AppBottomNav.vue'
 import Doodle from '../ui/Doodle.vue'
 
 defineProps({
@@ -14,7 +15,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :class="{ 'shell--with-nav': !noHeader }">
     <!-- 背景装饰层：克制的海边元素（波 / 云 / 日光），浮在内容下方、不接收点击 -->
     <div class="shell__ornaments" aria-hidden="true">
       <Doodle name="wave" :size="170" color="rgba(61,111,110,0.13)" class="orn orn-1" />
@@ -33,6 +34,7 @@ defineProps({
       <slot />
     </main>
     <AppFooter v-if="!noFooter" />
+    <AppBottomNav v-if="!noHeader" />
   </div>
 </template>
 

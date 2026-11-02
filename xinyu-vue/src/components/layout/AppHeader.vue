@@ -1,14 +1,15 @@
 <script setup>
 // 顶部导航条。包含 Logo、心情/社区 两个 Tab、深夜模式开关、右侧用户菜单。
 // 用户菜单里的"退出登录"会弹确认框，确认后清登录态并跳回登录页。
-import { ref } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { useConfirm } from '../../composables/useConfirm'
 import { useToast } from '../../composables/useToast'
 import { useTheme } from '../../composables/useTheme'
 import Doodle from '../ui/Doodle.vue'
-import logoUrl from '../../assets/logo-xinyu.png'
+import { navigationItems, isNavigationActive } from './navigation'
+import logoUrl from '../../assets/logo-xinyu-small.webp'
 
 const router = useRouter()
 const route = useRoute()
@@ -46,16 +47,19 @@ async function handleLogout() {
   router.push('/')
 }
 
-const navItems = [
-  { label: '心情', to: '/home', match: ['/home'] },
-  { label: '社区', to: '/posts', match: ['/posts', '/community'] },
-  { label: '收藏', to: '/favorites', match: ['/favorites'] },
-  { label: '后台', to: '/admin/users', match: ['/admin'], adminOnly: true }
-]
+const navItems = navigationItems.filter(item => item.to !== '/profile')
 
 function isActive(item) {
-  return item.match.some((m) => route.path.startsWith(m))
+  return isNavigationActive(item, route.path)
 }
+
+function handleEscape(event) {
+  if (event.key === 'Escape') closeMenu()
+}
+
+watch(() => route.path, closeMenu)
+onMounted(() => window.addEventListener('keydown', handleEscape))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
 </script>
 
 <template>
@@ -66,13 +70,14 @@ function isActive(item) {
         <span class="brand__name">心屿</span>
       </RouterLink>
 
-      <nav class="nav">
+      <nav class="nav" aria-label="主导航">
         <RouterLink
-          v-for="item in navItems.filter((item)=> !item.adminOnly ||userStore.loginUser?.role === 'ADMIN')"
+          v-for="item in navItems"
           :key="item.to"
           :to="item.to"
           class="nav__item"
           :class="{ 'is-active': isActive(item) }"
+          :aria-current="isActive(item) ? 'page' : undefined"
         >
           {{ item.label }}
         </RouterLink>
@@ -114,19 +119,29 @@ function isActive(item) {
           class="user__chip"
           @click="toggleMenu"
           :aria-expanded="menuOpen"
+          aria-controls="user-menu"
+          :aria-label="`${userStore.displayName}的用户菜单`"
         >
           <span class="user__avatar">
-            {{ (userStore.loginUser?.username || '心屿')[0].toUpperCase() }}
+            {{ userStore.displayName[0].toUpperCase() }}
           </span>
-          <span class="user__name">{{ userStore.loginUser?.username || '游客' }}</span>
+          <span class="user__name">{{ userStore.displayName }}</span>
           <span class="user__caret" aria-hidden="true">▾</span>
         </button>
 
         <transition name="menu">
-          <div v-if="menuOpen" class="user__menu" @click.stop>
+          <div v-if="menuOpen" id="user-menu" class="user__menu" @click.stop>
             <button type="button" class="user__menu-item" @click="goProfile">
               个人资料
             </button>
+            <RouterLink
+              v-if="userStore.loginUser?.role === 'ADMIN'"
+              to="/admin"
+              class="user__menu-item"
+              @click="closeMenu"
+            >
+              后台管理
+            </RouterLink>
             <div class="user__menu-divider" />
             <button type="button" class="user__menu-item" @click="handleLogout">
               退出登录
@@ -158,6 +173,7 @@ function isActive(item) {
 }
 
 .brand {
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -187,6 +203,7 @@ function isActive(item) {
 }
 
 .nav__item {
+  min-height: 44px;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -216,8 +233,8 @@ function isActive(item) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -248,7 +265,7 @@ function isActive(item) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
+  min-height: 44px;
   padding: 0 14px 0 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
@@ -305,6 +322,9 @@ function isActive(item) {
 }
 
 .user__menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   width: 100%;
   padding: 10px 12px;
   border: none;
@@ -350,8 +370,10 @@ function isActive(item) {
 }
 
 @media (max-width: 768px) {
-  .app-header__inner { gap: 10px; }
-  .brand__name { display: none; }
+  .app-header__inner { gap: 12px; }
+  .brand { margin-right: auto; }
+  .nav { display: none; }
+  .brand__name { display: inline; }
   .user__name { display: none; }
   .nav__item {
     min-height: 44px;

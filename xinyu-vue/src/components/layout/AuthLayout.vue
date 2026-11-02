@@ -3,7 +3,7 @@
 // 整页一张暖色画布：渐变 + 漂浮涂鸦铺满全屏，slogan 在左下，表单卡浮在右侧。
 // 窄屏自动堆叠成单列。
 import Doodle from '../ui/Doodle.vue'
-import logoUrl from '../../assets/logo-xinyu.png'
+import logoUrl from '../../assets/logo-xinyu-small.webp'
 
 defineProps({
   kicker: String,

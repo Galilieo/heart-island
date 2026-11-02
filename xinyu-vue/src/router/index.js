@@ -4,42 +4,68 @@
 //   - 已登录访问 / 或 /register 自动跳 /home
 import { createRouter, createWebHistory } from 'vue-router'
 
-import Login from '../views/Login.vue'
-import Home from '../views/Home.vue'
-import Register from '../views/Register.vue'
-import PostList from '../views/PostList.vue'
-import PostDetail from '../views/PostDetail.vue'
-import Favorites from '../views/Favorites.vue'
-import Profile from '../views/Profile.vue'
-import AdminUsers from '../views/AdminUsers.vue'
-import AdminPosts from '../views/AdminPosts.vue'
-import AdminReplies from '../views/AdminReplies.vue'
-import AdminDashboard from '../views/AdminDashboard.vue'
-import AdminTopics from '../views/AdminTopics.vue'
-import AdminAiReplies from '../views/AdminAiReplies.vue'
-
 const routes = [
-  { path: '/', component: Login },
-  { path: '/home', component: Home, meta: { requiresAuth: true } },
-  { path: '/register', component: Register },
-  { path: '/posts', component: PostList, meta: { requiresAuth: true } },
-  { path: '/community/post/:id', component: PostDetail, meta: { requiresAuth: true } },
-  { path: '/favorites', component: Favorites, meta: { requiresAuth: true } },
-  { path: '/profile', component: Profile, meta: { requiresAuth: true } },
-  {path:'/admin',name:'AdminDashboard',component:AdminDashboard,meta:{requiresAuth:true,requiresAdmin:true}},
+  { path: '/', component: () => import('../views/Login.vue'), meta: { title: '登录' } },
   {
-    path: '/admin/users', component: AdminUsers, meta: { requiresAuth: true, requiresAdmin: true }
+    path: '/home',
+    component: () => import('../views/Home.vue'),
+    meta: { title: '心情', requiresAuth: true },
   },
-  { path: '/admin/posts', component: AdminPosts, meta: { requiresAuth: true, requiresAdmin: true } },
+  { path: '/register', component: () => import('../views/Register.vue'), meta: { title: '注册' } },
   {
-    path: '/admin/replies', component: AdminReplies, meta: { requiresAuth: true, requiresAdmin: true }
+    path: '/posts',
+    component: () => import('../views/PostList.vue'),
+    meta: { title: '社区', requiresAuth: true },
   },
   {
-    path: '/admin/topics', component: AdminTopics, meta: { requiresAuth: true, requiresAdmin: true }
+    path: '/community/post/:id',
+    component: () => import('../views/PostDetail.vue'),
+    meta: { title: '帖子详情', requiresAuth: true },
   },
-  { path: '/admin/ai-replies', name: 'AdminAiReplies', component: AdminAiReplies, meta: { requiresAuth: true, requiresAdmin: true } },
-  // 兜底：未知路由按登录态送回首页或登录页（由守卫接管）
-  { path: '/:pathMatch(.*)*', redirect: '/home' }
+  {
+    path: '/favorites',
+    component: () => import('../views/Favorites.vue'),
+    meta: { title: '收藏', requiresAuth: true },
+  },
+  {
+    path: '/profile',
+    component: () => import('../views/Profile.vue'),
+    meta: { title: '我的', requiresAuth: true },
+  },
+  {
+    path: '/admin',
+    name: 'AdminDashboard',
+    component: () => import('../views/AdminDashboard.vue'),
+    meta: { title: '后台概览', requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/users',
+    component: () => import('../views/AdminUsers.vue'),
+    meta: { title: '用户管理', requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/posts',
+    component: () => import('../views/AdminPosts.vue'),
+    meta: { title: '帖子管理', requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/replies',
+    component: () => import('../views/AdminReplies.vue'),
+    meta: { title: '评论管理', requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/topics',
+    component: () => import('../views/AdminTopics.vue'),
+    meta: { title: '话题管理', requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/ai-replies',
+    name: 'AdminAiReplies',
+    component: () => import('../views/AdminAiReplies.vue'),
+    meta: { title: 'AI 记录', requiresAuth: true, requiresAdmin: true },
+  },
+  // 未知地址由登录守卫送回心情页或登录页。
+  { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
 const router = createRouter({
@@ -48,7 +74,7 @@ const router = createRouter({
   // 返回时恢复滚动位置，前进新页面回到顶部
   scrollBehavior(to, from, savedPosition) {
     return savedPosition || { top: 0 }
-  }
+  },
 })
 
 router.beforeEach((to) => {
@@ -75,6 +101,10 @@ router.beforeEach((to) => {
   }
 
   return true
+})
+
+router.afterEach((to, _from, failure) => {
+  if (!failure) document.title = `${to.meta.title || '心情'} · 心屿`
 })
 
 export default router

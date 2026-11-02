@@ -23,6 +23,7 @@ export const useUserStore = defineStore('user', () => {
   )
 
   const isLoggedIn = computed(() => Boolean(token.value))
+  const displayName = computed(() => loginUser.value?.nickname || loginUser.value?.username || '朋友')
 
   // 设置/清空登录态：传 null 视为登出
   function setSession(payload) {
@@ -76,6 +77,7 @@ export const useUserStore = defineStore('user', () => {
     token,
     loginUser,
     isLoggedIn,
+    displayName,
     login,
     register,
     updateProfile,

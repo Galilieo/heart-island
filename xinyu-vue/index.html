@@ -1,13 +1,27 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/src/assets/logo-xinyu.png">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>心屿</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>心屿 · 记录心情，遇见理解</title>
+    <meta name="description" content="心屿是一个记录心情、获得 AI 陪伴与匿名互助的温暖空间。写下今天的感受，让情绪被看见。">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta property="og:site_name" content="心屿">
+    <meta property="og:title" content="心屿 · 记录心情，遇见理解">
+    <meta property="og:description" content="记录心情，获得 AI 陪伴，在匿名社区遇见理解。">
+    <meta property="og:image" content="https://heart-island.cn/share-xinyu.png">
+    <meta property="og:image:width" content="512">
+    <meta property="og:image:height" content="512">
+    <meta property="og:image:alt" content="心屿标志">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="心屿 · 记录心情，遇见理解">
+    <meta name="twitter:description" content="记录心情，获得 AI 陪伴，在匿名社区遇见理解。">
+    <meta name="twitter:image" content="https://heart-island.cn/share-xinyu.png">
     <!-- 备案区随 HTML 直接返回，不依赖 Vue 或 JavaScript 加载。 -->
     <style>
-      :root { --site-filing-height: 44px; }
+      :root { --site-filing-height: 68px; }
       body { margin: 0; }
       /* 登录页与静态备案区共用背景，避免页脚出现独立色带。 */
       body:has(#app .auth) {
@@ -37,6 +51,7 @@
         font: 12px/20px system-ui, sans-serif;
       }
       .site-filing a {
+        min-height: 44px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -52,8 +67,16 @@
         height: 14px;
         flex-shrink: 0;
       }
+      @media (max-width: 768px) {
+        body:has(.shell--with-nav) {
+          padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+        }
+        body:has(.shell--with-nav) #app .shell {
+          min-height: calc(100dvh - var(--site-filing-height) - 64px - env(safe-area-inset-bottom, 0px));
+        }
+      }
       @media (max-width: 600px) {
-        :root { --site-filing-height: 70px; }
+        :root { --site-filing-height: 118px; }
         .site-filing { flex-direction: column; }
       }
     </style>

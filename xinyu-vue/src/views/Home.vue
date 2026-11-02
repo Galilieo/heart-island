@@ -41,7 +41,7 @@ const detailOpen = ref(false)
 
 const greeting = computed(() => {
   const h = new Date().getHours()
-  const name = userStore.loginUser?.nickname || userStore.loginUser?.username || ''
+  const name = userStore.displayName
   if (h < 6) return `深夜了，${name}`
   if (h < 12) return `早安，${name}`
   if (h < 18) return `午后好，${name}`
