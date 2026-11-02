@@ -18,6 +18,12 @@ request.interceptors.request.use(
   }
 )
 
+function clearSessionAndRedirect() {
+  localStorage.removeItem('loginUser')
+  localStorage.removeItem('token')
+  if (window.location.pathname !== '/') window.location.href = '/'
+}
+
 // 响应拦截器：每次响应返回后都会执行
 request.interceptors.response.use(
   response => {
@@ -27,12 +33,7 @@ request.interceptors.response.use(
       const message = result.message || ''
 
       if (message.includes('请先登录') || message.includes('登录失效')) {
-        localStorage.removeItem('loginUser')
-        localStorage.removeItem('token')
-
-        if (window.location.pathname !== '/') {
-          window.location.href = '/'
-        }
+        clearSessionAndRedirect()
       }
     }
 
@@ -40,6 +41,7 @@ request.interceptors.response.use(
   },
   error => {
     if (error.response) {
+      if (error.response.status === 401) clearSessionAndRedirect()
       const result = error.response.data
       error.userMessage = result?.message || '服务异常，请稍后再试'
     } else if (error.code === 'ECONNABORTED') {
