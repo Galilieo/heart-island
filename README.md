@@ -106,7 +106,7 @@ heart_island
 ├─ ops
 │  ├─ 00-10 Agent 工程说明
 │  └─ features
-│     └─ 后续 AI 功能初版规划
+│     └─ 当前升级契约、接续入口与参考资料
 ├─ AI_WORKLOG
 │  └─ 本地个人工作记录，已加入 .gitignore
 ├─ docs
@@ -128,6 +128,8 @@ heart_island
 │     ├─ dto
 │     ├─ vo
 │     └─ common
+├─ xinyu-ai
+│  └─ 独立 Python 单次回应服务（Task 1，尚未接 Java）
 └─ xinyu-vue
    └─ src
       ├─ api
@@ -251,29 +253,19 @@ npm run build
 5. 使用管理员账号进入后台。
 6. 查看概览统计、用户管理、帖子管理、回复管理、话题管理和 AI 记录管理。
 
-## 文档目录
+## 文档入口
 
-| 文档 | 说明 |
+| 你要做什么 | 入口 |
 | --- | --- |
-| `AGENTS.md` | Agent 总入口，说明后续 Codex 工作边界 |
-| `ops/` | 开发期 Agent 工程说明，包含新功能、接口、数据库、前后端规则 |
-| `ops/features/` | 多轮对话、长期记忆、情绪周报、RAG、工具调用等初版规划 |
-| `AI_WORKLOG/` | 本地个人工作记录和 prompt 模板，不建议提交 |
-| `docs/README.md` | 文档总导航和可信度说明 |
-| `docs/project/README.md` | 项目交付文档导航 |
-| `docs/project/01-项目背景与可行性分析.md` | 项目背景、价值和可行性 |
-| `docs/project/02-需求分析说明书.md` | 角色、用户故事和功能需求 |
-| `docs/project/03-系统概要设计说明书.md` | 架构、模块划分和整体设计 |
-| `docs/project/04-数据库设计说明书.md` | 数据表、字段和关系说明 |
-| `docs/project/05-接口设计说明书.md` | REST 接口、参数和返回说明 |
-| `docs/project/06-详细设计说明书.md` | 关键业务流程和实现细节 |
-| `docs/project/07-前端界面与交互设计说明.md` | 页面结构和交互设计 |
-| `docs/project/08-测试说明书.md` | 测试范围、测试用例和验收标准 |
-| `docs/project/09-部署与运行说明.md` | 本地和服务器部署说明 |
-| `docs/project/10-项目总结与后续规划.md` | 当前成果、亮点和后续方向 |
-| `docs/project/11-分阶段开发计划.md` | 已完成阶段和后续开发计划 |
+| 继续当前升级开发 | [功能首页](ops/features/README.md) → [接续状态](ops/features/xinyu-next-session.md) |
+| 查当前方案与契约 | [升级总方案](ops/features/xinyu-upgrade-master-plan.md)、[1a 功能契约](ops/features/ai-reply-service-v1a.md) |
+| 查 Agent 工作规则 | [AGENTS.md](AGENTS.md) 与 `ops/00-10` 相关规则 |
+| 查需求、架构、接口、数据库与部署说明 | [正式交付文档导航](docs/project/README.md)，按问题选读 |
+| 查旧方案、旧计划 | [历史归档索引](docs/history/README.md) |
+| 查参考方案和品牌素材 | [参考资料索引](ops/features/references/README.md) |
+| 查本地计划、验证和学习记录 | `AI_WORKLOG/`，已忽略，不纳入 Git |
 
-完整文档分类与可信度说明见 [docs/README.md](docs/README.md)。
+完整分类与可信度说明见 [docs/README.md](docs/README.md)。当前只维护一套总方案和一份正在执行的功能契约，历史材料不作为实现证据。
 
 ## 简历表述建议
 
@@ -292,4 +284,4 @@ npm run build
 - 工具调用：让 AI 在白名单内查询近期心情趋势、生成周报草稿。
 - SSE 流式输出、内容治理、日志监控、限流重试和部署自检。
 
-这些方向目前是规划和开发期方案，初版文档见 `ops/features/`，不要在简历或展示中说成已经实现。
+上述后续能力以[当前总方案](ops/features/xinyu-upgrade-master-plan.md)为准；1a 目前仅完成独立 Python 服务，尚未形成 Java／前端产品闭环。旧初版草稿已归档，不要在简历或展示中把规划写成已实现。
