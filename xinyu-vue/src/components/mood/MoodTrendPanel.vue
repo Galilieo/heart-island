@@ -155,8 +155,8 @@ function barHeight(count) {
 .trend__tide {
   margin-top: 18px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 16px 6px;
 }
 
 .trend__col {
@@ -272,7 +272,7 @@ function barHeight(count) {
 
   .trend__tide.is-open {
     display: grid;
-    gap: 4px;
+    gap: 14px 4px;
   }
 
   .trend__col-track { width: 14px; height: 64px; }

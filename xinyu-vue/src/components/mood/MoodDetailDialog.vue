@@ -8,7 +8,9 @@ import BaseTag from '../ui/BaseTag.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseSwitch from '../ui/BaseSwitch.vue'
-import { MOOD_OPTIONS, moodTone, formatTime } from '../../utils/mood'
+import { moodTone, moodExpression, formatTime } from '../../utils/mood'
+import Xiaoya from '../ui/Xiaoya.vue'
+import MoodPicker from './MoodPicker.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -88,6 +90,7 @@ function close() {
     <div v-if="mood" class="md">
       <div class="md__meta">
         <BaseTag :tone="moodTone(mood.moodType)" variant="soft" size="lg">
+          <Xiaoya :expression="moodExpression(mood.moodType)" :size="36" />
           {{ mood.moodType }}
         </BaseTag>
         <span>创建于 {{ formatTime(mood.createTime) }}</span>
@@ -108,17 +111,7 @@ function close() {
 
       <section v-if="editing" class="md__edit">
         <h4>编辑这段记录</h4>
-        <div class="md__moods">
-          <button
-            v-for="item in MOOD_OPTIONS"
-            :key="item.value"
-            type="button"
-            class="mood-chip"
-            :class="[`mood-chip--${moodTone(item.value)}`, { 'is-active': editMoodType === item.value }]"
-            :disabled="updating"
-            @click="editMoodType = item.value"
-          >{{ item.label }}</button>
-        </div>
+        <MoodPicker v-model="editMoodType" :disabled="updating" />
         <BaseTextarea
           v-model="editContent"
           :rows="6"
@@ -219,45 +212,4 @@ function close() {
   justify-content: flex-end;
 }
 
-.md__moods {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-@media (max-width: 768px) {
-  .md__moods { grid-template-columns: repeat(3, 1fr); }
-  .md__moods .mood-chip { min-height: 44px; }
-}
-
-.mood-chip {
-  height: 36px;
-  border: 1px solid var(--line);
-  background: var(--bg-card);
-  color: var(--ink-2);
-  border-radius: var(--radius-2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft);
-}
-
-.mood-chip:not(:disabled):hover {
-  background: var(--bg-soft);
-}
-
-.mood-chip:disabled { opacity: 0.55; cursor: not-allowed; }
-
-.mood-chip.is-active {
-  border-color: transparent;
-  font-weight: 700;
-}
-
-.mood-chip--joy.is-active   { background: var(--joy-soft); color: var(--joy-ink); }
-.mood-chip--calm.is-active  { background: var(--calm-soft); color: var(--calm-ink); }
-.mood-chip--warn.is-active  { background: var(--warn-soft); color: var(--warn-ink); }
-.mood-chip--sad.is-active   { background: var(--sad-soft); color: var(--sad-ink); }
-.mood-chip--tired.is-active { background: var(--tired-soft); color: var(--tired-ink); }
-.mood-chip--neutral.is-active { background: var(--brand-soft); color: var(--brand-deep); }
 </style>

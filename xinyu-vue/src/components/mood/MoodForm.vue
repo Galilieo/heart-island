@@ -1,13 +1,13 @@
 <script setup>
-// 新增心情的表单卡。心情类型用 6 个 chip（命中后高亮对应颜色）+ 大段 textarea。
+// 新增心情的表单卡。心情类型使用分组单选按钮（命中后高亮对应颜色）+ 大段 textarea。
 // 表单值通过 v-model:mood-type / v-model:content / v-model:need-ai-reply 由父级管理，自身不持有状态。
 import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseSwitch from '../ui/BaseSwitch.vue'
-import Doodle from '../ui/Doodle.vue'
-import { MOOD_OPTIONS, moodTone } from '../../utils/mood'
+import Xiaoya from '../ui/Xiaoya.vue'
+import MoodPicker from './MoodPicker.vue'
 
 const props = defineProps({
   moodType: { type: String, default: '' },
@@ -22,15 +22,6 @@ const canSubmit = computed(
   () => !!props.moodType && props.content.trim().length > 0 && !props.adding
 )
 
-// 心情 → 岛景天气符号（与「潮汐之窗」同一套视觉语言）
-const MOOD_ICONS = {
-  开心: 'sun',
-  平静: 'wave',
-  焦虑: 'cloud',
-  难过: 'leaf',
-  疲惫: 'cup',
-  其他: 'star'
-}
 </script>
 
 <template>
@@ -40,26 +31,16 @@ const MOOD_ICONS = {
         <p class="mood-form__kicker">心情日记</p>
         <h2 class="mood-form__title">现在心情怎么样？</h2>
       </div>
-      <Doodle name="heart" :size="36" color="var(--accent)" />
+      <Xiaoya expression="default" :size="40" />
     </header>
 
     <p class="mood-form__desc">记件小事，或者说说现在的感受，写几句就好。</p>
 
-    <div class="mood-form__moods" role="group" aria-label="选择心情类型">
-      <button
-        v-for="item in MOOD_OPTIONS"
-        :key="item.value"
-        type="button"
-        class="mood-chip"
-        :class="[`mood-chip--${moodTone(item.value)}`, { 'is-active': moodType === item.value }]"
-        :aria-pressed="moodType === item.value"
-        :disabled="adding"
-        @click="$emit('update:moodType', item.value)"
-      >
-        <Doodle :name="MOOD_ICONS[item.value] || 'star'" :size="17" color="currentColor" />
-        <span>{{ item.label }}</span>
-      </button>
-    </div>
+    <MoodPicker
+      :model-value="moodType"
+      :disabled="adding"
+      @update:model-value="$emit('update:moodType', $event)"
+    />
 
     <BaseTextarea
       :model-value="content"
@@ -106,6 +87,7 @@ const MOOD_ICONS = {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .mood-form__kicker {
@@ -127,53 +109,6 @@ const MOOD_ICONS = {
   line-height: 1.7;
 }
 
-.mood-form__moods {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.mood-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 44px;
-  border: 1px solid var(--line);
-  background: var(--bg-card);
-  color: var(--ink-2);
-  border-radius: var(--radius-2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform var(--t-fast) var(--ease-bounce),
-    background var(--t-fast) var(--ease-soft),
-    border-color var(--t-fast) var(--ease-soft);
-}
-
-.mood-chip:not(:disabled):hover {
-  transform: translateY(-1px);
-  background: var(--sea-soft);
-  border-color: var(--sea-soft);
-}
-
-.mood-chip:disabled { opacity: 0.55; cursor: not-allowed; }
-
-.mood-chip.is-active {
-  border-color: transparent;
-  color: var(--ink-1);
-  font-weight: 700;
-  box-shadow: 0 6px 14px rgba(120, 98, 60, 0.12);
-}
-
-.mood-chip--joy.is-active   { background: var(--joy-soft); color: var(--joy-ink); }
-.mood-chip--calm.is-active  { background: var(--calm-soft); color: var(--calm-ink); }
-.mood-chip--warn.is-active  { background: var(--warn-soft); color: var(--warn-ink); }
-.mood-chip--sad.is-active   { background: var(--sad-soft); color: var(--sad-ink); }
-.mood-chip--tired.is-active { background: var(--tired-soft); color: var(--tired-ink); }
-.mood-chip--neutral.is-active { background: var(--brand-soft); color: var(--brand-deep); }
-
 .mood-form > :deep(.field) {
   margin-bottom: 16px;
 }
@@ -191,5 +126,9 @@ const MOOD_ICONS = {
     max-height: none;
     overflow: visible;
   }
+}
+
+@media (max-width: 480px) {
+  .mood-form__title { font-size: clamp(20px, 5.4vw, 24px); }
 }
 </style>

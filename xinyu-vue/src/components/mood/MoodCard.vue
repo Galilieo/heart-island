@@ -5,7 +5,8 @@ import { ref } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTag from '../ui/BaseTag.vue'
 import BaseButton from '../ui/BaseButton.vue'
-import { moodTone, formatTime } from '../../utils/mood'
+import { moodTone, moodExpression, formatTime } from '../../utils/mood'
+import Xiaoya from '../ui/Xiaoya.vue'
 
 defineProps({
   mood: { type: Object, required: true },
@@ -29,6 +30,7 @@ const aiOpen = ref(false)
   >
     <div class="mood-card__top">
       <BaseTag :tone="moodTone(mood.moodType)" variant="soft" size="md">
+        <Xiaoya :expression="moodExpression(mood.moodType)" :size="28" />
         {{ mood.moodType }}
       </BaseTag>
       <span class="mood-card__time">{{ formatTime(mood.createTime) }}</span>
