@@ -1,6 +1,6 @@
 # 心屿 Python 单次回应服务 · Task 1
 
-内部服务只负责认证、输入校验、有限风险分支与一次模型生成；Java 管用户身份、来源版本、任务状态和结果持久化。此目录独立运行，不引用 agent-lab，不连接业务数据库。当前尚未接入 Java。
+内部服务只负责认证、输入校验、有限风险分支与一次模型生成；Java 管用户身份、来源版本、任务状态和结果持久化。此目录独立运行，不引用 agent-lab，不连接业务数据库。3A已接入独立Java内部HTTP客户端并完成回环及少量真实API验收，尚无自动worker和业务数据库闭环。
 
 ## 安装与运行
 
@@ -29,7 +29,7 @@ uv run --directory xinyu-ai --locked uvicorn app.main:app_from_env --factory \
 
 当前选用 DeepSeek 的 OpenAI 兼容 Chat Completions 协议，沿用 agent-lab 的直接 HTTP 接入方式。环境样例设置 `OPENAI_BASE_URL=https://api.deepseek.com`、`OPENAI_MODEL=deepseek-flash`、`DEEPSEEK_THINKING_MODE=disabled`；实际请求发送到 `https://api.deepseek.com/chat/completions`，密钥仍留空并由进程环境注入，不从 lab 复制真实配置。
 
-2026-11-07 核对[官方调用说明](https://api-docs.deepseek.com/quick_start/agent_integrations/)：`deepseek-flash` 当前由 DeepSeek-V4.1-Flash-1017 提供服务；lab 示例中的旧别名 `deepseek-v4-flash` 仍被兼容路由。该别名不是不可变版本锁，后续采样应记录日期及当时的模型映射。关闭 thinking 的请求格式见[官方思考模式说明](https://api-docs.deepseek.com/guides/thinking_mode/)。当前只有文档核对和离线协议验证，尚未完成真实供应商调用验收。
+2026-11-07 核对[官方调用说明](https://api-docs.deepseek.com/quick_start/agent_integrations/)：`deepseek-flash` 当前由 DeepSeek-V4.1-Flash-1017 提供服务；lab 示例中的旧别名 `deepseek-v4-flash` 仍被兼容路由。该别名不是不可变版本锁，后续采样应记录日期及当时的模型映射。关闭 thinking 的请求格式见[官方思考模式说明](https://api-docs.deepseek.com/guides/thinking_mode/)。此前只有文档与离线协议证据；2026-11-09经用户授权，用两条合成心情走Java17→Python→真实供应商，均通过，单次generate耗时2.305秒／2.582秒。仅验证此次配置下的真实链路，不证明稳定延迟、总体质量或生产验收；也不据此确认别名当前底层版本。
 
 ## 请求与结果
 
@@ -86,4 +86,11 @@ uv run --directory xinyu-ai --locked pytest -q
 
 测试替换外部供应商，保留真实认证、风险、校验与 HTTP 适配；另以真实回环 TCP 验证挂起响应在总 deadline 后关闭连接。运行测试需要允许绑定 127.0.0.1 临时端口。协议测试及有限样例不证明真实模型质量、危机覆盖率或生产可用性。
 
-本地 RED/GREEN、依赖版本与后续接续见 `AI_WORKLOG/2026-11-07-ai-reply-1a-progress.md`。尚未执行真实供应商采样、Java 联调、数据库验证或部署。
+本地 RED/GREEN、依赖版本与后续接续见 `AI_WORKLOG/2026-11-07-ai-reply-1a-progress.md`。3A已完成Java内部HTTP联调与两条合成输入真实供应商验收；自动worker、数据库提交闭环、社区耗时校准和部署仍待后续阶段。
+
+
+### Java→Python 回环契约验收（3A）
+
+后端 `AiServiceClientContractIT` 会用本目录 `.venv/bin/python -m tests.java_contract_server` 自动启动随机回环端口，并在结束后停止进程。测试子进程清空继承环境，使用字面量测试配置与合成 Provider，不读取真实模型密钥、不访问数据库。共享 `test-contracts/mood-types.json` 的13种心情、SUPPORT零供应商调用与错误token均走实际Python HTTP接口。
+
+在后端目录显式运行 `sh ./mvnw '-Dtest=AiServiceClientContractIT' test`；需要已准备本服务锁定依赖的虚拟环境和本地端口权限。该IT不由默认 `*Tests` 匹配自动运行，不能只跑默认测试就声称跨服务已验。它只验证内部协议与客户端，worker／数据库／页面闭环在后续批次验收。
