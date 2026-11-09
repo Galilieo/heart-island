@@ -4,7 +4,13 @@
 
 ## 当前状态
 
-- 当前交接（2026-11-09）：用户要求先整理本地commit，由Claude维护近期3A代码的可读性，完成后再由Codex核验并重新带读。Codex尚未实施这次排版／重构，3A源码与通过客户端预审的12文件快照一致。Claude重点处理长布尔校验、generate职责、常量命名、状态码与错误码表达、功能分段和中文注释；变更前核对当前源码，保留认证、关联／Unicode／大小校验、重复键与编码检查、总deadline及关闭取消语义。DNS堵塞已有复现证据，若要去掉机制须先说明如何满足原边界，不把内部服务可信等同于无需超时与协议检查。3C失败收尾和3B冷却纯函数／CAS仍由用户手写，当前不越界实现；交回后先按真实diff复测／审查，再带读，不以重构通过等同于用户掌握。本次整理获准本地提交，未授权推送或部署。 实现基线完整SHA：`a94dd810e94ff10f7f5153579647f174a87b56f0`。
+- **当前接续：3A实现／验证／带读已完成，可接3C（2026-11-09）**：用户完成旧主体带读后明确授权“赶紧处理”。现有HC5新增generateAsync，DNS按需共享Future，失败缓存默认10秒（AI_DNS_FAILURE_CACHE_SECONDS），到期由新请求触发恢复。最多3个逻辑请求和3个HTTP线程，有限交接队列上限3；等待DNS不占HTTP线程，原deadline覆盖等待，单请求取消隔离共享查询，关闭／过期不续发，卡住的原生查询不再启动第二项。成功IP缓存到close，成功TTL刷新仍暂缓。同步generate明确阻塞，仅兼容；3C必须async，DB收尾用显式执行器，禁止在DNS／deadline线程同步执行事务。
+- **当前证据与边界**：Java17普通*Tests＋显式AiServiceClientContractIT共180项通过（0失败／错误／跳过），含15项Java→真实Python合成Provider。独立review_dns_recovery按/tmp/heartisland-dns-review/manifest.json 9文件哈希只读审查通过，另外实测卡住查询退出后重查恢复、HTTP取消后断连并复用两个完整闭环。低优先级建议把这两个探针纳入长期自动回归，已记progress；没有阻断项。未调用真实模型／业务库或MySQL IT，未验证生产DNS和穷举纳秒竞态；用户随后授权整理本地提交（具体SHA见本地progress）；本轮无推送／部署，不认证无关工作区修改。新增7项客户端DNS测试及升级3项resolver测试；一次完成回调立即续接误报overloaded已单项RED→GREEN修复。具体设计／取舍见执行稿11.7／11.8、证据见既有progress。
+- **带读接续**：旧同步主体及新增generateAsync→Call登记／定时器→dns.prepare共享结果／失败缓存→查询／超时→afterDns有界HTTP续接→executeHttp→finish原子结束／release清理→resolve只读缓存／close均已按源码带读，并快速对照共享查询与10秒缓存恢复两项测试。用户曾在返回位置、Lambda参数和定时器处追问，已放慢拆解；不把“下一步／OK”记作独立掌握。下一步进入3C，先讲一次执行链并准备脚手架；用户负责complete异常后独立事务fail及fail失败处理、3B冷却纯函数／CAS分工保持。方案真实归属为用户发现不可恢复问题并选择共享查询，Codex讲解／实现／测试，无生产效果指标。
+
+以下旧173／172项与一次性DNS快照描述为历史时点，以本页上述当前状态为准。
+
+- Claude可读性补丁已本地应用（2026-11-09）：用户提供源补丁d9a0dcc256576f548017f0bb714663503fa5a8fc并要求更新本地，Codex使用git apply更新AiServiceClient／BoundedAiResponseParser／FixedAiDnsResolver三文件，未创建补丁commit。保留具名校验、预算／请求／解析分段、常量和中文注释。核验发现源补丁先toNanos再限幅会在极大Duration溢出，经单项RED复现后修回先Duration限幅再转换，新增边界测试。Java17本轮全部普通测试＋显式AiServiceClientContractIT共173项，0失败／0错误／0跳过，含15项真Java→Python（合成Provider）；未真实模型调用或MySQL IT。独立review_claude_readability固定基准392211bb0e230d38b2bb990c26a2c81579e222fb＋4文件哈希复核无新增可操作问题（未独立运行Maven）。下一步沿当前重构源码重新带读；3C失败收尾和3B冷却纯函数／CAS仍留给用户手写。本次仅应用与修复，未提交／推送／部署；下面3A旧测试数与交接记录按历史时点理解。
 
 - 正式测评计划已收录（2026-11-09）：用户提供全文，正文保留于[心屿项目测评计划](xinyu-evaluation-plan.md)。规划L1～L4、100条纯合成样例（替代原30～50条建议）、质量／危机／周报／Agent／记忆RAG指标、20～30条人工校准、候选工具及非功能SQL／线上观测。当前值空白、目标是建议初值，工具与SQL及研究引用待实施前核验；新增usage／反馈结构、prompt Trace等不因归档获准实施。排期仍为Task3／Task4闭环后、完整1a发布前首轮基线，后续模块各补；实际付费批次另定。172／114是工程验证，两条真实调用是链路验收，正式评测尚未实施，不改变3C手写主线。
 - 3A真实API验收（2026-11-09）：用户补齐配置后同意两条合成心情实测，Java17→Python→真实供应商均通过：开心2.305秒／焦虑2.582秒，MODEL与关联／正文校验合法；配置deepseek-flash、thinking disabled、max_tokens4096。只两次顺序请求、无重试、不写DB、不启worker；不是3F社区耗时采样，也不代表三并发／稳定延迟或总体质量。结果与样例已写既有progress；正常自动化仍隔离真实模型。下一步继续3A带读与3C用户手写准备。

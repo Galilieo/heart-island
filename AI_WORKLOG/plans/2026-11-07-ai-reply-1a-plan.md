@@ -116,7 +116,9 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 
 用户2026-11-09明确“可以开始”，按 [v2执行稿及复核补充](/Users/jiangqiuyu/pre/heartisland/heart-island/AI_WORKLOG/plans/2026-11-09-ai-reply-1a-task3-execution-review.md)实施，当前契约已同步。六个功能单元按3A→3C→3D+3E→3B→3F推进，独立评审按三轮合并；小diff不构成提交授权。后续社区异步三并发另列总方案，不插入本Task。
 
-- [ ] **3A内部客户端**：认证、严格snake_case／类型／关联校验、16KiB正文与8KiB状态行／响应头限制、错误分类、无重试／重定向、连接／读取／绝对总截止、可取消与关闭；真Java→Python共享13心情矩阵。当前已实现并初步回归，客户端预审与主体带读分别记录，未以测试通过代替掌握。
+- [x] **3A补全DNS自动恢复（2026-11-09实现及验证）**：generateAsync共享查询并在剩余预算内续接；失败缓存默认10秒、到期按需重查；单请求取消隔离、关闭／过期不续发，卡住原生解析不增加物理查询。最多3逻辑请求／HTTP线程，队列上限3。Java17普通测试＋合成Python IT 180项全通过，独立review_dns_recovery固定9文件哈希审查通过，另有DNS退出恢复／HTTP取消断连复用探针。证据见progress，具体选择见执行稿11.7／11.8。成功IP TTL暂缓；新增异步段及代表性测试已带读，用户授权整理本地提交，未部署；不记为用户独立掌握。
+
+- [x] **3A内部客户端**：认证、严格snake_case／类型／关联校验、16KiB正文与8KiB状态行／响应头限制、错误分类、无重试／重定向、连接／读取／绝对总截止、可取消与关闭；真Java→Python共享13心情矩阵。当前实现／回归和客户端预审完成，旧主体及新增DNS异步段已带读；第一轮3A＋3C整体评审仍待3C。未以测试通过代替掌握。
 - [ ] **3C单次执行**：claim→来源预检→事务外generate→条件complete。优先测completeFailureIsMarkedFailedInNewTransactionAndCanRetry与lateFailureDoesNotOverwriteSupersededOrNewAttempt；真实DB证明日志失败回滚后新事务failed及可重试。complete异常后的独立fail与fail失败处理由用户手写，Codex不提前代写；DB持续故障不伪称收尾成功，不自动重调模型。complete／fail的5秒事务配置和实际锁／连接／网络边界在本批验证。
 - [ ] **第一轮独立评审3A＋3C**：固定SHA／逐文件哈希快照；3A可先预审，3C用户完成后补齐同轮结论。
 - [ ] **3D启动停止＋3E三并发**：配置校验→唯一worker且旧进程退出前提→恢复一次→成功后扫描；恢复失败不扫描、worker关闭零恢复／领取，重复事件不注册第二份调度。停止先关领取闸门再清理I/O、等待执行退出。每秒按空槽补领，Java默认3槽、Python单应用进程门禁3；无无限内存待办。至少两用户及屏障证明3条重叠、第4条数据库queued、空槽补领、超时不影响另两槽、槽位／门禁回收和删除／修改交错不回写旧结果。跨实例租约仍1b。
