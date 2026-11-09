@@ -8,6 +8,8 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.service.MoodRecordService;
 import com.xinyu.utils.JwtUtil;
 import com.xinyu.vo.MoodTrendVO;
+import com.xinyu.vo.MoodSaveVO;
+import com.xinyu.vo.MoodRecordVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,7 +25,7 @@ public class MoodRecordController {
     private JwtUtil jwtUtil;
 
     @PostMapping("/add")
-    public Result<Boolean> add(@RequestHeader(value = "token", required = false) String token,
+    public Result<MoodSaveVO> add(@RequestHeader(value = "token", required = false) String token,
                                @RequestBody MoodRecordAddRequest request) {
         if (token == null || token.trim().isEmpty()) {
             return Result.error("请先登录");
@@ -49,17 +51,15 @@ public class MoodRecordController {
         moodRecord.setUserId(userId);
         moodRecord.setNeedAiReply(request.getNeedAiReply());
 
-        Boolean success = moodRecordService.add(moodRecord);
-
-        if (!success) {
-            return Result.error("新增心情记录失败");
+        try {
+            return Result.success("心情已保存", moodRecordService.add(moodRecord));
+        } catch (IllegalArgumentException invalid) {
+            return Result.error(invalid.getMessage());
         }
-
-        return Result.success("新增成功", true);
     }
 
     @GetMapping("/list")
-    public Result<Page<MoodRecord>> list(@RequestHeader(value = "token", required = false) String token,
+    public Result<Page<MoodRecordVO>> list(@RequestHeader(value = "token", required = false) String token,
                                          @RequestParam(required = false) String moodType,
                                          @RequestParam(required = false) String startDate,
                                          @RequestParam(required = false) String endDate,
@@ -85,7 +85,7 @@ public class MoodRecordController {
 
         Long userId = jwtUtil.getUserId(token);
 
-        Page<MoodRecord> page = moodRecordService.listByCondition(userId, moodType, startDate, endDate, pageNum, pageSize);
+        Page<MoodRecordVO> page = moodRecordService.listViews(userId, moodType, startDate, endDate, pageNum, pageSize);
         return Result.success("查询成功", page);
     }
 
@@ -110,7 +110,7 @@ public class MoodRecordController {
         return Result.success("删除成功", true);
     }
     @GetMapping("/detail/{id}")
-    public Result<MoodRecord> detail(@RequestHeader(value = "token", required = false) String token,
+    public Result<MoodRecordVO> detail(@RequestHeader(value = "token", required = false) String token,
                                     @PathVariable Long id) {
         if(token ==null||token.trim().isEmpty()){
             return Result.error("请先登录");
@@ -121,7 +121,7 @@ public class MoodRecordController {
 
         Long userId = jwtUtil.getUserId(token);
 
-        MoodRecord moodRecord = moodRecordService.getDetail(id,userId);
+        MoodRecordVO moodRecord = moodRecordService.getDetailView(id,userId);
 
         if(moodRecord==null){
             return Result.error("心情记录不存在或者无权查看");
@@ -131,7 +131,7 @@ public class MoodRecordController {
     }
 
     @PutMapping("/update/{id}")
-    public Result<Boolean> update(@RequestHeader(value = "token", required = false) String token,
+    public Result<MoodSaveVO> update(@RequestHeader(value = "token", required = false) String token,
                                   @PathVariable Long id,
                                   @RequestBody MoodRecordUpdateRequest request) {
         if (token == null || token.trim().isEmpty()) {
@@ -160,13 +160,13 @@ public class MoodRecordController {
         moodRecord.setContent(request.getContent());
         moodRecord.setNeedAiReply(request.getNeedAiReply());
 
-        Boolean success =moodRecordService.update(id,userId,moodRecord);
-
-        if (!success) {
-            return Result.error("心情记录不存在或者无权修改");
+        try {
+            MoodSaveVO saved = moodRecordService.update(id, userId, moodRecord);
+            if (saved == null) return Result.error("心情记录不存在或者无权修改");
+            return Result.success("心情已保存", saved);
+        } catch (IllegalArgumentException invalid) {
+            return Result.error(invalid.getMessage());
         }
-
-        return Result.success("修改成功", true);
     }
 
     @GetMapping("/trend/recent7")

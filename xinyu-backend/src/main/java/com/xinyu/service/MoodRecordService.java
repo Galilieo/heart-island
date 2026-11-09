@@ -1,60 +1,85 @@
 package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xinyu.dto.AiReplyResult;
+import com.xinyu.entity.AiJob;
+import com.xinyu.vo.MoodSaveVO;
+import com.xinyu.vo.MoodRecordVO;
 import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.MoodRecordMapper;
 import com.xinyu.vo.MoodTrendVO;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 public class MoodRecordService {
-    @Autowired
-    private AiReplyService aiReplyService;
+    private final MoodRecordMapper moodRecordMapper;
+    private final AiJobService jobs;
+    private final AiJobAdmission admission;
+    private static final Set<String> MOOD_TYPES = Set.of("开心", "满足", "期待", "感动", "平静", "焦虑", "难过", "生气", "委屈", "孤独", "迷茫", "疲惫", "其他");
 
-    @Autowired
-    private AiReplyLogService aiReplyLogService;
+    public MoodRecordService(MoodRecordMapper moodRecordMapper, AiJobService jobs, AiJobAdmission admission) {
+        this.moodRecordMapper = moodRecordMapper;
+        this.jobs = jobs;
+        this.admission = admission;
+    }
 
-    @Autowired
-    private MoodRecordMapper moodRecordMapper;
+    /** 先保存日记与本版本任务，事务提交后返回；不在保存接口等待模型。 */
+    public MoodSaveVO add(MoodRecord request) {
+        validateInput(request);
+        return admission.save(() -> {
+            MoodRecord source = new MoodRecord();
+            source.setUserId(request.getUserId());
+            source.setMoodType(request.getMoodType());
+            source.setContent(request.getContent());
+            source.setStatus(1);
+            source.setContentVersion(1L);
+            source.setAiReplyEnabled(!Boolean.FALSE.equals(request.getNeedAiReply()));
+            if (moodRecordMapper.insert(source) != 1) throw new IllegalStateException("日记保存未成功");
+            return saved(source, jobs.createForVersion(source));
+        });
+    }
 
-    public Boolean add(MoodRecord moodRecord) {
-        moodRecord.setStatus(1);
-
-        int insertRows = moodRecordMapper.insert(moodRecord);
-        if (insertRows <= 0) {
-            return false;
+    /** UTF-16 长度与 Python 协议一致；孤立代理字符不能进入持久化与模型链路。 */
+    private static void validateInput(MoodRecord request) {
+        if (request == null || request.getUserId() == null || request.getUserId() <= 0) {
+            throw new IllegalArgumentException("用户身份无效");
         }
-
-        // 用户选择不要 AI 回复：只保存记录，不生成、不写调用日志
-        if (Boolean.FALSE.equals(moodRecord.getNeedAiReply())) {
-            return true;
+        if (!MOOD_TYPES.contains(request.getMoodType() == null ? "" : request.getMoodType())) {
+            throw new IllegalArgumentException("心情类型无效");
         }
+        String text = request.getContent();
+        // Python str.strip 同时视 Unicode 空格及 NEXT LINE 为白字符，不能只用 Java isBlank。
+        if (text == null || text.codePoints().allMatch(unit -> Character.isWhitespace(unit)
+                || Character.isSpaceChar(unit) || unit == 0x85) || text.length() > 500) {
+            throw new IllegalArgumentException("心情内容不能为空且不能超过500个UTF-16单位");
+        }
+        for (int i = 0; i < text.length(); i++) {
+            char unit = text.charAt(i);
+            if (Character.isHighSurrogate(unit)) {
+                if (++i >= text.length() || !Character.isLowSurrogate(text.charAt(i))) {
+                    throw new IllegalArgumentException("心情内容包含非法Unicode字符");
+                }
+            } else if (Character.isLowSurrogate(unit)) {
+                throw new IllegalArgumentException("心情内容包含非法Unicode字符");
+            }
+        }
+    }
 
-        AiReplyResult aiReplyResult = aiReplyService.generateReplyResult(
-                moodRecord.getMoodType(),
-                moodRecord.getContent()
-        );
-
-        moodRecord.setAiReply(aiReplyResult.getReplyContent());
-        int updateRows = moodRecordMapper.updateById(moodRecord);
-
-        aiReplyLogService.saveMoodReply(
-                moodRecord.getUserId(),
-                moodRecord.getId(),
-                aiReplyResult
-        );
-
-        return updateRows > 0;
+    private static MoodSaveVO saved(MoodRecord source, AiJob job) {
+        MoodSaveVO result = new MoodSaveVO();
+        result.setId(source.getId());
+        result.setContentVersion(source.getContentVersion());
+        result.setAiReplyEnabled(source.getAiReplyEnabled());
+        result.setJobId(job == null ? null : job.getId());
+        result.setAiReplyState(job == null ? "disabled" : job.getStatus());
+        return result;
     }
 
     public List<MoodRecord> listByUserId(Long userId) {
@@ -66,25 +91,19 @@ public class MoodRecordService {
         return moodRecordMapper.selectList(queryWrapper);
     }
 
-    public Boolean delete(Long id,Long userId) {
-        MoodRecord moodRecord =moodRecordMapper.selectById(id);
-
-        if(moodRecord == null){
-            return false;
-        }
-
-        if(!moodRecord.getUserId().equals(userId)){
-            return false;
-        }
-
-        if (moodRecord.getStatus() != null && moodRecord.getStatus() == 0) {
-            return false;
-        }
-
-        moodRecord.setStatus(0);
-        int rows = moodRecordMapper.updateById(moodRecord);
-        return rows > 0;
+    /** 来源先锁定再条件删除，任务失效失败时来源变更也会回滚。 */
+    public Boolean delete(Long id, Long userId) {
+        return admission.transaction(() -> {
+            MoodRecord source = moodRecordMapper.selectOwnedForUpdate(id, userId);
+            if (source == null || !Integer.valueOf(1).equals(source.getStatus())) return false;
+            if (moodRecordMapper.softDeleteAtVersion(id, userId, source.getContentVersion()) != 1) {
+                throw new IllegalStateException("日记删除条件已变化");
+            }
+            jobs.supersedeUnfinished(id, userId);
+            return true;
+        });
     }
+
     public Page<MoodRecord> listByCondition(Long userId,
                                             String moodType,
                                             String startDate,
@@ -114,6 +133,24 @@ public class MoodRecordService {
         return moodRecordMapper.selectPage(page,queryWrapper);
     }
 
+    /** 来源和任务在同一快照中读取，避免组合出生成提交前后的混合视图。 */
+    public Page<MoodRecordVO> listViews(Long userId, String moodType, String startDate, String endDate,
+                                       Long pageNum, Long pageSize) {
+        return admission.transaction(() -> {
+            Page<MoodRecord> page = listByCondition(userId, moodType, startDate, endDate, pageNum, pageSize);
+            Page<MoodRecordVO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+            result.setRecords(page.getRecords().stream().map(jobs::toMoodView).toList());
+            return result;
+        });
+    }
+
+    public MoodRecordVO getDetailView(Long id, Long userId) {
+        return admission.transaction(() -> {
+            MoodRecord source = getDetail(id, userId);
+            return source == null ? null : jobs.toMoodView(source);
+        });
+    }
+
     public MoodRecord getDetail(Long id,Long userId){
         MoodRecord moodRecord =moodRecordMapper.selectById(id);
 
@@ -132,56 +169,40 @@ public class MoodRecordService {
         return moodRecord;
     }
 
-    public Boolean update(Long id, Long userId, MoodRecord moodRecord) {
-        MoodRecord dbRecord = moodRecordMapper.selectById(id);
-
-        if(dbRecord==null){
-            return false;
-        }
-
-        if (dbRecord.getStatus() != null && dbRecord.getStatus() == 0) {
-            return false;
-        }
-
-        if(!dbRecord.getUserId().equals(userId)){
-            return false;
-        }
-
-        dbRecord.setMoodType(moodRecord.getMoodType());
-        dbRecord.setContent(moodRecord.getContent());
-
-        if (Boolean.FALSE.equals(moodRecord.getNeedAiReply())) {
-            // 用户选择不要 AI 回复：清掉已有回复，不重新生成、不写日志。
-            // 注意 updateById 默认忽略 null 字段，ai_reply 要用 UpdateWrapper 显式置 NULL。
-            dbRecord.setAiReply(null);
-            int rows = moodRecordMapper.updateById(dbRecord);
-            if (rows > 0) {
-                UpdateWrapper<MoodRecord> clearReply = new UpdateWrapper<>();
-                clearReply.eq("id", dbRecord.getId());
-                clearReply.set("ai_reply", null);
-                moodRecordMapper.update(null, clearReply);
+    /** 修改输入后失效旧任务；只写指定字段，不用旧实体覆盖有效状态或删除时间。 */
+    public MoodSaveVO update(Long id, Long userId, MoodRecord request) {
+        // 身份始终来自 Controller 的登录上下文，不采纳请求实体携带的 userId。
+        MoodRecord input = new MoodRecord();
+        input.setUserId(userId);
+        input.setMoodType(request == null ? null : request.getMoodType());
+        input.setContent(request == null ? null : request.getContent());
+        validateInput(input);
+        boolean enabled = !Boolean.FALSE.equals(request.getNeedAiReply());
+        return admission.save(() -> {
+            MoodRecord source = moodRecordMapper.selectOwnedForUpdate(id, userId);
+            if (source == null || !Integer.valueOf(1).equals(source.getStatus())) return null;
+            // 未修改生成依据时保留原回复及任务；失败重试通过独立接口发起。
+            if (java.util.Objects.equals(source.getMoodType(), input.getMoodType())
+                    && java.util.Objects.equals(source.getContent(), input.getContent())
+                    && Boolean.valueOf(enabled).equals(source.getAiReplyEnabled())) {
+                MoodRecordVO current = jobs.toMoodView(source);
+                MoodSaveVO unchanged = new MoodSaveVO();
+                unchanged.setId(source.getId());
+                unchanged.setContentVersion(source.getContentVersion());
+                unchanged.setAiReplyEnabled(source.getAiReplyEnabled());
+                unchanged.setAiReplyState(current.aiReplyState());
+                unchanged.setJobId(current.jobId());
+                return unchanged;
             }
-            return rows > 0;
-        }
-
-        AiReplyResult aiReplyResult = aiReplyService.generateReplyResult(
-                moodRecord.getMoodType(),
-                moodRecord.getContent()
-        );
-
-        dbRecord.setAiReply(aiReplyResult.getReplyContent());
-
-        int rows = moodRecordMapper.updateById(dbRecord);
-
-        if (rows > 0) {
-            aiReplyLogService.saveMoodReply(
-                    dbRecord.getUserId(),
-                    dbRecord.getId(),
-                    aiReplyResult
-            );
-        }
-
-        return rows > 0;
+            if (moodRecordMapper.updateContentAtVersion(id, userId, source.getContentVersion(),
+                    input.getMoodType(), input.getContent(), enabled) != 1) {
+                throw new IllegalStateException("日记修改条件已变化");
+            }
+            jobs.supersedeUnfinished(id, userId);
+            source.setContentVersion(Math.addExact(source.getContentVersion(), 1));
+            source.setAiReplyEnabled(enabled);
+            return saved(source, jobs.createForVersion(source));
+        });
     }
 
     public MoodTrendVO getRecentSevenDaysTrend(Long userId) {

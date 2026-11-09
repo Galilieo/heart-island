@@ -19,6 +19,20 @@ public class MoodRecord {
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
+    /** 生成依据的版本；AI 只写回复时不递增。 */
+    private Long contentVersion;
+    /** 当前版本是否需要 AI 回应。 */
+    private Boolean aiReplyEnabled;
+    /** 首次软删除的时间；历史未知时间保留空值。 */
+    private LocalDateTime deletedAt;
+
+    public Long getContentVersion() { return contentVersion; }
+    public void setContentVersion(Long contentVersion) { this.contentVersion = contentVersion; }
+    public Boolean getAiReplyEnabled() { return aiReplyEnabled; }
+    public void setAiReplyEnabled(Boolean aiReplyEnabled) { this.aiReplyEnabled = aiReplyEnabled; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+
     public Long getId() {
         return id;
     }

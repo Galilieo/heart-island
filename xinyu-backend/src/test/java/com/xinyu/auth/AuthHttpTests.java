@@ -4,6 +4,10 @@ import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.xinyu.config.AuthWebConfig;
 import com.xinyu.config.CorsConfig;
+import com.xinyu.config.JacksonConfig;
+import com.xinyu.vo.AiJobVO;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import com.xinyu.entity.User;
 import com.xinyu.mapper.*;
 import com.xinyu.service.*;
@@ -27,13 +31,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // MVC、路由和 JWT 使用真实实现；只替换数据库业务依赖，不启动 MySQL/AI。
 @WebMvcTest
-@Import({JwtUtil.class, AuthWebConfig.class, CorsConfig.class})
-@MockitoBean(types = {MoodRecordService.class, CommunityPostService.class,
+@Import({JwtUtil.class, AuthWebConfig.class, CorsConfig.class, JacksonConfig.class})
+@MockitoBean(types = {MoodRecordService.class, AiJobService.class, CommunityPostService.class,
         CommunityReplyService.class, TopicService.class, AiReplyLogService.class,
         UserMapper.class, CommunityPostMapper.class, CommunityReplyMapper.class, AiReplyMapper.class})
 class AuthHttpTests {
     @Autowired MockMvc mvc;
     @Autowired JwtUtil jwtUtil;
+    @Autowired AiJobService jobs;
+    @Autowired MoodRecordService moods;
     @MockitoBean UserService userService;
 
     private String memberToken;
@@ -171,6 +177,57 @@ class AuthHttpTests {
                         .header("Access-Control-Request-Headers", "token"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+    }
+
+    @Test
+    void jobRoutesRequireAuthentication() throws Exception {
+        mvc.perform(get("/mood/ai-job/10")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/mood/ai-job/10/retry")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void jobReadAndRetryUseJwtIdentityAndSerializeLongsAsStrings() throws Exception {
+        AiJobVO view = new AiJobVO(10L, 2054153819121537036L, 7L, "queued", 0, null, null, null, false);
+        when(jobs.getOwned(11, 10)).thenReturn(view);
+        when(jobs.retry(11, 10)).thenReturn(view);
+        mvc.perform(get("/mood/ai-job/10").header("token", memberToken).param("userId", "22"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value("10"))
+                .andExpect(jsonPath("$.data.targetId").value("2054153819121537036"))
+                .andExpect(jsonPath("$.data.targetVersion").value("7"));
+        mvc.perform(post("/mood/ai-job/10/retry").header("token", memberToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("queued"));
+    }
+
+    @Test
+    void jobErrorsKeepHttpStatusAndHideResult() throws Exception {
+        when(jobs.getOwned(11, 10)).thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "无权访问该任务"));
+        when(jobs.retry(11, 10)).thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "心情记录不存在"));
+        mvc.perform(get("/mood/ai-job/10").header("token", memberToken))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.data").isEmpty());
+        mvc.perform(post("/mood/ai-job/10/retry").header("token", memberToken))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    void moodListAndDetailExposeVersionedViewsWithCompatibleFields() throws Exception {
+        var view = new com.xinyu.vo.MoodRecordVO(9L, 11L, "平静", "合成内容", null, 1, null, null,
+                7L, true, "running", 10L, null);
+        when(moods.getDetailView(9L, 11L)).thenReturn(view);
+        var page = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<com.xinyu.vo.MoodRecordVO>(1, 5, 1);
+        page.setRecords(java.util.List.of(view));
+        when(moods.listViews(11L, null, null, null, 1L, 5L)).thenReturn(page);
+        mvc.perform(get("/mood/detail/9").header("token", memberToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value("9"))
+                .andExpect(jsonPath("$.data.contentVersion").value("7"))
+                .andExpect(jsonPath("$.data.content").value("合成内容"))
+                .andExpect(jsonPath("$.data.aiReplyState").value("running"))
+                .andExpect(jsonPath("$.data.deletedAt").doesNotExist());
+        mvc.perform(get("/mood/list").header("token", memberToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value("1"))
+                .andExpect(jsonPath("$.data.records[0].jobId").value("10"))
+                .andExpect(jsonPath("$.data.records[0].moodType").value("平静"));
     }
 
     private static User user(Long id, String role, int status) {
