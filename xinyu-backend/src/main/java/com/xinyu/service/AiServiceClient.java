@@ -17,6 +17,7 @@ import org.apache.hc.client5.http.impl.io.ManagedHttpClientConnectionFactory;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.MessageConstraintException;
 import org.apache.hc.core5.http.config.Http1Config;
 import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
@@ -28,6 +29,7 @@ import java.net.URI;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
@@ -208,50 +210,88 @@ public final class AiServiceClient implements AutoCloseable {
 
     private MoodAiResponse parse(ClassicHttpResponse response, MoodAiRequest request) throws IOException {
         int status = response.getCode();
-        if (status >= 500 && status != 502 && status != 503 && status != 504) throw failure("provider_error");
-        if (status != 200 && status != 400 && status != 401 && status != 502 && status != 503 && status != 504) throw failure("invalid_model_response");
-        if (response.getEntity() == null || response.getEntity().getContentLength() > BODY_LIMIT_BYTES) throw failure("invalid_model_response");
-        String type = response.getEntity().getContentType();
-        if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/json")) throw failure("invalid_model_response");
-        // 先检查累计字节再交还响应资源；提前 close 流可能继续排空超大剩余正文。
-        InputStream stream = response.getEntity().getContent();
-        byte[] body = stream.readNBytes(BODY_LIMIT_BYTES + 1);
-        if (body.length > BODY_LIMIT_BYTES) throw failure("invalid_model_response");
-        JsonNode root;
-        try {
-            String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(body)).toString();
-            root = json.readTree(text);
-        } catch (IOException invalid) { throw failure("invalid_model_response"); }
-        if (status != 200) {
-            requireFields(root, Set.of("request_id", "code"));
-            if (!root.get("code").isTextual() || !(root.get("request_id").isNull() || root.get("request_id").isTextual())) throw failure("invalid_model_response");
-            String id = root.get("request_id").textValue(), code = root.get("code").textValue();
-            if ((id != null && !id.equals(request.requestId())) || !Objects.equals(ERROR_STATUS.get(code), status)) throw failure("invalid_model_response");
-            throw failure(code);
+        requireAcceptedStatus(status);
+        JsonNode root = readJsonBody(response.getEntity());
+        if (status != 200) throw parseErrorResponse(root, status, request);
+        return parseSuccessResponse(root, request);
+    }
+
+    private static void requireAcceptedStatus(int status) {
+        if (ACCEPTED_STATUS.contains(status)) return;
+        // 未约定的 5xx 视为上游故障；其他未约定状态视为协议不符。
+        throw failure(status >= 500 ? PROVIDER_ERROR : INVALID_MODEL_RESPONSE);
+    }
+
+    /** 只接受不超过上限的 application/json 严格 UTF-8 正文。 */
+    private JsonNode readJsonBody(HttpEntity entity) throws IOException {
+        if (entity == null || entity.getContentLength() > BODY_LIMIT_BYTES) throw failure(INVALID_MODEL_RESPONSE);
+        String type = entity.getContentType();
+        if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/json")) {
+            throw failure(INVALID_MODEL_RESPONSE);
         }
-        requireFields(root, SUCCESS_FIELDS);
+        // 先检查累计字节再交还响应资源；提前 close 流可能继续排空超大剩余正文。
+        byte[] body = entity.getContent().readNBytes(BODY_LIMIT_BYTES + 1);
+        if (body.length > BODY_LIMIT_BYTES) throw failure(INVALID_MODEL_RESPONSE);
+        try {
+            return json.readTree(decodeStrictUtf8(body));
+        } catch (IOException invalid) {
+            throw failure(INVALID_MODEL_RESPONSE);
+        }
+    }
+
+    private static String decodeStrictUtf8(byte[] body) throws CharacterCodingException {
+        return StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(body))
+                .toString();
+    }
+
+    /** 错误响应必须形如 {request_id, code}，且 code 与状态码配对；通过后原样透传 code。 */
+    private static AiServiceException parseErrorResponse(JsonNode root, int status, MoodAiRequest request) {
+        requireExactFields(root, ERROR_FIELDS);
+        JsonNode idNode = root.get("request_id");
+        JsonNode codeNode = root.get("code");
+        if (!codeNode.isTextual() || !(idNode.isNull() || idNode.isTextual())) throw failure(INVALID_MODEL_RESPONSE);
+
+        String id = idNode.textValue();
+        String code = codeNode.textValue();
+        boolean idMatches = id == null || id.equals(request.requestId());
+        boolean statusMatches = Objects.equals(ERROR_STATUS.get(code), status);
+        if (!idMatches || !statusMatches) throw failure(INVALID_MODEL_RESPONSE);
+        return failure(code);
+    }
+
+    private MoodAiResponse parseSuccessResponse(JsonNode root, MoodAiRequest request) throws IOException {
+        requireExactFields(root, SUCCESS_FIELDS);
         for (String field : SUCCESS_FIELDS) {
-            JsonNode value = root.get(field);
-            boolean valid = switch (field) {
-                case "attempt" -> value.isIntegralNumber() && value.canConvertToInt();
-                case "model_called" -> value.isBoolean();
-                case "model_name" -> value.isNull() || value.isTextual();
-                default -> value.isTextual();
-            };
-            if (!valid) throw failure("invalid_model_response");
+            if (!hasExpectedType(field, root.get(field))) throw failure(INVALID_MODEL_RESPONSE);
         }
         MoodAiResponse result = json.treeToValue(root, MoodAiResponse.class);
         try {
-            result.validatedReply(Long.parseLong(request.jobId()), request.attempt(), request.requestId(), Long.parseLong(request.sourceVersion()));
-        } catch (IllegalArgumentException invalid) { throw failure("invalid_model_response"); }
+            result.validatedReply(Long.parseLong(request.jobId()), request.attempt(),
+                    request.requestId(), Long.parseLong(request.sourceVersion()));
+        } catch (IllegalArgumentException invalid) {
+            throw failure(INVALID_MODEL_RESPONSE);
+        }
         return result;
     }
 
-    private static void requireFields(JsonNode root, Set<String> expected) {
-        if (root == null || !root.isObject()) throw failure("invalid_model_response");
-        Set<String> actual = new HashSet<>(); root.fieldNames().forEachRemaining(actual::add);
-        if (!actual.equals(expected)) throw failure("invalid_model_response");
+    /** 逐字段校验 JSON 类型，避免 Jackson 把字符串宽松转换为数字或布尔值。 */
+    private static boolean hasExpectedType(String field, JsonNode value) {
+        return switch (field) {
+            case "attempt" -> value.isIntegralNumber() && value.canConvertToInt();
+            case "model_called" -> value.isBoolean();
+            case "model_name" -> value.isNull() || value.isTextual();
+            default -> value.isTextual();
+        };
+    }
+
+    private static void requireExactFields(JsonNode root, Set<String> expected) {
+        if (root == null || !root.isObject()) throw failure(INVALID_MODEL_RESPONSE);
+        Set<String> actual = new HashSet<>();
+        root.fieldNames().forEachRemaining(actual::add);
+        if (!actual.equals(expected)) throw failure(INVALID_MODEL_RESPONSE);
     }
 
     private static void validateInput(MoodAiRequest request) {
