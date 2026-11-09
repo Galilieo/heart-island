@@ -37,23 +37,63 @@ import java.util.function.LongSupplier;
 
 /** 内部生成调用入口；资源在客户端关闭时统一回收，业务事务由调用方管理。 */
 public final class AiServiceClient implements AutoCloseable {
+    /** 单次调用的时间上限；只允许收紧，不允许超过生产初值。 */
     public record Limits(Duration connect, Duration read, Duration total) {
-        public static final Limits PRODUCTION = new Limits(Duration.ofSeconds(2), Duration.ofSeconds(45), Duration.ofSeconds(50));
+        private static final Duration MAX_CONNECT = Duration.ofSeconds(2);
+        private static final Duration MAX_READ = Duration.ofSeconds(45);
+        private static final Duration MAX_TOTAL = Duration.ofSeconds(50);
+        public static final Limits PRODUCTION = new Limits(MAX_CONNECT, MAX_READ, MAX_TOTAL);
 
         public Limits {
-            if (connect == null || read == null || total == null || connect.isNegative() || connect.isZero()
-                    || read.isNegative() || read.isZero() || total.isNegative() || total.isZero()
-                    || connect.compareTo(Duration.ofSeconds(2)) > 0 || read.compareTo(Duration.ofSeconds(45)) > 0
-                    || total.compareTo(Duration.ofSeconds(50)) > 0) throw new IllegalArgumentException("invalid_ai_service_configuration");
+            if (!isWithin(connect, MAX_CONNECT) || !isWithin(read, MAX_READ) || !isWithin(total, MAX_TOTAL)) {
+                throw new IllegalArgumentException(INVALID_CONFIGURATION);
+            }
+        }
+
+        private static boolean isWithin(Duration value, Duration max) {
+            return value != null && !value.isNegative() && !value.isZero() && value.compareTo(max) <= 0;
         }
     }
 
-    private static final int BODY_LIMIT = 16 * 1024;
+    // ---- 对外错误分类码 ----
+    private static final String INVALID_CONFIGURATION = "invalid_ai_service_configuration";
+    private static final String EXECUTION_INTERRUPTED = "execution_interrupted";
+    private static final String INVALID_REQUEST = "invalid_request";
+    private static final String PROVIDER_TIMEOUT = "provider_timeout";
+    private static final String PROVIDER_ERROR = "provider_error";
+    private static final String INVALID_MODEL_RESPONSE = "invalid_model_response";
+
+    /** Python 允许返回的错误码及其必须搭配的 HTTP 状态码；不一致即视为响应不可信。 */
+    private static final Map<String, Integer> ERROR_STATUS = Map.of(
+            "invalid_request", 400,
+            "unauthorized", 401,
+            "provider_timeout", 504,
+            "provider_error", 502,
+            "invalid_model_response", 502,
+            "overloaded", 503);
+    private static final Set<Integer> ACCEPTED_STATUS = Set.of(200, 400, 401, 502, 503, 504);
+
+    // ---- 协议与请求边界 ----
+    private static final String ENDPOINT_PATH = "/internal/v1/mood-replies";
+    private static final int BODY_LIMIT_BYTES = 16 * 1024;
+    private static final int MAX_HEADER_LINE = 8192;
+    private static final int MAX_HEADER_COUNT = 128;
+    private static final int MAX_JSON_DEPTH = 16;
+    private static final int MAX_JSON_NUMBER_LENGTH = 32;
+    private static final int MAX_BUDGET_MS = 40_000;
+    /** 给协议处理留的本地余量：剩余时间的 10%，最多 250ms。是本服务初值，不是供应商 SLA。 */
+    private static final long LOCAL_MARGIN_CAP_MS = 250;
+    private static final int MAX_CONTENT_LENGTH = 500;
+    private static final int MAX_ATTEMPT = 3;
+    private static final String REQUEST_ID_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,63}";
+    private static final String POSITIVE_LONG_PATTERN = "[1-9][0-9]{0,18}";
+    private static final Set<String> MOODS = Set.of(
+            "开心", "满足", "期待", "感动", "平静", "焦虑", "难过", "生气", "委屈", "孤独", "迷茫", "疲惫", "其他");
+
+    private static final Set<String> ERROR_FIELDS = Set.of("request_id", "code");
     private static final Set<String> SUCCESS_FIELDS = Set.of("request_id", "job_id", "attempt", "source_version",
             "reply_content", "result_kind", "model_called", "template_version", "model_name");
-    private static final Set<String> MOODS = Set.of("开心", "满足", "期待", "感动", "平静", "焦虑", "难过", "生气", "委屈", "孤独", "迷茫", "疲惫", "其他");
-    private static final Map<String, Integer> ERRORS = Map.of("invalid_request", 400, "unauthorized", 401,
-            "provider_timeout", 504, "provider_error", 502, "invalid_model_response", 502, "overloaded", 503);
+
     private final URI endpoint;
     private final String token;
     private final Limits limits;
@@ -66,7 +106,7 @@ public final class AiServiceClient implements AutoCloseable {
     // 独立解析器不继承全局 Long 序列化或宽松转换配置，禁止重复键和尾随 JSON。
     private final ObjectMapper json = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-            .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(16).maxStringLength(BODY_LIMIT).maxNumberLength(32).build())
+            .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(16).maxStringLength(BODY_LIMIT_BYTES).maxNumberLength(32).build())
             .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     public AiServiceClient(String baseUrl, String token, int concurrency) {
@@ -80,10 +120,7 @@ public final class AiServiceClient implements AutoCloseable {
     public AiServiceClient(String baseUrl, String token, int concurrency, Limits limits, LongSupplier clock) {
         try {
             URI base = URI.create(baseUrl);
-            if (!("http".equals(base.getScheme()) || "https".equals(base.getScheme())) || base.getHost() == null
-                    || base.getUserInfo() != null || base.getRawQuery() != null || base.getRawFragment() != null
-                    || base.getPort() > 65535 || concurrency < 1 || limits == null || clock == null
-                    || token == null || token.isEmpty() || token.chars().anyMatch(c -> c < 33 || c > 126)) {
+            if (!isSafeBaseUri(base) || !isValidToken(token) || concurrency < 1 || limits == null || clock == null) {
                 throw new IllegalArgumentException();
             }
             endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/internal/v1/mood-replies");
@@ -173,13 +210,13 @@ public final class AiServiceClient implements AutoCloseable {
         int status = response.getCode();
         if (status >= 500 && status != 502 && status != 503 && status != 504) throw failure("provider_error");
         if (status != 200 && status != 400 && status != 401 && status != 502 && status != 503 && status != 504) throw failure("invalid_model_response");
-        if (response.getEntity() == null || response.getEntity().getContentLength() > BODY_LIMIT) throw failure("invalid_model_response");
+        if (response.getEntity() == null || response.getEntity().getContentLength() > BODY_LIMIT_BYTES) throw failure("invalid_model_response");
         String type = response.getEntity().getContentType();
         if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/json")) throw failure("invalid_model_response");
         // 先检查累计字节再交还响应资源；提前 close 流可能继续排空超大剩余正文。
         InputStream stream = response.getEntity().getContent();
-        byte[] body = stream.readNBytes(BODY_LIMIT + 1);
-        if (body.length > BODY_LIMIT) throw failure("invalid_model_response");
+        byte[] body = stream.readNBytes(BODY_LIMIT_BYTES + 1);
+        if (body.length > BODY_LIMIT_BYTES) throw failure("invalid_model_response");
         JsonNode root;
         try {
             String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
@@ -190,7 +227,7 @@ public final class AiServiceClient implements AutoCloseable {
             requireFields(root, Set.of("request_id", "code"));
             if (!root.get("code").isTextual() || !(root.get("request_id").isNull() || root.get("request_id").isTextual())) throw failure("invalid_model_response");
             String id = root.get("request_id").textValue(), code = root.get("code").textValue();
-            if ((id != null && !id.equals(request.requestId())) || !Objects.equals(ERRORS.get(code), status)) throw failure("invalid_model_response");
+            if ((id != null && !id.equals(request.requestId())) || !Objects.equals(ERROR_STATUS.get(code), status)) throw failure("invalid_model_response");
             throw failure(code);
         }
         requireFields(root, SUCCESS_FIELDS);
@@ -219,19 +256,72 @@ public final class AiServiceClient implements AutoCloseable {
 
     private static void validateInput(MoodAiRequest request) {
         try {
-            if (request == null || request.requestId() == null || !request.requestId().matches("[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
-                    || request.jobId() == null || !request.jobId().matches("[1-9][0-9]{0,18}") || Long.parseLong(request.jobId()) <= 0
-                    || request.sourceVersion() == null || !request.sourceVersion().matches("[1-9][0-9]{0,18}") || Long.parseLong(request.sourceVersion()) <= 0
-                    || request.attempt() < 1 || request.attempt() > 3 || !MOODS.contains(request.moodType() == null ? "" : request.moodType())
-                    || request.budgetMs() < 1 || request.budgetMs() > 40000 || request.content() == null
-                    || request.content().length() > 500 || request.content().codePoints().noneMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c) && c != 0x85)) throw failure("invalid_request");
-            for (int i = 0; i < request.content().length(); i++) {
-                char unit = request.content().charAt(i);
-                if (Character.isHighSurrogate(unit)) {
-                    if (++i >= request.content().length() || !Character.isLowSurrogate(request.content().charAt(i))) throw failure("invalid_request");
-                } else if (Character.isLowSurrogate(unit)) throw failure("invalid_request");
+            require(request != null);
+            require(matches(request.requestId(), REQUEST_ID_PATTERN));
+            require(isPositiveLong(request.jobId()));
+            require(isPositiveLong(request.sourceVersion()));
+            require(request.attempt() >= 1 && request.attempt() <= MAX_ATTEMPT);
+            require(MOODS.contains(request.moodType() == null ? "" : request.moodType()));
+            require(request.budgetMs() >= 1 && request.budgetMs() <= MAX_BUDGET_MS);
+            require(isValidContent(request.content()));
+        } catch (NumberFormatException overflow) {
+            throw failure(INVALID_REQUEST);
+        }
+    }
+
+    private static void require(boolean condition) {
+        if (!condition) throw failure(INVALID_REQUEST);
+    }
+
+    private static boolean matches(String value, String pattern) {
+        return value != null && value.matches(pattern);
+    }
+
+    /** 19 位以内的正整数字符串；超出 long 范围时 parseLong 抛出 NumberFormatException。 */
+    private static boolean isPositiveLong(String value) {
+        return matches(value, POSITIVE_LONG_PATTERN) && Long.parseLong(value) > 0;
+    }
+
+    /** 正文非空、不超长、不全是空白，且不含孤立的代理字符。 */
+    private static boolean isValidContent(String content) {
+        return content != null
+                && content.length() <= MAX_CONTENT_LENGTH
+                && content.codePoints().anyMatch(c -> !isUnicodeWhitespace(c))
+                && hasPairedSurrogates(content);
+    }
+
+    /** 与 Python str.strip 的 Unicode 白字符口径保持一致。 */
+    private static boolean isUnicodeWhitespace(int codePoint) {
+        return Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint) || codePoint == 0x85;
+    }
+
+    private static boolean hasPairedSurrogates(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char unit = text.charAt(i);
+            if (Character.isHighSurrogate(unit)) {
+                i++;
+                if (i >= text.length() || !Character.isLowSurrogate(text.charAt(i))) return false;
+            } else if (Character.isLowSurrogate(unit)) {
+                return false;
             }
-        } catch (NumberFormatException invalid) { throw failure("invalid_request"); }
+        }
+        return true;
+    }
+
+    /** 只允许 http(s)，且地址中不得带用户信息、查询串或片段。 */
+    private static boolean isSafeBaseUri(URI base) {
+        boolean httpScheme = "http".equals(base.getScheme()) || "https".equals(base.getScheme());
+        return httpScheme
+                && base.getHost() != null
+                && base.getUserInfo() == null
+                && base.getRawQuery() == null
+                && base.getRawFragment() == null
+                && base.getPort() <= 65535;
+    }
+
+    /** 令牌只能由可见 ASCII 字符组成，防止头部注入。 */
+    private static boolean isValidToken(String token) {
+        return token != null && !token.isEmpty() && token.chars().allMatch(c -> c >= 33 && c <= 126);
     }
 
     private void checkDeadline(long deadline, AtomicBoolean expired) {
