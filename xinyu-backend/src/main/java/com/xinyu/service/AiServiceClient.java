@@ -14,6 +14,7 @@ import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.ManagedHttpClientConnectionFactory;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
@@ -24,21 +25,33 @@ import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.io.CloseMode;
 import org.apache.hc.core5.util.Timeout;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.charset.CodingErrorAction;
 import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 
-/** 内部生成调用入口；资源在客户端关闭时统一回收，业务事务由调用方管理。 */
+/**
+ * Java 调用 Python 内部生成服务的 HTTP 客户端。
+ *
+ * <p>每次 {@link #generate} 都受同一个总截止时间约束：连接、等待响应、读取正文和本地校验都计入其中，
+ * 到期由定时器直接取消底层请求。失败只抛出带安全分类码的 {@link AiServiceException}，
+ * 不携带原始响应、密钥或异常链。资源在 {@link #close} 时统一回收，业务事务由调用方管理。</p>
+ */
 public final class AiServiceClient implements AutoCloseable {
+
     /** 单次调用的时间上限；只允许收紧，不允许超过生产初值。 */
     public record Limits(Duration connect, Duration read, Duration total) {
         private static final Duration MAX_CONNECT = Duration.ofSeconds(2);
@@ -105,11 +118,17 @@ public final class AiServiceClient implements AutoCloseable {
     private final Object lifecycle = new Object();
     private final Set<HttpPost> active = ConcurrentHashMap.newKeySet();
     private volatile boolean closed;
-    // 独立解析器不继承全局 Long 序列化或宽松转换配置，禁止重复键和尾随 JSON。
+
+    /** 独立解析器：不继承全局 Long 序列化或宽松转换配置，禁止重复键和尾随 JSON。 */
     private final ObjectMapper json = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-            .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(16).maxStringLength(BODY_LIMIT_BYTES).maxNumberLength(32).build())
-            .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+            .streamReadConstraints(StreamReadConstraints.builder()
+                    .maxNestingDepth(MAX_JSON_DEPTH)
+                    .maxStringLength(BODY_LIMIT_BYTES)
+                    .maxNumberLength(MAX_JSON_NUMBER_LENGTH)
+                    .build())
+            .build())
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     public AiServiceClient(String baseUrl, String token, int concurrency) {
         this(baseUrl, token, concurrency, Limits.PRODUCTION);
@@ -125,61 +144,45 @@ public final class AiServiceClient implements AutoCloseable {
             if (!isSafeBaseUri(base) || !isValidToken(token) || concurrency < 1 || limits == null || clock == null) {
                 throw new IllegalArgumentException();
             }
-            endpoint = URI.create(baseUrl.replaceAll("/+$", "") + "/internal/v1/mood-replies");
+            endpoint = URI.create(baseUrl.replaceAll("/+$", "") + ENDPOINT_PATH);
         } catch (RuntimeException invalid) {
             // 不附带原始配置或异常链，避免启动失败时回显密钥和地址中的凭据。
-            throw new IllegalArgumentException("invalid_ai_service_configuration");
+            throw new IllegalArgumentException(INVALID_CONFIGURATION);
         }
         this.token = token;
         this.limits = limits;
         this.clock = clock;
-        var factory = ManagedHttpClientConnectionFactory.builder()
-                .http1Config(Http1Config.custom().setMaxLineLength(8192).setMaxHeaderCount(128).build())
-                .responseParserFactory(BoundedAiResponseParser::create).build();
-        var connections = PoolingHttpClientConnectionManagerBuilder.create().setConnectionFactory(factory)
-                .setDnsResolver(FixedAiDnsResolver.create(endpoint.getHost(), limits.connect()))
-                .setMaxConnTotal(concurrency).setMaxConnPerRoute(concurrency)
-                .setDefaultConnectionConfig(ConnectionConfig.custom()
-                        .setConnectTimeout(Timeout.ofMilliseconds(Math.max(1, limits.connect().toMillis())))
-                        .setSocketTimeout(Timeout.ofMilliseconds(Math.max(1, limits.read().toMillis()))).build()).build();
-        http = HttpClients.custom().setConnectionManager(connections)
-                .disableAutomaticRetries().disableRedirectHandling().disableContentCompression().disableCookieManagement().build();
-        deadlines = new ScheduledThreadPoolExecutor(1, work -> {
-            Thread thread = new Thread(work, "ai-http-deadline"); thread.setDaemon(true); return thread;
-        });
-        deadlines.setRemoveOnCancelPolicy(true);
+        this.http = HttpClients.custom()
+                .setConnectionManager(connectionManager(endpoint.getHost(), concurrency, limits))
+                .disableAutomaticRetries()
+                .disableRedirectHandling()
+                .disableContentCompression()
+                .disableCookieManagement()
+                .build();
+        this.deadlines = new ScheduledThreadPoolExecutor(1, work -> daemonThread(work, "ai-http-deadline"));
+        this.deadlines.setRemoveOnCancelPolicy(true);
     }
 
+    // =====================================================================
+    // 生成调用主流程
+    // =====================================================================
+
     public MoodAiResponse generate(MoodAiRequest request, Duration remaining) {
-        if (Thread.currentThread().isInterrupted() || closed) throw failure("execution_interrupted");
-        if (remaining == null || remaining.isNegative() || remaining.isZero()) throw failure("provider_timeout");
-        long allotted = remaining.compareTo(limits.total()) < 0 ? remaining.toNanos() : limits.total().toNanos();
-        long deadline = clock.getAsLong() + allotted;
+        if (Thread.currentThread().isInterrupted() || closed) throw failure(EXECUTION_INTERRUPTED);
+        if (remaining == null || remaining.isNegative() || remaining.isZero()) throw failure(PROVIDER_TIMEOUT);
+
+        // 先按 Duration 限幅，再转纳秒，避免调用方传入极大时间时转换溢出。
+        Duration allowed = remaining.compareTo(limits.total()) < 0 ? remaining : limits.total();
+        long deadline = clock.getAsLong() + allowed.toNanos();
         validateInput(request);
-        // 为协议处理留少量本地余量；这是本服务初值，不是供应商 SLA 或数据库提交预算。
-        long millis = Math.max(0, deadline - clock.getAsLong()) / 1_000_000;
-        int budget = (int) Math.min(request.budgetMs(), Math.min(40000, millis - Math.min(250, millis / 10)));
-        if (budget < 1) throw failure("provider_timeout");
-        MoodAiRequest input = new MoodAiRequest(request.requestId(), request.jobId(), request.attempt(),
-                request.sourceVersion(), request.moodType(), request.content(), budget);
-        HttpPost post = new HttpPost(endpoint);
-        try {
-            post.setHeader("Authorization", "Bearer " + token);
-            post.setHeader("Accept", "application/json");
-            post.setEntity(new ByteArrayEntity(json.writeValueAsBytes(input), ContentType.APPLICATION_JSON));
-        } catch (IOException invalid) { throw failure("invalid_request"); }
-        post.setConfig(RequestConfig.custom()
-                .setConnectionRequestTimeout(Timeout.ofMilliseconds(Math.max(1, millis)))
-                .setResponseTimeout(Timeout.ofMilliseconds(Math.max(1, Math.min(limits.read().toMillis(), millis))))
-                .build());
+
+        long remainingMs = nanosUntil(deadline) / 1_000_000;
+        int budgetMs = providerBudgetMs(request.budgetMs(), remainingMs);
+        if (budgetMs < 1) throw failure(PROVIDER_TIMEOUT);
+
+        HttpPost post = buildPost(withBudget(request, budgetMs), remainingMs);
         AtomicBoolean expired = new AtomicBoolean();
-        ScheduledFuture<?> alarm;
-        synchronized (lifecycle) {
-            if (closed) throw failure("execution_interrupted");
-            active.add(post);
-            // 定时器直接取消底层请求；执行调用仍在当前线程，退出后才由 worker 归还槽位。
-            alarm = deadlines.schedule(() -> { expired.set(true); post.cancel(); }, Math.max(0, deadline - clock.getAsLong()), TimeUnit.NANOSECONDS);
-        }
+        ScheduledFuture<?> alarm = register(post, deadline, expired);
         try {
             checkDeadline(deadline, expired);
             MoodAiResponse result = http.execute(post, response -> {
@@ -198,15 +201,77 @@ public final class AiServiceClient implements AutoCloseable {
         } catch (AiServiceException safe) {
             throw safe;
         } catch (Exception problem) {
-            if (closed || Thread.currentThread().isInterrupted()) throw failure("execution_interrupted");
-            if (expired.get() || clock.getAsLong() - deadline >= 0 || hasCause(problem, SocketTimeoutException.class)) throw failure("provider_timeout");
-            if (hasCause(problem, MessageConstraintException.class)) throw failure("invalid_model_response");
-            throw failure("provider_error");
+            throw classifyTransportFailure(problem, deadline, expired);
         } finally {
             alarm.cancel(false);
             active.remove(post);
         }
     }
+
+    /** 传给 Python 的预算：不超过调用方请求值、上限 40 秒，并扣掉本地协议余量。 */
+    private static int providerBudgetMs(int requestedMs, long remainingMs) {
+        long localMargin = Math.min(LOCAL_MARGIN_CAP_MS, remainingMs / 10);
+        long available = Math.min(MAX_BUDGET_MS, remainingMs - localMargin);
+        return (int) Math.min(requestedMs, available);
+    }
+
+    private static MoodAiRequest withBudget(MoodAiRequest r, int budgetMs) {
+        return new MoodAiRequest(r.requestId(), r.jobId(), r.attempt(), r.sourceVersion(), r.moodType(), r.content(), budgetMs);
+    }
+
+    private HttpPost buildPost(MoodAiRequest input, long remainingMs) {
+        HttpPost post = new HttpPost(endpoint);
+        try {
+            post.setHeader("Authorization", "Bearer " + token);
+            post.setHeader("Accept", "application/json");
+            post.setEntity(new ByteArrayEntity(json.writeValueAsBytes(input), ContentType.APPLICATION_JSON));
+        } catch (IOException invalid) {
+            throw failure(INVALID_REQUEST);
+        }
+        post.setConfig(RequestConfig.custom()
+                .setConnectionRequestTimeout(atLeastOneMs(remainingMs))
+                .setResponseTimeout(atLeastOneMs(Math.min(limits.read().toMillis(), remainingMs)))
+                .build());
+        return post;
+    }
+
+    /**
+     * 登记进行中的请求并排定截止定时器。与 close 在同一把锁下执行，保证关闭后不会再有新请求漏网。
+     * 定时器直接取消底层请求；执行调用仍在当前线程，退出后才由 worker 归还槽位。
+     */
+    private ScheduledFuture<?> register(HttpPost post, long deadline, AtomicBoolean expired) {
+        synchronized (lifecycle) {
+            if (closed) throw failure(EXECUTION_INTERRUPTED);
+            active.add(post);
+            return deadlines.schedule(() -> {
+                expired.set(true);
+                post.cancel();
+            }, Math.max(0, nanosUntil(deadline)), TimeUnit.NANOSECONDS);
+        }
+    }
+
+    /** 把 HTTP 层的未知异常收敛为安全分类码；判断顺序即优先级。 */
+    private AiServiceException classifyTransportFailure(Exception problem, long deadline, AtomicBoolean expired) {
+        if (closed || Thread.currentThread().isInterrupted()) return failure(EXECUTION_INTERRUPTED);
+        if (expired.get() || nanosUntil(deadline) <= 0 || hasCause(problem, SocketTimeoutException.class)) {
+            return failure(PROVIDER_TIMEOUT);
+        }
+        if (hasCause(problem, MessageConstraintException.class)) return failure(INVALID_MODEL_RESPONSE);
+        return failure(PROVIDER_ERROR);
+    }
+
+    private void checkDeadline(long deadline, AtomicBoolean expired) {
+        if (closed || Thread.currentThread().isInterrupted()) throw failure(EXECUTION_INTERRUPTED);
+        if (expired.get() || nanosUntil(deadline) <= 0) throw failure(PROVIDER_TIMEOUT);
+    }
+
+    private long nanosUntil(long deadline) {
+        return deadline - clock.getAsLong();
+    }
+
+    // =====================================================================
+    // 响应解析：状态码 → 正文读取 → JSON 结构 → 业务关联校验
+    // =====================================================================
 
     private MoodAiResponse parse(ClassicHttpResponse response, MoodAiRequest request) throws IOException {
         int status = response.getCode();
@@ -294,6 +359,10 @@ public final class AiServiceClient implements AutoCloseable {
         if (!actual.equals(expected)) throw failure(INVALID_MODEL_RESPONSE);
     }
 
+    // =====================================================================
+    // 输入与配置校验
+    // =====================================================================
+
     private static void validateInput(MoodAiRequest request) {
         try {
             require(request != null);
@@ -364,17 +433,51 @@ public final class AiServiceClient implements AutoCloseable {
         return token != null && !token.isEmpty() && token.chars().allMatch(c -> c >= 33 && c <= 126);
     }
 
-    private void checkDeadline(long deadline, AtomicBoolean expired) {
-        if (closed || Thread.currentThread().isInterrupted()) throw failure("execution_interrupted");
-        if (expired.get() || clock.getAsLong() - deadline >= 0) throw failure("provider_timeout");
+    // =====================================================================
+    // 基础设施
+    // =====================================================================
+
+    /** 连接池：限制响应头大小、使用启动时固定的 DNS 快照，并设置连接与读取超时。 */
+    private static PoolingHttpClientConnectionManager connectionManager(String host, int concurrency, Limits limits) {
+        var connectionFactory = ManagedHttpClientConnectionFactory.builder()
+                .http1Config(Http1Config.custom()
+                        .setMaxLineLength(MAX_HEADER_LINE)
+                        .setMaxHeaderCount(MAX_HEADER_COUNT)
+                        .build())
+                .responseParserFactory(BoundedAiResponseParser::create)
+                .build();
+        return PoolingHttpClientConnectionManagerBuilder.create()
+                .setConnectionFactory(connectionFactory)
+                .setDnsResolver(FixedAiDnsResolver.create(host, limits.connect()))
+                .setMaxConnTotal(concurrency)
+                .setMaxConnPerRoute(concurrency)
+                .setDefaultConnectionConfig(ConnectionConfig.custom()
+                        .setConnectTimeout(atLeastOneMs(limits.connect().toMillis()))
+                        .setSocketTimeout(atLeastOneMs(limits.read().toMillis()))
+                        .build())
+                .build();
+    }
+
+    private static Timeout atLeastOneMs(long millis) {
+        return Timeout.ofMilliseconds(Math.max(1, millis));
+    }
+
+    static Thread daemonThread(Runnable work, String name) {
+        Thread thread = new Thread(work, name);
+        thread.setDaemon(true);
+        return thread;
     }
 
     private static boolean hasCause(Throwable error, Class<? extends Throwable> type) {
-        for (Throwable current = error; current != null; current = current.getCause()) if (type.isInstance(current)) return true;
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) return true;
+        }
         return false;
     }
 
-    private static AiServiceException failure(String code) { return new AiServiceException(code); }
+    private static AiServiceException failure(String code) {
+        return new AiServiceException(code);
+    }
 
     @Override
     public void close() {

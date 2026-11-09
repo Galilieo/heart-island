@@ -184,6 +184,16 @@ class AiServiceClientTests {
     }
 
     @Test
+    void capsLargeCallerBudgetBeforeConvertingToNanoseconds() throws Exception {
+        try (Peer peer = new Peer((socket, input, wire) -> respond(socket, 200, GOOD));
+             AiServiceClient client = new AiServiceClient(peer.url(), SECRET, 1)) {
+            // 调用方给出的时间再大，也应先收紧到客户端上限，不能在单位转换时溢出。
+            assertThat(client.generate(request(), Duration.ofSeconds(Long.MAX_VALUE)).resultKind())
+                    .isEqualTo("MODEL");
+        }
+    }
+
+    @Test
     void refusedConnectionIsSafeProviderError() throws Exception {
         int port;
         try (ServerSocket reserved = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { port = reserved.getLocalPort(); }

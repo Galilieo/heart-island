@@ -17,9 +17,8 @@ final class FixedAiDnsResolver implements DnsResolver {
 
     /** 初始化解析失败只缓存不可用状态，不阻止业务应用启动；修改服务地址后需重建客户端。 */
     static FixedAiDnsResolver snapshot(String host, Duration timeout, Callable<InetAddress[]> lookup) {
-        ExecutorService initializer = Executors.newSingleThreadExecutor(work -> {
-            Thread thread = new Thread(work, "ai-http-dns-init"); thread.setDaemon(true); return thread;
-        });
+        ExecutorService initializer = Executors.newSingleThreadExecutor(
+                work -> AiServiceClient.daemonThread(work, "ai-http-dns-init"));
         Future<InetAddress[]> pending = initializer.submit(lookup);
         InetAddress[] resolved = new InetAddress[0];
         try {
