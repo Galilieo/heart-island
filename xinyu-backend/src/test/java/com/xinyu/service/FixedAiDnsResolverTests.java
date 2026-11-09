@@ -59,8 +59,8 @@ class FixedAiDnsResolverTests {
                     lookups.incrementAndGet();
                     entered.countDown();
                     try {
-                        awaitIgnoringInterrupt(release);
-                        return loopback();
+                        AiServiceClientDnsTests.awaitIgnoringInterrupt(release);
+                        return AiServiceClientDnsTests.loopback();
                     } finally { exited.countDown(); }
                 })) {
             var first = resolver.prepare().toCompletableFuture();
@@ -77,15 +77,6 @@ class FixedAiDnsResolverTests {
         } finally {
             release.countDown();
             assertThat(exited.await(1, TimeUnit.SECONDS)).isTrue();
-        }
-    }
-    private static InetAddress[] loopback() throws Exception {
-        return new InetAddress[]{InetAddress.getByAddress(new byte[]{127, 0, 0, 1})};
-    }
-
-    private static void awaitIgnoringInterrupt(CountDownLatch gate) {
-        while (gate.getCount() != 0) {
-            try { gate.await(); } catch (InterruptedException ignored) { }
         }
     }
 }

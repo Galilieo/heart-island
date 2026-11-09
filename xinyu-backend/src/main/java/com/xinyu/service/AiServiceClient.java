@@ -26,6 +26,7 @@ import org.apache.hc.core5.io.CloseMode;
 import org.apache.hc.core5.util.Timeout;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
+import java.net.InetAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -36,7 +37,13 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +53,7 @@ import java.util.function.LongSupplier;
 /**
  * Java 调用 Python 内部生成服务的 HTTP 客户端。
  *
- * <p>每次 {@link #generate} 都受同一个总截止时间约束：连接、等待响应、读取正文和本地校验都计入其中，
+ * <p>每次 {@link #generateAsync} 都受同一个总截止时间约束：DNS、连接、读取和本地校验都计入其中，
  * 到期由定时器直接取消底层请求。失败只抛出带安全分类码的 {@link AiServiceException}，
  * 不携带原始响应、密钥或异常链。资源在 {@link #close} 时统一回收，业务事务由调用方管理。</p>
  */
@@ -116,7 +123,11 @@ public final class AiServiceClient implements AutoCloseable {
     private final CloseableHttpClient http;
     private final ScheduledThreadPoolExecutor deadlines;
     private final Object lifecycle = new Object();
-    private final Set<HttpPost> active = ConcurrentHashMap.newKeySet();
+    private final Set<Call> active = ConcurrentHashMap.newKeySet();
+    private final FixedAiDnsResolver dns;
+    private final ThreadPoolExecutor httpWorkers;
+    private final int concurrency;
+    private static final Duration DEFAULT_DNS_FAILURE_TTL = Duration.ofSeconds(10);
     private volatile boolean closed;
 
     /** 独立解析器：不继承全局 Long 序列化或宽松转换配置，禁止重复键和尾随 JSON。 */
@@ -139,9 +150,22 @@ public final class AiServiceClient implements AutoCloseable {
     }
 
     public AiServiceClient(String baseUrl, String token, int concurrency, Limits limits, LongSupplier clock) {
+        this(baseUrl, token, concurrency, limits, clock, DEFAULT_DNS_FAILURE_TTL);
+    }
+
+    public AiServiceClient(String baseUrl, String token, int concurrency, Limits limits,
+                           LongSupplier clock, Duration dnsFailureTtl) {
+        this(baseUrl, token, concurrency, limits, clock, dnsFailureTtl, null);
+    }
+
+    /** 测试可替换系统解析与时钟；正式调用仍使用固定配置中的主机和系统DNS。 */
+    AiServiceClient(String baseUrl, String token, int concurrency, Limits limits,
+                    LongSupplier clock, Duration dnsFailureTtl, Callable<InetAddress[]> lookup) {
         try {
             URI base = URI.create(baseUrl);
-            if (!isSafeBaseUri(base) || !isValidToken(token) || concurrency < 1 || limits == null || clock == null) {
+            if (!isSafeBaseUri(base) || !isValidToken(token) || concurrency < 1 || limits == null || clock == null
+                    || dnsFailureTtl == null || dnsFailureTtl.isNegative() || dnsFailureTtl.isZero()
+                    || dnsFailureTtl.compareTo(Duration.ofHours(1)) > 0) {
                 throw new IllegalArgumentException();
             }
             endpoint = URI.create(baseUrl.replaceAll("/+$", "") + ENDPOINT_PATH);
@@ -152,8 +176,15 @@ public final class AiServiceClient implements AutoCloseable {
         this.token = token;
         this.limits = limits;
         this.clock = clock;
+        this.concurrency = concurrency;
+        this.dns = new FixedAiDnsResolver(endpoint.getHost(), limits.connect(), dnsFailureTtl, clock,
+                lookup != null ? lookup : () -> InetAddress.getAllByName(endpoint.getHost()));
+        // 队列只承接旧任务结束／取消时尚未归还的物理线程；逻辑准入仍限制为concurrency。
+        this.httpWorkers = new ThreadPoolExecutor(concurrency, concurrency, 0, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(concurrency), work -> daemonThread(work, "ai-http-execute"),
+                new ThreadPoolExecutor.AbortPolicy());
         this.http = HttpClients.custom()
-                .setConnectionManager(connectionManager(endpoint.getHost(), concurrency, limits))
+                .setConnectionManager(connectionManager(dns, concurrency, limits))
                 .disableAutomaticRetries()
                 .disableRedirectHandling()
                 .disableContentCompression()
@@ -167,44 +198,135 @@ public final class AiServiceClient implements AutoCloseable {
     // 生成调用主流程
     // =====================================================================
 
+    /** 同步兼容入口，会阻塞调用线程；worker必须使用generateAsync避免占线程等待DNS。 */
     public MoodAiResponse generate(MoodAiRequest request, Duration remaining) {
-        if (Thread.currentThread().isInterrupted() || closed) throw failure(EXECUTION_INTERRUPTED);
-        if (remaining == null || remaining.isNegative() || remaining.isZero()) throw failure(PROVIDER_TIMEOUT);
-
-        // 先按 Duration 限幅，再转纳秒，避免调用方传入极大时间时转换溢出。
-        Duration allowed = remaining.compareTo(limits.total()) < 0 ? remaining : limits.total();
-        long deadline = clock.getAsLong() + allowed.toNanos();
-        validateInput(request);
-
-        long remainingMs = nanosUntil(deadline) / 1_000_000;
-        int budgetMs = providerBudgetMs(request.budgetMs(), remainingMs);
-        if (budgetMs < 1) throw failure(PROVIDER_TIMEOUT);
-
-        HttpPost post = buildPost(withBudget(request, budgetMs), remainingMs);
-        AtomicBoolean expired = new AtomicBoolean();
-        ScheduledFuture<?> alarm = register(post, deadline, expired);
+        CompletableFuture<MoodAiResponse> result = generateAsync(request, remaining);
         try {
-            checkDeadline(deadline, expired);
-            MoodAiResponse result = http.execute(post, response -> {
+            return result.get();
+        } catch (InterruptedException interrupted) {
+            result.cancel(true);
+            Thread.currentThread().interrupt();
+            throw failure(EXECUTION_INTERRUPTED);
+        } catch (ExecutionException problem) {
+            if (problem.getCause() instanceof AiServiceException safe) throw safe;
+            throw failure(PROVIDER_ERROR);
+        }
+    }
+
+    /**
+     * DNS阶段只登记续接；每个请求的deadline、取消和结果独立，HTTP阶段才占用有界执行线程。
+     * 调用方的同步续接必须保持轻量；数据库操作等阻塞任务应使用whenCompleteAsync及显式执行器。
+     */
+    public CompletableFuture<MoodAiResponse> generateAsync(MoodAiRequest request, Duration remaining) {
+        Call call;
+        try {
+            if (Thread.currentThread().isInterrupted() || closed) throw failure(EXECUTION_INTERRUPTED);
+            if (remaining == null || remaining.isNegative() || remaining.isZero()) throw failure(PROVIDER_TIMEOUT);
+            Duration allowed = remaining.compareTo(limits.total()) < 0 ? remaining : limits.total();
+            long deadline = clock.getAsLong() + allowed.toNanos();
+            validateInput(request);
+            call = new Call(request, deadline);
+            synchronized (lifecycle) {
+                if (closed) throw failure(EXECUTION_INTERRUPTED);
+                if (active.size() >= concurrency) throw failure("overloaded");
+                active.add(call);
+                call.alarm = deadlines.schedule(() -> {
+                    call.expired.set(true);
+                    call.cancelPost();
+                    finish(call, null, failure(PROVIDER_TIMEOUT));
+                }, Math.max(0, nanosUntil(deadline)), TimeUnit.NANOSECONDS);
+            }
+        } catch (AiServiceException invalid) {
+            return CompletableFuture.failedFuture(invalid);
+        }
+        call.result.whenComplete((value, problem) -> release(call));
+        dns.prepare().whenComplete((ignored, problem) -> afterDns(call, problem));
+        return call.result;
+    }
+
+    private void afterDns(Call call, Throwable dnsFailure) {
+        if (call.result.isDone()) return;
+        try {
+            synchronized (lifecycle) {
+                checkDeadline(call.deadline, call.expired);
+                if (call.result.isDone()) return;
+                if (dnsFailure != null) throw failure(PROVIDER_ERROR);
+                // DNS等待已经消耗预算，此处重新计算，不能查到地址后再获得完整50秒。
+                long remainingMs = nanosUntil(call.deadline) / 1_000_000;
+                int budgetMs = providerBudgetMs(call.request.budgetMs(), remainingMs);
+                if (budgetMs < 1) throw failure(PROVIDER_TIMEOUT);
+                call.post = buildPost(withBudget(call.request, budgetMs), remainingMs);
+                call.task = () -> executeHttp(call);
+                httpWorkers.execute(call.task);
+            }
+        } catch (RejectedExecutionException full) {
+            finish(call, null, failure(closed ? EXECUTION_INTERRUPTED : "overloaded"));
+        } catch (AiServiceException safe) {
+            finish(call, null, safe);
+        }
+    }
+
+    private void executeHttp(Call call) {
+        if (call.result.isDone()) return;
+        try {
+            checkDeadline(call.deadline, call.expired);
+            MoodAiResponse result = http.execute(call.post, response -> {
                 try {
-                    MoodAiResponse parsed = parse(response, request);
-                    checkDeadline(deadline, expired);
+                    MoodAiResponse parsed = parse(response, call.request);
+                    checkDeadline(call.deadline, call.expired);
                     return parsed;
                 } catch (IOException | RuntimeException problem) {
-                    // 防止响应处理器关闭时继续消费未知／超大剩余正文。
-                    post.cancel();
+                    call.cancelPost();
                     throw problem;
                 }
             });
-            checkDeadline(deadline, expired);
-            return result;
+            checkDeadline(call.deadline, call.expired);
+            finish(call, result, null);
         } catch (AiServiceException safe) {
-            throw safe;
+            finish(call, null, safe);
         } catch (Exception problem) {
-            throw classifyTransportFailure(problem, deadline, expired);
-        } finally {
-            alarm.cancel(false);
-            active.remove(post);
+            finish(call, null, classifyTransportFailure(problem, call.deadline, call.expired));
+        }
+    }
+
+    private void finish(Call call, MoodAiResponse value, AiServiceException problem) {
+        if (!call.finished.compareAndSet(false, true)) return;
+        // 先释放逻辑容量再公开结果，允许调用方在完成回调里立即提交下一请求。
+        release(call);
+        if (problem == null) call.result.complete(value);
+        else call.result.completeExceptionally(problem);
+    }
+
+    private void release(Call call) {
+        synchronized (lifecycle) {
+            call.alarm.cancel(false);
+            call.cancelPost();
+            if (call.task != null) httpWorkers.remove(call.task);
+            active.remove(call);
+        }
+    }
+
+    /** 测试观察实际HTTP线程占用，区别于等待DNS的逻辑请求数。 */
+    int httpActiveCount() { return httpWorkers.getActiveCount(); }
+
+    private static final class Call {
+        final MoodAiRequest request;
+        final long deadline;
+        final AtomicBoolean expired = new AtomicBoolean();
+        final AtomicBoolean finished = new AtomicBoolean();
+        final CompletableFuture<MoodAiResponse> result = new CompletableFuture<>();
+        volatile HttpPost post;
+        Runnable task;
+        ScheduledFuture<?> alarm;
+
+        Call(MoodAiRequest request, long deadline) {
+            this.request = request;
+            this.deadline = deadline;
+        }
+
+        void cancelPost() {
+            HttpPost current = post;
+            if (current != null) current.cancel();
         }
     }
 
@@ -233,21 +355,6 @@ public final class AiServiceClient implements AutoCloseable {
                 .setResponseTimeout(atLeastOneMs(Math.min(limits.read().toMillis(), remainingMs)))
                 .build());
         return post;
-    }
-
-    /**
-     * 登记进行中的请求并排定截止定时器。与 close 在同一把锁下执行，保证关闭后不会再有新请求漏网。
-     * 定时器直接取消底层请求；执行调用仍在当前线程，退出后才由 worker 归还槽位。
-     */
-    private ScheduledFuture<?> register(HttpPost post, long deadline, AtomicBoolean expired) {
-        synchronized (lifecycle) {
-            if (closed) throw failure(EXECUTION_INTERRUPTED);
-            active.add(post);
-            return deadlines.schedule(() -> {
-                expired.set(true);
-                post.cancel();
-            }, Math.max(0, nanosUntil(deadline)), TimeUnit.NANOSECONDS);
-        }
     }
 
     /** 把 HTTP 层的未知异常收敛为安全分类码；判断顺序即优先级。 */
@@ -437,8 +544,8 @@ public final class AiServiceClient implements AutoCloseable {
     // 基础设施
     // =====================================================================
 
-    /** 连接池：限制响应头大小、使用启动时固定的 DNS 快照，并设置连接与读取超时。 */
-    private static PoolingHttpClientConnectionManager connectionManager(String host, int concurrency, Limits limits) {
+    /** 连接池只读取已解析的地址快照；系统DNS由异步准备阶段负责。 */
+    private static PoolingHttpClientConnectionManager connectionManager(FixedAiDnsResolver dns, int concurrency, Limits limits) {
         var connectionFactory = ManagedHttpClientConnectionFactory.builder()
                 .http1Config(Http1Config.custom()
                         .setMaxLineLength(MAX_HEADER_LINE)
@@ -448,7 +555,7 @@ public final class AiServiceClient implements AutoCloseable {
                 .build();
         return PoolingHttpClientConnectionManagerBuilder.create()
                 .setConnectionFactory(connectionFactory)
-                .setDnsResolver(FixedAiDnsResolver.create(host, limits.connect()))
+                .setDnsResolver(dns)
                 .setMaxConnTotal(concurrency)
                 .setMaxConnPerRoute(concurrency)
                 .setDefaultConnectionConfig(ConnectionConfig.custom()
@@ -481,12 +588,18 @@ public final class AiServiceClient implements AutoCloseable {
 
     @Override
     public void close() {
+        Call[] pending;
         synchronized (lifecycle) {
             if (closed) return;
             closed = true;
-            active.forEach(HttpPost::cancel);
+            pending = active.toArray(Call[]::new);
+            for (Call call : pending) call.cancelPost();
             deadlines.shutdownNow();
+            httpWorkers.shutdownNow();
         }
+        dns.close();
         http.close(CloseMode.IMMEDIATE);
+        // 不持有生命周期锁执行Future续接；迟到DNS和HTTP结果不能覆盖已终止的结果。
+        for (Call call : pending) finish(call, null, failure(EXECUTION_INTERRUPTED));
     }
 }

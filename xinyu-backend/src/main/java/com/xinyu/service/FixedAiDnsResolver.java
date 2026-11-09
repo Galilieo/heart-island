@@ -5,9 +5,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Future;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
@@ -43,35 +40,6 @@ final class FixedAiDnsResolver implements DnsResolver, AutoCloseable {
         this.clock = clock;
         this.lookup = lookup;
         timer.setRemoveOnCancelPolicy(true);
-    }
-
-    static FixedAiDnsResolver create(String host, Duration timeout) {
-        return snapshot(host, timeout, () -> InetAddress.getAllByName(host));
-    }
-
-    /** 初始化解析失败只缓存不可用状态，不阻止业务应用启动；修改服务地址后需重建客户端。 */
-    static FixedAiDnsResolver snapshot(String host, Duration timeout, Callable<InetAddress[]> lookup) {
-        ExecutorService initializer = Executors.newSingleThreadExecutor(
-                work -> AiServiceClient.daemonThread(work, "ai-http-dns-init"));
-        Future<InetAddress[]> pending = initializer.submit(lookup);
-        InetAddress[] resolved = new InetAddress[0];
-        try {
-            InetAddress[] value = pending.get(Math.max(1, timeout.toMillis()), TimeUnit.MILLISECONDS);
-            if (value != null) resolved = value.clone();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        } catch (ExecutionException | TimeoutException unavailable) {
-            // 不记录系统异常文本或猜测可用地址；generate 将得到安全的 provider_error。
-        } finally {
-            pending.cancel(true);
-            initializer.shutdownNow();
-        }
-        return new FixedAiDnsResolver(host, resolved);
-    }
-
-    private FixedAiDnsResolver(String host, InetAddress[] addresses) {
-        this(host, Duration.ofSeconds(2), Duration.ofSeconds(10), System::nanoTime, () -> addresses.clone());
-        this.addresses = addresses;
     }
 
     /** 请求只登记后续动作；返回只读stage，调用方不能取消所有等待者共享的查询结果。 */
