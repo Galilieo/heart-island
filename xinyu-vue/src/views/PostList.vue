@@ -199,7 +199,7 @@ onMounted(async () => {
           <EmptyState
             v-else-if="!postsLoading"
             key="post-empty"
-            doodle="cloud"
+            expression="default"
             title="这里还没有帖子"
             hint="换个话题试试，或者点上面的「发布」写下你想说的。"
           >

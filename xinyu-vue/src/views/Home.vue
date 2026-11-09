@@ -214,7 +214,7 @@ onMounted(() => {
               <EmptyState
                 v-else-if="!listLoading"
                 key="mood-empty"
-                doodle="cloud"
+                expression="default"
                 title="还没有心情记录"
                 hint="写下心情并保存后，就能在这里回看。"
               />

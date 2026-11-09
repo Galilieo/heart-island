@@ -104,7 +104,7 @@ onMounted(async () => {
 
           <EmptyState
             v-else
-            doodle="star"
+            expression="love"
             title="还没有收藏的帖子"
             hint="看到想留着的帖子，点一下「收藏」就能存到这里。"
           >
