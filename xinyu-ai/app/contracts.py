@@ -51,7 +51,7 @@ class Correlation(Contract):
 class MoodReplyRequest(Correlation):
     """单次心情回应请求，包含最少必要的内容和本次处理预算。"""
 
-    mood_type: Literal["开心", "平静", "焦虑", "难过", "疲惫", "其他"]
+    mood_type: Literal["开心", "满足", "期待", "感动", "平静", "焦虑", "难过", "生气", "委屈", "孤独", "迷茫", "疲惫", "其他"]
     content: str
     budget_ms: int = Field(ge=1, le=40000)
 

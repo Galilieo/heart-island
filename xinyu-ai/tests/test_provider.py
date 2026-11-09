@@ -39,7 +39,7 @@ async def test_http_provider_classifies_results_without_retries_or_body_leaks(bo
     assert request.headers["Authorization"] == "Bearer test-provider-secret"
     data = json.loads(request.content)
     assert data["model"] == "test-model"
-    assert data["max_tokens"] == 300
+    assert data["max_tokens"] == 4096
     assert data["thinking"] == {"type": "disabled"}
     assert data["stream"] is False
     assert [m["role"] for m in data["messages"]] == ["system", "user"]
@@ -56,6 +56,31 @@ async def test_http_provider_classifies_results_without_retries_or_body_leaks(bo
     else:
         assert response.status_code == 200
         assert response.json()["reply_content"] == "一段合规回复。"
+
+
+@pytest.mark.parametrize("mode", ["disabled", "enabled"])
+async def test_configured_token_budget_and_thinking_are_sent_without_exposing_reasoning(mode):
+    """两种模式均发送配置预算；成功只返回正文，不向调用方暴露思考内容。"""
+    import json
+    calls = []
+
+    def upstream(request):
+        calls.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{
+            "message": {"content": "一段合规回复。", "reasoning_content": "private-reasoning-sentinel"},
+            "finish_reason": "stop",
+        }]})
+
+    settings = make_settings(model_thinking_mode=mode, model_max_tokens=8192)
+    provider = HttpProvider(settings, transport=httpx.MockTransport(upstream))
+    async with client_for(create_app(settings, provider)) as client:
+        response = await client.post("/internal/v1/mood-replies", json=payload(), headers=AUTH)
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["max_tokens"] == 8192
+    assert calls[0]["thinking"] == {"type": mode}
+    assert response.json()["reply_content"] == "一段合规回复。"
+    assert "private-reasoning-sentinel" not in response.text
 
 
 @pytest.mark.parametrize("error,expected,status", [

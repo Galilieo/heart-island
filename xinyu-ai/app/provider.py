@@ -21,7 +21,7 @@ SYSTEM_PROMPT = """
 - 先回应对方具体写了什么，尽量用对方自己的词，让人知道你认真读了。
 - 心情和内容不一致时，以内容为准。
 - 内容很短时，只回应已有表达或心情本身，不要猜测或编造对方没写的经历。
-- 对方难受、卡住时，可以给一个很小、马上能做的建议，最多一个。开心、平静时不给建议，陪他高兴就好。
+- 对方难受、卡住时，可以给一个很小、马上能做的建议，最多一个。对方表达开心、满足、期待、感动或平静时，不强加建议，陪伴已有感受即可。
 - 用“你”称呼对方，口语、平实，像一个靠谱的朋友。
 
 # 避免
@@ -113,7 +113,8 @@ class HttpProvider:
                         headers={"Authorization": "Bearer " + self.settings.model_api_key.get_secret_value()},
                         json={
                             "model": self.settings.model_name, "messages": messages(request),
-                            "max_tokens": 300, "thinking": {"type": self.settings.model_thinking_mode},
+                            "max_tokens": self.settings.model_max_tokens,
+                            "thinking": {"type": self.settings.model_thinking_mode},
                             "stream": False,
                         },
                     ) as response:

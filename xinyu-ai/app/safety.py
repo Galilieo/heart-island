@@ -26,8 +26,19 @@ _RISK = re.compile(
 )
 
 
+_COLLOQUIAL_RISK = re.compile(
+    # 显式第一人称可以出现在句中；省略主语的表达仅在句首或分句边界识别，
+    # 避免把“我朋友说他想自杀”中的第三人称片段直接当作本人意图；
+    # 排除“想死你了／死磕／活在／活成”的明确构词，不做完整语义分析。
+    r"(?:我(?:现在|今晚|真的|已经|正在|很)*+"
+    r"(?:(?:想要|想|要|打算|准备)(?:去)?死(?![你磕])|不想活(?![在成])|活不下去))"
+    r"|(?:^|[，。！？!?；;\n])\s*"
+    r"(?:想(?:要)?(?:去)?(?:自杀|死(?![你磕]))|不想活(?![在成])|活不下去)"
+)
+
+
 def build_support_reply(content: str) -> str | None:
     """命中有限风险规则时返回内置支持性回应，否则进入普通生成分支。"""
-    if _RISK.search(content):
+    if _RISK.search(content) or _COLLOQUIAL_RISK.search(content):
         return support_text()
     return None

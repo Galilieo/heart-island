@@ -18,6 +18,8 @@ class Settings(BaseModel):
     model_name: str = Field(min_length=1, max_length=128)
     # 当前供应商以 thinking.type 接收思考模式，必须显式配置，不允许静默省略。
     model_thinking_mode: Literal["disabled", "enabled"]
+    # 这是本服务的预算初值和本地上限，不是供应商限制，也不保证思考模式一定完成。
+    model_max_tokens: int = Field(default=4096, strict=True, ge=1, le=8192)
     request_timeout_seconds: float = Field(default=40, gt=0, le=40)
 
     @field_validator("internal_token", "model_api_key")
@@ -49,17 +51,20 @@ class Settings(BaseModel):
 
     @classmethod
     def from_env(cls):
-        """读取五项必需的环境配置；缺失或非法时抛出不含配置值的 ValueError。"""
+        """读取必需配置与可选 token 预算；缺失或非法时抛出不含配置值的 ValueError。"""
         try:
-            return cls(**{
-                field: os.environ[env]
-                for field, env in {
-                    "internal_token": "XY_AI_INTERNAL_TOKEN",
-                    "model_base_url": "XY_MODEL_BASE_URL",
-                    "model_api_key": "XY_MODEL_API_KEY",
-                    "model_name": "XY_MODEL_NAME",
-                    "model_thinking_mode": "XY_MODEL_THINKING_MODE",
-                }.items()
-            })
+            return cls(
+                model_max_tokens=int(os.environ.get("OPENAI_MAX_TOKENS", "4096")),
+                **{
+                    field: os.environ[env]
+                    for field, env in {
+                        "internal_token": "AI_INTERNAL_TOKEN",
+                        "model_base_url": "OPENAI_BASE_URL",
+                        "model_api_key": "OPENAI_API_KEY",
+                        "model_name": "OPENAI_MODEL",
+                        "model_thinking_mode": "DEEPSEEK_THINKING_MODE",
+                    }.items()
+                },
+            )
         except (KeyError, ValueError):
             raise ValueError("invalid_ai_service_configuration") from None

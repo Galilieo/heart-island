@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -183,3 +184,14 @@ async def test_busy_service_rejects_excess_work_without_queueing():
         finally:
             release.set()
             await first
+
+
+@pytest.mark.parametrize("mood", json.loads((Path(__file__).resolve().parents[2] / "test-contracts/mood-types.json").read_text()))
+async def test_all_product_moods_reach_provider_without_changing_their_value(mood):
+    """产品单选的全部十三种心情均可通过内部协议，且原值传给模型适配层。"""
+    provider = StubProvider()
+    async with client_for(application(provider)) as client:
+        response = await client.post("/internal/v1/mood-replies", json=payload(mood_type=mood), headers=AUTH)
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert provider.calls[0][0].mood_type == mood

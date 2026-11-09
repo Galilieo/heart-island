@@ -10,7 +10,11 @@
 uv sync --directory xinyu-ai --locked
 ```
 
-按 `.env.example` 将以下五项配置注入进程环境：`XY_AI_INTERNAL_TOKEN`、`XY_MODEL_BASE_URL`、`XY_MODEL_API_KEY`、`XY_MODEL_NAME`、`XY_MODEL_THINKING_MODE`。不自动查找／加载 `.env`，也不读取 Java 或 lab 的真实配置。内部 token 与供应商 key 必须为非空 ASCII；启动错误不回显变量值。
+按 `.env.example` 将以下五项配置注入进程环境：`AI_INTERNAL_TOKEN`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL`、`DEEPSEEK_THINKING_MODE`。不自动查找／加载 `.env`，也不读取 Java 或 lab 的真实配置。内部 token 与供应商 key 必须为非空 ASCII；启动错误不回显变量值。
+
+另支持可选配置 `OPENAI_MAX_TOKENS`，缺省为 4096，必须是 1～8192 的整数。8192 是本服务当前预算上限，不是供应商的模型上限；非法值阻止启动。
+
+`OPENAI_*` 沿用 agent-lab 的兼容接口配置名称，实际供应商仍由地址和模型决定；`AI_INTERNAL_TOKEN` 专供 Java→Python 内部认证，`DEEPSEEK_THINKING_MODE` 明确标识供应商扩展参数。不再兼容原 `XY_` 前缀配置。
 
 ```sh
 uv run --directory xinyu-ai --locked uvicorn app.main:app_from_env --factory \
@@ -19,7 +23,13 @@ uv run --directory xinyu-ai --locked uvicorn app.main:app_from_env --factory \
 
 保持回环／私网可达，不向公网暴露此端口。健康检查 `GET /health` 只返回 `{"ready":true}`，表示配置已通过启动校验，不代表供应商在线；API 文档端点关闭。
 
-`XY_MODEL_BASE_URL` 为供应商 API 前缀，实际调用追加 `/chat/completions`。当前适配发送 `max_tokens=300`、`stream=false` 和 `thinking.type=XY_MODEL_THINKING_MODE`，模式仅支持 `disabled`／`enabled`，样例关闭 thinking。供应商不支持该协议时应显式更换适配并补测试，不能默默忽略参数。禁止自动重试／自动跳转，不使用环境代理转发请求。
+`OPENAI_BASE_URL` 为供应商 API 前缀，实际调用追加 `/chat/completions`。当前适配发送 `max_tokens=OPENAI_MAX_TOKENS`、`stream=false` 和 `thinking.type=DEEPSEEK_THINKING_MODE`，模式仅支持 `disabled`／`enabled`，样例关闭 thinking。供应商不支持该协议时应显式更换适配并补测试，不能默默忽略参数。禁止自动重试／自动跳转，不使用环境代理转发请求。
+
+原固定 300-token 预算已提高到默认 4096，作为本地初值，尚未通过真实模型校准。启用 thinking 时，预算还要容纳思考开销，不能只按最终短回复估算；可按实际样例调整至 8192，但预算增大不保证完成，也不保证时延或费用。40 秒总 deadline、64 KiB 上游正文上限和 2000 UTF-16 回复上限仍独立生效。`finish_reason=length` 仍判失败，不自动补发或展示截断回复；仅返回 `content`，不回传 `reasoning_content`。参数依据见[官方接口说明](https://api-docs.deepseek.com/api/create-chat-completion/)和[思考模式说明](https://api-docs.deepseek.com/guides/thinking_mode/)。
+
+当前选用 DeepSeek 的 OpenAI 兼容 Chat Completions 协议，沿用 agent-lab 的直接 HTTP 接入方式。环境样例设置 `OPENAI_BASE_URL=https://api.deepseek.com`、`OPENAI_MODEL=deepseek-flash`、`DEEPSEEK_THINKING_MODE=disabled`；实际请求发送到 `https://api.deepseek.com/chat/completions`，密钥仍留空并由进程环境注入，不从 lab 复制真实配置。
+
+2026-11-07 核对[官方调用说明](https://api-docs.deepseek.com/quick_start/agent_integrations/)：`deepseek-flash` 当前由 DeepSeek-V4.1-Flash-1017 提供服务；lab 示例中的旧别名 `deepseek-v4-flash` 仍被兼容路由。该别名不是不可变版本锁，后续采样应记录日期及当时的模型映射。关闭 thinking 的请求格式见[官方思考模式说明](https://api-docs.deepseek.com/guides/thinking_mode/)。当前只有文档核对和离线协议验证，尚未完成真实供应商调用验收。
 
 ## 请求与结果
 
@@ -37,7 +47,7 @@ uv run --directory xinyu-ai --locked uvicorn app.main:app_from_env --factory \
 }
 ```
 
-ID／版本必须是正数的十进制字符串且在 Java signed long 范围内；attempt 为 1—3 的整数，budget_ms 为 1—40000。心情类型与现有页面六种枚举一致。content 非空，最多 500 个 UTF-16 单位；250 个 emoji 合法，251 个越界；孤立代理字符拒绝。未知字段、错误类型和非法 JSON 均拒绝。关联字段仅回传，不代表服务替 Java 校验了来源归属。
+ID／版本必须是正数的十进制字符串且在 Java signed long 范围内；attempt 为 1—3 的整数，budget_ms 为 1—40000。心情类型与前端、Java统一为13项：开心、满足、期待、感动、平静、焦虑、难过、生气、委屈、孤独、迷茫、疲惫、其他；目前仍为单选字符串，旧六项继续合法。content 非空，最多 500 个 UTF-16 单位；250 个 emoji 合法，251 个越界；孤立代理字符拒绝。未知字段、错误类型和非法 JSON 均拒绝。关联字段仅回传，不代表服务替 Java 校验了来源归属。
 
 200 响应回传 request_id／job_id／attempt／source_version，并包含 reply_content、result_kind、model_called、template_version 和 model_name。回复去首尾空白后非空、最多 2000 个 UTF-16 单位。MODEL 必须 model_called=true 且模型名非空；SUPPORT 为 false／null。模板版本固定 `mood-reply-v1`。model_called=true 只说明已发起本地供应商请求，不证明供应商执行或计费。
 
@@ -62,7 +72,9 @@ ID／版本必须是正数的十进制字符串且在 Java signed long 范围内
 
 此分支不依赖外部资源文件、地区选择或核验日期，也没有定期维护门禁。旧环境变量 `XY_HELP_RESOURCES_FILE` 不再读取，可从部署环境移除；遗留值即使指向无效路径，也不影响应用启动和普通模型调用。内部认证及模型必需配置仍需合法。
 
-当前仅有限中英文第一人称表达规则，可漏判或误判，不代表完整危机识别能力。普通模型的 SYSTEM_PROMPT 与固定 SUPPORT 文案分别维护：更改 system 提示词不会自动改动固定分支。未来确需提供地区联系方式时，另行明确适用范围与信息来源，不自动引入 LLM 定位、IP 查询或启动门禁。
+当前仅有限中英文第一人称／省略主语表达规则，已覆盖“我想死”“我想去死”“不想活了”“活不下去了”和句首／分句边界的“想自杀”。保留明确否定、第三人称转述及“累死了”“笑死我了”“想死你了”“不想活在过去”“不想活成别人期待的样子”“想死磕这道题”等对照测试。省略主语仅在句首或中文常见分句边界匹配，避免直接把“我朋友说他想自杀”当作本人意图；这不是完整的否定、引用或人称分析，仍可能漏判或误判，不代表完整危机识别能力。
+
+普通模型的 SYSTEM_PROMPT 与固定 SUPPORT 文案分别维护：更改 system 提示词不会自动改动固定分支。未来确需提供地区联系方式时，另行明确适用范围与信息来源，不自动引入 LLM 定位、IP 查询或启动门禁。
 
 ## 验证与证据范围
 
