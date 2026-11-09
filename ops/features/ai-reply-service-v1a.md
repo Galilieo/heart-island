@@ -1,6 +1,6 @@
 # 阶段 1a：单实例异步心情回应设计
 
-2026-11-07 · 已评审契约 v0.6（简化风险回应，移除资源启动门禁） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
+2026-11-09 · 契约 v0.8（保留v0.7基线，按外部评审补充无变化保存、提交异常收尾与发布顺序） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
 
 ## 1. 目标与范围
 
@@ -8,7 +8,7 @@
 
 保留 Java / MySQL 的业务权威，新增独立 Python 服务。初始部署限定一个启用 worker 的 Spring Boot 进程；定时扫描任务表，单线程执行，数据库中 queued 是待办队列，不把全部待办塞进内存。
 
-1a 包含内部认证、总超时、最小风险分支与可配置资源、日志隐私、条件提交。Redis 限流 / 租约 / 独立 attempt 表在 1b 按场景加入；聊天、SSE、周报、RAG 不在本阶段，周报仍是紧接着的阶段 2。
+1a 包含内部认证、总超时、最小内置风险回应分支、日志隐私、条件提交。Redis 限流 / 租约 / 独立 attempt 表在 1b 按场景加入；聊天、SSE、周报、RAG 不在本阶段，周报仍是紧接着的阶段 2。
 
 ## 2. 当前代码与兼容面
 
@@ -24,11 +24,13 @@
 
 迁移文件：`sql/migrations/20261107_01_ai_reply_job.sql`。仅增量，不运行 `sql/xinyu.sql` 初始化脚本，不在本轮执行迁移。
 
+模型名长度修正单独使用 `sql/migrations/20261107_02_ai_reply_model_name.sql`：将既有 `ai_reply.model_name` 从 VARCHAR(100) 放宽为 VARCHAR(128)，对齐内部契约及任务元数据。该脚本可独立执行，不依赖任务表迁移；新库初始化定义同步为128。用户已同意本地修正与隔离验证，云端执行须另行明确授权，执行前核对实际表定义与备份；不自动缩列回退。
+
 `mood_record` 新增：
 
 | 字段 | 类型 / 初值 | 规则 |
 | --- | --- | --- |
-| content_version | BIGINT NOT NULL DEFAULT 1 | 每次成功修改内容、心情、回应开关或首次软删除都 +1；重复删除和只写 AI 结果不递增 |
+| content_version | BIGINT NOT NULL DEFAULT 1 | 内容、心情、回应开关有实际变化或首次软删除才 +1；三项均相同的保存、重复删除和只写 AI 结果不递增 |
 | ai_reply_enabled | TINYINT NOT NULL DEFAULT 0 | 持久化本版本的回应意愿；请求仍叫 needAiReply，沿用既有缺省 true |
 | deleted_at | DATETIME NULL DEFAULT NULL | 首次status=1→0的删除UPDATE写入数据库当前时间；普通更新/AI提交不写此列，重复删除不改时间 |
 
@@ -57,11 +59,15 @@
 
 ## 4. 状态与事务
 
+产品取舍（用户确认）：生成中允许修改与删除；修改使旧任务失效，并在需要 AI 回应时按新版本创建任务；删除随时可用。此选择服务于日记操作体验，不是异步技术的必然要求；不采用生成中锁定编辑，以避免任务卡住时需要额外的解禁机制。这里的短数据库事务行锁只串行化写入，不在整个生成期间锁定编辑，也不等待上游结束才删除。
+
 ```text
 保存事务：日记 + queued job → 提交 → 返回
 worker：读取 queued → CAS queued→running / attempt+1 → 校验当前来源status=1 / 版本 / enabled → 调 Python
 提交事务：锁定来源并校验status=1 / 版本 / enabled → 校验 job 为本次 running → 写回复与兼容日志 → succeeded
 ```
+
+无变化保存：update锁住本人有效日记后，逐项精确比较moodType、content和enabled；三项均相同则返回当前状态及原jobId，不写来源、不递增版本、不清回复、不失效任务、不创建任务，也不修改update_time。failed仍需独立retry；unavailable不因无变化保存自动补生成。任一项实际变化仍按原更新事务处理。
 
 修改来源的update/delete及提交结果的complete统一先锁日记，再操作job；只修改job的retry见下文CAS例外。update、delete、complete必须在事务生效的连接上先执行SELECT ... FOR UPDATE（按id/user_id锁来源），重新检查status/版本后，再执行只更新指定列的条件UPDATE；锁持有至事务提交或回滚。删除UPDATE的WHERE包含id、user_id、status=1和锁定行的content_version，SET中content_version=content_version+1并写deleted_at；complete使用同样归属/status/版本约束并检查enabled，且不改deleted_at。update只改mood_type/content/ai_reply_enabled/ai_reply及正常修改时间，SQL中content_version+1，WHERE带id/user_id/status=1/预期版本；不写status或deleted_at。随后在同一事务内失效旧未完成job，按开关和容量创建新版本job，失败整体回滚。不能沿用旧update()/delete()无锁selectById后updateById整实体回写；Java进程锁不能替代数据库行锁。claim只执行job的短CAS，不持锁等模型。外部网络调用始终在事务外；扫描一条、领取一条，配置扫描间隔 1 秒、执行并发 1，不存在无限内存任务队列。
 
@@ -73,7 +79,9 @@ retry不显式锁来源，先普通快照读取检查来源，再仅对job做上
 
 更新/关闭令旧未完成job为superseded；软删除按第3节置状态、版本递增并失效未完成任务，不删除job行。1a 不提供用户取消接口；cancelled 为后续扩展预留，不伪造已实现的取消功能。
 
-仅XY_AI_WORKER_ENABLED=true的worker启动流程执行恢复；worker关闭时不调用recoverInterrupted、不扫描/领取任务。单实例启动时还须确认旧进程已停止，再将遗留running标为failed，错误 execution_interrupted；queued 保留并恢复扫描。无自动供应商重试，无“重启必定没付费”承诺。多实例 / 滚动发布前必须完成 1b 租约与持有者方案，禁止两个 worker 同时运行此恢复逻辑。
+Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕获其异常，在新的短事务里调用带原jobId/attempt/request_id的fail(internal_error)，不得在rollback-only原事务中写失败。补“提交日志失败→回复／终态回滚→新事务标failed→可手动重试”的worker＋真实DB回归，以及来源已删除／尝试已变化时失败收尾不得覆盖新状态的用例。若数据库持续不可用导致fail也失败，要记录分类故障并保留恢复依据，不伪称已转failed、不自动重调模型。当前只有Task2方法，不能将Task3收尾写成已实现。
+
+仅AI_WORKER_ENABLED=true的worker启动流程执行恢复；worker关闭时不调用recoverInterrupted、不扫描/领取任务。单实例启动时还须确认旧进程已停止，再将遗留running标为failed，错误 execution_interrupted；queued 保留并恢复扫描。无自动供应商重试，无“重启必定没付费”承诺。多实例 / 滚动发布前必须完成 1b 租约与持有者方案，禁止两个 worker 同时运行此恢复逻辑。
 
 ## 5. 公共 API
 
@@ -87,7 +95,7 @@ retry不显式锁来源，先普通快照读取检查来源，再仅对job做上
 | GET /mood/ai-job/{id} | 无 | AiJobVO：id、targetId、targetVersion、status、attemptCount、resultKind、replyContent、errorCode、retryable |
 | POST /mood/ai-job/{id}/retry | 无 | 返回当前 AiJobVO；仅来源status=1且当前版本的failed可入队，其余按第4节处理 |
 
-先校验来源归属与status=1，再计算aiReplyState；来源status=0或不存在时拒绝读取任务/重试，不返回replyContent，不映射为unavailable，不创建新任务。aiReplyState包含任务状态，以及disabled / legacy / unavailable；没有 job 且历史非空回复为 legacy；没有 job 且 enabled=false 为 disabled，enabled=true 且无回复 / 无任务为 unavailable（历史或异常状态缺少任务，提示重新加载，不自动生成）。请求 content 必须非空，最大 500 个 UTF-16 code unit，与现有浏览器 maxlength 和 Java String.length 一致；心情类型只允许现有 UI 的合法枚举。客户端不能提交 version / jobId 决定服务端写入。
+先校验来源归属与status=1，再计算aiReplyState；来源status=0或不存在时拒绝读取任务/重试，不返回replyContent，不映射为unavailable，不创建新任务。aiReplyState包含任务状态，以及disabled / legacy / unavailable；没有 job 且历史非空回复为 legacy；没有 job 且 enabled=false 为 disabled，enabled=true 且无回复 / 无任务为 unavailable（历史或异常状态缺少任务，提示重新加载，不自动生成）。请求 content 必须非空，最大 500 个 UTF-16 code unit，与现有浏览器 maxlength 和 Java String.length 一致；心情类型单选，三端统一为13项：正向开心、满足、期待、感动、平静；负向焦虑、难过、生气、委屈、孤独、迷茫、疲惫；其他。前端用无标题间距分为5项与8项两组，其他并入末组；按钮暂用纯文字且等宽，不用重复图标或正向／负向标签，不生成情绪评分；接口继续传一个moodType字符串，历史六项兼容。情绪强度和多选留待后续单独设计，不在1a增加字段。客户端不能提交 version / jobId 决定服务端写入。
 
 管理端继续现有分页，返回 `AdminAiReplyVO`：id、userId、targetType、targetId、modelName、status、errorCode、createTime；不返回 prompt、replyContent 或上游 errorMessage。keyword 搜索仅查这些允许字段，不允许用隐藏全文做猜测式检索。当前无详情 API，不新增一个暴露原文的接口；既有数据库 prompt 保留，不经普通页面透出。
 
@@ -95,7 +103,7 @@ retry不显式锁来源，先普通快照读取检查来源，再仅对job做上
 
 新目录 `xinyu-ai/`，Python 3.12，FastAPI / Pydantic / httpx，单次非流式 httpx.AsyncClient 调用；不引用 agent-lab 的 SQLite、工具或记忆配置。依赖在实施时按可安装版本锁定，不提前声称已安装。
 
-`POST /internal/v1/mood-replies`，`Authorization: Bearer <internal token>`，仅私网 / 回环可达。token 从 XY_AI_INTERNAL_TOKEN 读，缺失则服务启动失败，比较用 constant-time；禁止日志打印。Java 用户 JWT 不传供应商。
+`POST /internal/v1/mood-replies`，`Authorization: Bearer <internal token>`，仅私网 / 回环可达。token 从 AI_INTERNAL_TOKEN 读，缺失则服务启动失败，比较用 constant-time；禁止日志打印。Java 用户 JWT 不传供应商。
 
 请求字段：`request_id`、`job_id`、`attempt`、`source_version`、`mood_type`、`content`、`budget_ms`。ID / 版本按字符串跨边界，attempt 为整数，budget_ms 固定不超过 40000。Python只回传关联字段，Java不信任回包宣称的用户身份。
 
@@ -105,7 +113,7 @@ retry不显式锁来源，先普通快照读取检查来源，再仅对job做上
 
 时间预算：Java→Python connect 2 秒、read 45 秒，整个任务尝试最多 50 秒；Python整个处理最多 40 秒（含风险判断、等待及供应商调用），供应商 connect 2 秒、read 35 秒且受剩余总时间约束。使用真实可取消的网络 deadline / 资源关闭，不能只让 Future 超时而继续占着唯一 worker。无自动重试；超时只保证本地结束等待，不保证供应商停止计算 / 计费。
 
-供应商配置使用 XY_MODEL_BASE_URL、XY_MODEL_API_KEY、XY_MODEL_NAME、XY_MODEL_THINKING_MODE；健康检查不返回其值。模型配置沿用当前心情场景意图：max_tokens=300；thinking=disabled 作为供应商适配参数，供应商不支持时必须显式调整适配配置，不能默默丢掉参数。prompt 在 Python 模板集中管理，日记作为数据隔离；不复制到业务日志。
+供应商配置使用 OPENAI_BASE_URL、OPENAI_API_KEY、OPENAI_MODEL、DEEPSEEK_THINKING_MODE；健康检查不返回其值。可选 OPENAI_MAX_TOKENS 控制输出预算，默认4096，本服务允许1～8192的整数（不是供应商上限）；thinking样例仍为disabled，同时允许enabled。思考模式也消耗输出预算，调大不保证在40秒总预算或64 KiB上游正文限制内完成；截断仍判失败，不自动重试，不回传思考内容。该初值未经真实模型校准。thinking作为供应商适配参数，供应商不支持时必须显式调整适配配置，不能默默丢掉参数。prompt 在 Python 模板集中管理，日记作为数据隔离；不复制到业务日志。
 
 ## 7. 最小风险回应
 
@@ -113,7 +121,7 @@ retry不显式锁来源，先普通快照读取检查来源，再仅对job做上
 
 按用户 2026-11-07 的简化要求，移除求助资源文件、地区／核验日期和 90 天有效期门禁。Python 服务不再读取 XY_HELP_RESOURCES_FILE；该变量缺失或保留无效路径不得影响服务启动和普通回应。内部认证及模型必需配置校验保留，接口字段和数据库设计不变。
 
-验收断言：无资源配置也能从环境启动并正常生成 MODEL；命中规则时返回完整且合法的内置 SUPPORT，model_called=false、model_name=null、普通模型零调用。保留高风险／对照样例和正则耗时边界验证；不将有限样例通过等同于总体安全覆盖。未来地区联系方式按实际产品需求单独设计，不自动加入 LLM 定位或 IP 查询。
+验收断言：无资源配置也能从环境启动并正常生成 MODEL；命中规则时返回完整且合法的内置 SUPPORT，model_called=false、model_name=null、普通模型零调用。保留高风险／对照样例和正则耗时边界验证；口语正例覆盖我想死、我想去死、不想活了、活不下去了和句首／分句边界的想自杀，反例包含明确否定、第三人称转述及累死了／笑死我了／想死你了；不将有限样例通过等同于总体安全覆盖。未来地区联系方式按实际产品需求单独设计，不自动加入 LLM 定位或 IP 查询。
 
 ## 8. 页面、资源控制与验收
 
@@ -136,3 +144,12 @@ retry不显式锁来源，先普通快照读取检查来源，再仅对job做上
 先跑预设供应商的真实 Java→Python 回环 HTTP 与隔离 MySQL 的迁移 / 竞态测试，再经用户授权做有限真实模型体验。单元模拟、回环契约、实际供应商质量、生产部署分别记录。
 
 回退：先停接新 AI 任务 / 停 worker，保留已保存日记及新增字段 / 表；前后端按同版本回退，旧同步代码会重新启用旧问题，不作为无风险方案。迁移不含自动 DROP 回滚。所有代码与数据库操作待用户确认后实施，本轮文档检查不算产品验收。
+
+
+## 9. 发布顺序与旧应用兼容
+
+完整1a验收并获准发布后，必须先执行增量迁移，再启动依赖新列的新应用，不能把带DROP的初始化脚本当作升级。推荐停写窗口：停止旧应用／worker并确认退出 → 备份及验证 → 核对并执行所需增量迁移 → 启动配套前后端，新worker先关闭 → 基础接口／权限／页面回查验证 → 确认仅一个worker后启用扫描与恢复 → 完整验收后开放写入。
+
+若迁移后短暂仍由旧应用写入，新日记的enabled可为默认0且带旧同步回复，当前无job＋非空回复会显示legacy；这只是迁移兼容，不是允许新旧应用长期混跑。新旧版本应用不得同时处理这套业务，新旧worker不得同时运行。当前01尚未上线，02模型名独立扩列已单独完成；不能因02已执行就认为所有迁移已完成。
+
+Task2提交用于评审，不代表获准部署；Task3／4尚未完成，仍需配套验收。Python与Java的13种心情回归共用test-contracts/mood-types.json输入基准；它是测试数据，不是运行时配置。Task3必须覆盖同一组13值的真实Java→Python回环HTTP矩阵，避免只靠单端测试宣称跨服务已验证。
