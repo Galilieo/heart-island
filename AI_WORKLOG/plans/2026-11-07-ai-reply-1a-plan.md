@@ -14,10 +14,10 @@
 
 ## Global Constraints
 
-- 初始部署限定一个启用worker的Spring Boot进程；Task3按用户要求支持单进程有界并发，实际并发上限结合供应商额度和实测确定。扫描间隔保留1秒，只领取空闲执行槽位可容纳的任务；不做多实例租约／Redis／SSE／聊天。
-- 任务状态 queued / running / succeeded / failed / cancelled / superseded；当前Task2代码最多3次尝试，Task3按RETRY-001修订为每三次失败冷却180秒后可手动继续、累计attempt不重置；Java/Python协议和SQL保护同步调整，不自动重试模型。
+- 初始部署限定一个启用worker的Spring Boot进程；用户2026-11-09选定Task3单进程执行并发初值为3，Java执行槽位与Python内部生成门禁同步设为3，上限保留可配置。供应商额度与实测用于后续校准，不将初值写成性能已验证。扫描间隔保留1秒，只领取空闲执行槽位可容纳的任务；不做多实例租约／Redis／SSE／聊天。
+- 任务状态 queued / running / succeeded / failed / cancelled / superseded；当前Task2代码最多3次尝试，Task3按已确认v2修订为每三次失败冷却180秒起逐轮翻倍、封顶3600秒后可手动继续、累计attempt不重置；Java/Python协议和SQL保护同步调整，不自动重试模型。
 - content 最大 500 个 UTF-16 code unit；回复最多 2000；max_tokens由OPENAI_MAX_TOKENS配置，默认4096，本服务上限8192；thinking样例disabled，也允许enabled，预算与40秒deadline独立生效；未经真实模型校准。
-- Java connect 2 秒 / read 45 秒 / 尝试总时限 50 秒；Python 总时限 40 秒，供应商 connect 2 秒 / read 35 秒且受总时限约束。
+- Java connect 2秒／read 45秒，领取成功后生成阶段总时限50秒；complete与失败收尾分别配置5秒事务超时（3C实测有效边界）；Python 总时限 40 秒，供应商 connect 2 秒 / read 35 秒且受总时限约束。
 - 持久 queued 上限 100；单用户 queued/running 上限 3；单实例短事务准入锁只包容量检查与保存。
 - 轮询间隔 2 秒、单次超时 5 秒、最多观察 120 秒；仅可见页与打开详情，最多 6 个，不重叠。
 - 风险分支使用内置具体支持文案，不依赖求助资源文件、地区或核验日期；不推测地区或输出电话号码。按用户2026-11-07修正移除90天启动门禁，无此配置也须能启动和生成普通回应。
@@ -114,56 +114,25 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 
 ## Task 3：Java→Python 契约、有界并行执行与日志
 
-**实施批次（2026-11-09用户要求小diff，当前均未开始）**
+用户2026-11-09明确“可以开始”，按 [v2执行稿及复核补充](/Users/jiangqiuyu/pre/heartisland/heart-island/AI_WORKLOG/plans/2026-11-09-ai-reply-1a-task3-execution-review.md)实施，当前契约已同步。六个功能单元按3A→3C→3D+3E→3B→3F推进，独立评审按三轮合并；小diff不构成提交授权。后续社区异步三并发另列总方案，不插入本Task。
 
-按可独立验证的功能依次交付：①内部HTTP客户端与协议／错误映射；②RETRY-001后端冷却及两端attempt契约；③worker单次执行与提交失败收尾；④启动／停止编排；⑤有界并行及Python门禁；⑥社区超时与日志隐私。每批包含相关测试与必要文档、适用的独立评审，控制变更范围，不积攒成整个Task一个大提交。获准提交时按这些目的拆分，保持worker默认关闭，不擅自重写旧历史；各批完成不等于1a已可部署。
+- [ ] **3A内部客户端**：认证、严格snake_case／类型／关联校验、16KiB正文与8KiB状态行／响应头限制、错误分类、无重试／重定向、连接／读取／绝对总截止、可取消与关闭；真Java→Python共享13心情矩阵。当前已实现并初步回归，客户端预审与主体带读分别记录，未以测试通过代替掌握。
+- [ ] **3C单次执行**：claim→来源预检→事务外generate→条件complete。优先测completeFailureIsMarkedFailedInNewTransactionAndCanRetry与lateFailureDoesNotOverwriteSupersededOrNewAttempt；真实DB证明日志失败回滚后新事务failed及可重试。complete异常后的独立fail与fail失败处理由用户手写，Codex不提前代写；DB持续故障不伪称收尾成功，不自动重调模型。complete／fail的5秒事务配置和实际锁／连接／网络边界在本批验证。
+- [ ] **第一轮独立评审3A＋3C**：固定SHA／逐文件哈希快照；3A可先预审，3C用户完成后补齐同轮结论。
+- [ ] **3D启动停止＋3E三并发**：配置校验→唯一worker且旧进程退出前提→恢复一次→成功后扫描；恢复失败不扫描、worker关闭零恢复／领取，重复事件不注册第二份调度。停止先关领取闸门再清理I/O、等待执行退出。每秒按空槽补领，Java默认3槽、Python单应用进程门禁3；无无限内存待办。至少两用户及屏障证明3条重叠、第4条数据库queued、空槽补领、超时不影响另两槽、槽位／门禁回收和删除／修改交错不回写旧结果。跨实例租约仍1b。
+- [ ] **第二轮独立评审3D＋3E**：恢复、停止竞争、资源释放与门禁一致性。
+- [ ] **3B冷却**：每3次失败180秒起翻倍、封顶3600秒，累计attempt不重置；同步SQL／Java／Python去掉永久三次限制。用户手写cooldownSeconds与requeue冷却CAS，Codex脚手架／测试／评审。数据库计算retryAfterSeconds，异常NULL显式0；冷却retry经归属检查后429＋Retry-After，普通错误体无VO，前端GET回查。验证到期／NULL／第4与7次／双击／旧身份／删除与服务重建；跨job请求限频留1b。
+- [ ] **3F社区与隐私**：先最多5次授权真实模型合成采样校准2秒连接／15秒读等待初值，缺授权或环境就记待校准；真实慢HTTP验证帖子保留、AI失败NULL、编辑先清旧回复且不恢复、日志失败无兜底。旧解析器空／非法结果不得假成功，新日志不复制prompt或原始异常，后台AdminAiReplyVO及允许字段搜索，真实MVC权限与捕获日志隐私回归。
+- [ ] **第三轮独立评审3B＋3F**：冷却CAS／429、权限、社区与日志隐私。
+- [ ] 两端相关模块完整回归，真实MySQL与回环HTTP分别记录；Task4前不可部署，不自动提交／推送／部署。
 
-**Interfaces**
-
-- `AiServiceClient.generate(MoodAiRequest request, Duration remaining) -> MoodAiResponse`；由 worker 在事务外调用，执行前按来源重新构造最少输入；HTTP body 关联字段统一字符串。
-- `AiJobWorker.runOne() -> boolean`：领取至多一条、调用、条件提交或分类失败，外层总 deadline 50 秒，返回是否领取；调度按空闲执行槽位领取；单次runOne处理一个任务，多个runOne可有界并行，不提前领取超过执行容量的任务。
-- 配置 `AI_SERVICE_BASE_URL`、`AI_INTERNAL_TOKEN`、`AI_WORKER_ENABLED`，worker 默认关闭，启用前必须提供前两项；worker启用但服务不可用时把对应尝试明确失败，普通日记照常保存；worker关闭时不得恢复或扫描。
-- `AiReplyLogService` 的心情 / 社区新写入都不复制 prompt，只保存错误分类；旧 `AiReplyService.parseReply` 对空 / 非法回复必须失败，不用默认文字冒充成功。
-
-**单进程并发排期（用户2026-11-09要求记录，当前未实现）**
-
-- [ ] worker支持同一Java进程同时执行多条不同任务，使用可配置并发上限和有界执行资源；只按空闲槽位领取，不建立无限内存等待队列。Task2的同job CAS、来源／尝试校验继续使用；不存在“同一张表只能同时执行一条任务”的前提。
-- [ ] 同步调整Python当前active>=1的内部生成请求门禁、HTTP连接池容量与并发／总deadline清理；Java增加线程数而Python仍限1会返回overloaded，不算实现并行。并发上限应结合供应商并发／RPM／token额度和实测确定，不在本轮带读随意定值，也不宣称CPU低就可无限并发。
-- [ ] 用可控回环服务证明不同job确实重叠执行且不超过配置上限，同job只能一次成功claim；一个任务超时／失败不能阻塞其他槽位，删除／修改与多任务完成交错仍拒绝旧结果。停机时先停止新领取，再关闭／取消所有在途I/O并确认执行退出。
-- [ ] 多Java进程／多机器共享任务时的租约、持有者、恢复归属仍在1b另行设计；单进程多线程不等于已解决跨实例恢复，不因此擅加表结构。
-
-**RETRY-001排期（用户2026-11-09明确）**
-
-- [ ] Task3实现单job每三次失败冷却180秒后可继续手动重试的后端规则，保留累计attempt和request_id关联保护，同步Java／Python字段范围、领取／重排SQL及服务端可重试时间。冷却期间不调用模型，到期不自动生成，容量未准入且attempt=0不消耗本轮失败次数。
-- [ ] 保留排队／生成中的重复retry幂等，并落实冷却最终由后端判定；评估单实例按用户请求节流的最小实现，不把并发名额当时间限流，不因本项擅加表／索引或引入Redis。跨实例共享限流仍按1b范围设计。
-- [ ] 验证第三次失败、180秒边界、到期第四次、并发重试只入队一次、旧结果不得覆盖新attempt，以及刷新／服务重启后的冷却一致性；与Task4的服务端时间展示和按钮状态同批验收。细节按既有契约第10节核对，不边带读边改当前Task2代码。
-
-**外部代码复核后的优先验收（2026-11-09）**
-
-先把下面两个边界写成测试并实现，再将正常调用接入调度；它们属于Task3完成条件，当前均未实现。
-
-- **提交失败收尾**：`completeFailureIsMarkedFailedInNewTransactionAndCanRetry`模拟日志插入失败，确认来源回复／成功终态回滚后，原事务已结束；worker在新的事务内用原jobId/attempt/request_id调用fail(internal_error)，最终failed且可重试。`lateFailureDoesNotOverwriteSupersededOrNewAttempt`确认删除或新尝试之后的失败收尾不能覆盖当前状态。
-- **恢复调用时机**：启动顺序为配置校验／确认单worker进程部署前提 → 仅启用worker执行一次恢复 → 恢复成功后开始按空闲槽位扫描。增加`startupRecoversOnceBeforeFirstScan`、`recoveryFailureDoesNotStartScanning`及`workerDisabledDoesNotRecoverOrClaim`；关闭调度后不再claim，取消／关闭在途I/O并确认旧执行线程退出，再允许部署流程启动新worker。重复生命周期事件不得注册第二份扫描或重复恢复。
-
-唯一启用worker且旧进程已停止是单实例发布／进程管理前提，Task3要把生命周期顺序和部署核验落实；不能仅在注释里假设，也不能冒充已具备跨主机防双开能力。当前不新增租约／持有者／心跳字段；多实例需另行评审1b方案。
-
-- [ ] worker在complete抛异常且原提交事务结束后，使用新的短事务调用fail(internal_error)，带原attempt/request_id；补“日志插入失败→整体回滚→新事务failed→可重试”和失效／新attempt不被失败收尾覆盖的回归。fail也因持续DB故障失败时分类记录，不伪称已收尾、不自动重调模型。
-- [ ] 按共享test-contracts/mood-types.json的13值运行真实Java→Python回环HTTP矩阵；单端测试不替代跨服务证据。
-- [ ] 配置改动前完成社区耗时校准：沿用实际prompt与max_tokens=200，最多5次真实供应商顺序合成输入，记录模型/参数/日期、各次耗时、中位数、最大值和失败数至AI_WORKLOG；据结果确认或调整connect=2秒/read=15秒及前端20秒初值，保持前端等待余量。未获得实际数据则明确记录待校准，不伪造“正常生成均小于阈值”的证据，不将小样本当稳定P95。
-- [ ] 保留`RestTemplateConfigTests`和`CommunityAiTimeoutTests`的短时限注入方案：真实回环上游接收后不返回正文，验证读超时分类；断言生产默认connect=2000ms/read=15000ms或采样后明确记录的校准值。实际社区add保留帖子、ai_reply为NULL、AI日志失败且无兜底reply_content；编辑生成失败也不保留旧内容对应回复。禁止真实公网“黑洞地址”测试。
-- [ ] 写 `AiServiceClientTests` / `AiJobWorkerTests`：真实回环 stub HTTP 验证认证头、snake_case DTO、空正文 / 错版本 / 错 attempt / 错 request_id、超时、连接失败；未知调用状态不填 false，SUPPORT 不插供应商成功记录。
-- [ ] RED：`sh ./mvnw '-Dtest=AiServiceClientTests,AiJobWorkerTests,RestTemplateConfigTests,CommunityAiTimeoutTests' test`，确认失败与预期行为有关。
-- [ ] 给现有RestTemplateConfig显式设置社区共享客户端，初值connect=2000ms/read=15000ms并按采样记录校准；改写CommunityPostService.attachAiReply的成功分支，失败不写公开兜底，编辑先清除旧回复。保留同步流程，不把两个阶段超时称为总deadline。
-- [ ] 实现客户端与总 deadline、可关闭资源、按空闲槽位有界调度；仅worker启用时注册启动恢复/扫描，增加`workerDisabledDoesNotRecoverOrClaim`，断言关闭实例的启动不会改动已有running任务；明确关闭调度后再清理在途本地任务。总 deadline 不能仅 cancel Future 而遗留长时间网络阻塞；测试用较短注入时限，生产值固定在全局约束。
-- [ ] 写 `AiReplyHttpTests`：用现有 JWT / AuthInterceptor 的真实 MVC 路径 + mock service，验证本人状态/重试、未登录/跨用户拒绝、add/update返回新VO、已软删来源get/retry拒绝且无replyContent或unavailable、管理列表无prompt/replyContent/raw error；控制器不直接返回 Entity。同步删掉后台 keyword 对隐藏全文的搜索。
-- [ ] 回归社区：200但无正文记失败且不展示兜底，正常成功正文仍展示；公开列表/详情无回复时不挂载AI卡片；捕获结构化日志，断言没有 token、原始日记、prompt 和上游敏感 body；社区新日志同样不复制 prompt。SUPPORT 的模型名必须空，普通 MODEL 非空。
-- [ ] GREEN：`sh ./mvnw '-Dtest=AiServiceClientTests,AiJobWorkerTests,RestTemplateConfigTests,CommunityAiTimeoutTests,AiReplyHttpTests,AuthHttpTests,CorsConfigTests,JacksonConfigTests' test`。
-
-交付物：预设HTTP下任务、权限与隐私可验证。此时前端尚未按MoodSaveVO完成适配，不视为兼容交付，禁止部署；必须待Task4联调验收后同批发布。
+接口保持AiServiceClient.generate(MoodAiRequest, Duration remaining)→MoodAiResponse；worker.runOne最多领取一条，网络不包业务事务。3A仍按当前两端attempt1～3，3B统一放宽。配置AI_SERVICE_BASE_URL、AI_INTERNAL_TOKEN、AI_WORKER_ENABLED（默认false）、AI_WORKER_CONCURRENCY（默认3）；关闭实例不要求内部服务凭据。具体读取保护、时限与停止证据、每批带读和最终命令见v2同一文件，不另立执行口径。
 
 ## Task 4：页面轮询与跨服务闭环验收
 
-- [ ] 接入RETRY-001的前端交互：重试POST在途、queued／running、冷却期均防止连续提交；使用后端可重试时间显示等待，到期只恢复手动入口，不自动生成；刷新／多页面不能绕过后端规则。
+- [ ] 完整1a发布前完成正式模型效果小基线，按总方案14.1节准备固定样例／评分规则／版本和对照证据；当前工程测试与两次真实链路调用不替代该项。具体付费批次与预算另行确认，不自动增加调用；不挤占当前3C主线。
+
+- [ ] 接入RETRY-001的前端交互：重试POST在途、queued／running、冷却期均防止连续提交；使用后端retryAfterSeconds显示等待，到期只恢复手动入口，不自动生成；刷新／多页面不能绕过后端规则。
 
 **Interfaces**
 
