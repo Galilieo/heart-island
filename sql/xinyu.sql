@@ -60,7 +60,7 @@ CREATE TABLE `ai_reply` (
   `target_id` BIGINT NOT NULL COMMENT '关联业务ID',
   `prompt` TEXT DEFAULT NULL COMMENT '发送给AI的提示词',
   `reply_content` TEXT DEFAULT NULL COMMENT 'AI回复内容',
-  `model_name` VARCHAR(100) DEFAULT NULL COMMENT '模型名称',
+  `model_name` VARCHAR(128) DEFAULT NULL COMMENT '模型名称',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1成功，0失败',
   `error_message` TEXT DEFAULT NULL COMMENT '失败原因',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
