@@ -11,6 +11,7 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import Doodle from '../components/ui/Doodle.vue'
+import avatarUrl from '../assets/xiaoya/xinyu-avatar.svg'
 import { useUserStore } from '../stores/user'
 import { userApi } from '../api/user'
 import { useToast } from '../composables/useToast'
@@ -20,9 +21,6 @@ const userStore = useUserStore()
 const toast = useToast()
 
 const username = computed(() => userStore.loginUser?.username || '')
-const avatarText = computed(
-  () => (userStore.loginUser?.nickname || username.value || '心')[0].toUpperCase()
-)
 
 const GENDER_OPTIONS = [
   { label: '不愿透露', value: 'UNDISCLOSED' },
@@ -145,7 +143,7 @@ async function handleSavePassword() {
       <header class="profile__masthead">
         <div class="profile__hero">
           <div class="profile__id">
-            <span class="profile__avatar">{{ avatarText }}</span>
+            <img :src="avatarUrl" alt="" aria-hidden="true" width="64" height="64" class="profile__avatar" />
             <div class="profile__id-text">
               <p class="profile__kicker">个人资料</p>
               <h1 class="profile__name">{{ userStore.loginUser?.nickname || '心屿用户' }}</h1>
@@ -352,15 +350,9 @@ async function handleSavePassword() {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), var(--accent));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-2xl);
-  font-weight: 700;
+  background: var(--bg-soft);
+  object-fit: contain;
   flex-shrink: 0;
-  box-shadow: 0 10px 22px rgba(111, 169, 164, 0.3);
 }
 
 .profile__kicker {

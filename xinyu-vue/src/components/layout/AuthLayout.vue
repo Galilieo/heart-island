@@ -3,7 +3,11 @@
 // 整页一张暖色画布：渐变 + 漂浮涂鸦铺满全屏，slogan 在左下，表单卡浮在右侧。
 // 窄屏自动堆叠成单列。
 import Doodle from '../ui/Doodle.vue'
-import logoUrl from '../../assets/logo-xinyu-small.webp'
+import logoUrl from '../../assets/xiaoya/xinyu-mascot.svg'
+import logoDarkUrl from '../../assets/xiaoya/xinyu-mascot-dark.svg'
+import { useTheme } from '../../composables/useTheme'
+
+const { theme } = useTheme()
 
 defineProps({
   kicker: String,
@@ -34,7 +38,7 @@ defineProps({
     <section class="auth__panel">
       <div class="auth__card float-in">
         <header class="auth__brand">
-          <img :src="logoUrl" alt="心屿" class="auth__logo" />
+          <img :src="theme === 'night' ? logoDarkUrl : logoUrl" alt="心屿" class="auth__logo" />
         </header>
 
         <p v-if="kicker" class="auth__kicker">{{ kicker }}</p>
@@ -138,18 +142,15 @@ defineProps({
 }
 
 .auth__brand {
-  width: 56px;
-  height: 56px;
+  width: 88px;
+  height: 88px;
   margin: 0 auto 18px;
-  border-radius: var(--radius-3);
-  overflow: hidden;
-  box-shadow: 0 12px 28px rgba(111, 169, 164, 0.28);
 }
 
 .auth__logo {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 

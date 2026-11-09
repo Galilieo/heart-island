@@ -9,7 +9,9 @@ import { useToast } from '../../composables/useToast'
 import { useTheme } from '../../composables/useTheme'
 import Doodle from '../ui/Doodle.vue'
 import { navigationItems, isNavigationActive } from './navigation'
-import logoUrl from '../../assets/logo-xinyu-small.webp'
+import logoUrl from '../../assets/xiaoya/xinyu-mascot.svg'
+import logoDarkUrl from '../../assets/xiaoya/xinyu-mascot-dark.svg'
+import avatarUrl from '../../assets/xiaoya/xinyu-avatar.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -66,7 +68,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
   <header class="app-header">
     <div class="app-header__inner container">
       <RouterLink to="/home" class="brand" @click="closeMenu">
-        <img :src="logoUrl" alt="心屿" class="brand__logo" />
+        <img :src="theme === 'night' ? logoDarkUrl : logoUrl" alt="心屿" class="brand__logo" />
         <span class="brand__name">心屿</span>
       </RouterLink>
 
@@ -122,9 +124,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
           aria-controls="user-menu"
           :aria-label="`${userStore.displayName}的用户菜单`"
         >
-          <span class="user__avatar">
-            {{ userStore.displayName[0].toUpperCase() }}
-          </span>
+          <img :src="avatarUrl" alt="" aria-hidden="true" width="32" height="32" class="user__avatar" />
           <span class="user__name">{{ userStore.displayName }}</span>
           <span class="user__caret" aria-hidden="true">▾</span>
         </button>
@@ -185,9 +185,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
 .brand__logo {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  object-fit: cover;
-  box-shadow: 0 6px 14px rgba(111, 169, 164, 0.32);
+  object-fit: contain;
 }
 
 .brand__name {
@@ -285,13 +283,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), var(--accent));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-sm);
-  font-weight: 700;
+  background: var(--bg-soft);
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .user__name {

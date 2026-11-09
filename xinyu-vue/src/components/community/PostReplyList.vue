@@ -6,6 +6,7 @@
 //   - 删除：直接 @delete，由父级走 useConfirm + store。
 import { ref, computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
+import avatarUrl from '../../assets/xiaoya/xinyu-avatar.svg'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import EmptyState from '../ui/EmptyState.vue'
@@ -91,9 +92,7 @@ async function saveEdit(reply) {
       >
         <header class="rl__item-head">
           <div class="rl__author">
-            <span class="rl__avatar">
-              {{ (r.anonymousName || r.nickname || '心')[0].toUpperCase() }}
-            </span>
+            <img :src="avatarUrl" alt="" aria-hidden="true" width="32" height="32" class="rl__avatar" />
             <div>
               <p class="rl__author-name">{{ r.anonymousName || r.nickname || '匿名朋友' }}</p>
               <p class="rl__author-time">{{ formatTime(r.createTime) }}</p>
@@ -208,13 +207,9 @@ async function saveEdit(reply) {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--calm), var(--brand));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-sm);
-  font-weight: 700;
+  background: var(--bg-soft);
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .rl__author-name {

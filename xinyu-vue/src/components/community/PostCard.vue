@@ -5,6 +5,7 @@
 // 点赞 / 收藏 / 编辑 / 删除都只发事件，逻辑在父级走 communityStore。
 import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
+import avatarUrl from '../../assets/xiaoya/xinyu-avatar.svg'
 import BaseTag from '../ui/BaseTag.vue'
 import { moodTone, formatTime } from '../../utils/mood'
 
@@ -45,7 +46,7 @@ const isOwner = computed(
   >
     <header class="pc__head">
       <div class="pc__author">
-        <span class="pc__avatar">{{ authorName[0]?.toUpperCase() || '心' }}</span>
+        <img :src="avatarUrl" alt="" aria-hidden="true" width="36" height="36" class="pc__avatar" />
         <div class="pc__author-meta">
           <p class="pc__author-name">{{ authorName }}</p>
           <p class="pc__author-time">{{ formatTime(post.createTime) }}</p>
@@ -135,13 +136,8 @@ const isOwner = computed(
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--brand), var(--accent));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--fs-sm);
-  font-weight: 700;
+  background: var(--bg-soft);
+  object-fit: contain;
   flex-shrink: 0;
 }
 
