@@ -7,6 +7,19 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 TEMPLATE_VERSION = "mood-reply-v1"
 
+# 以下范围与 Java 侧契约一致：正文按 UTF-16 代码单元计数，
+# budget_ms 与 ID／版本上限来自 Java 的字段定义和 signed long 范围。
+MAX_CONTENT_UTF16 = 500
+MAX_REPLY_UTF16 = 2000
+MAX_BUDGET_MS = 40000
+JAVA_LONG_MAX = 9223372036854775807
+
+# 与前端、Java 统一的心情单选值，顺序与产品选项保持一致。
+MoodType = Literal[
+    "开心", "满足", "期待", "感动", "平静",
+    "焦虑", "难过", "生气", "委屈", "孤独", "迷茫", "疲惫", "其他",
+]
+
 
 def utf16_length(text: str) -> int:
     """计算 UTF-16 代码单元数；包含孤立代理字符时抛出 ValueError。"""
@@ -20,7 +33,7 @@ def utf16_length(text: str) -> int:
 def validate_reply(text: str) -> str:
     """去除回复首尾空白，并校验非空及最多 2000 个 UTF-16 代码单元。"""
     text = text.strip()
-    if not text or utf16_length(text) > 2000:
+    if not text or utf16_length(text) > MAX_REPLY_UTF16:
         raise ValueError("invalid_reply")
     return text
 
@@ -43,7 +56,7 @@ class Correlation(Contract):
     @classmethod
     def signed_long(cls, value: str) -> str:
         """确保字符串形式的 ID 和版本号不超过 Java 有符号 long 的上限。"""
-        if int(value) > 9223372036854775807:
+        if int(value) > JAVA_LONG_MAX:
             raise ValueError("invalid_id")
         return value
 
@@ -51,15 +64,15 @@ class Correlation(Contract):
 class MoodReplyRequest(Correlation):
     """单次心情回应请求，包含最少必要的内容和本次处理预算。"""
 
-    mood_type: Literal["开心", "满足", "期待", "感动", "平静", "焦虑", "难过", "生气", "委屈", "孤独", "迷茫", "疲惫", "其他"]
+    mood_type: MoodType
     content: str
-    budget_ms: int = Field(ge=1, le=40000)
+    budget_ms: int = Field(ge=1, le=MAX_BUDGET_MS)
 
     @field_validator("content")
     @classmethod
     def valid_content(cls, value: str) -> str:
         """拒绝空白、超长或包含孤立代理字符的心情内容。"""
-        if not value.strip() or utf16_length(value) > 500:
+        if not value.strip() or utf16_length(value) > MAX_CONTENT_UTF16:
             raise ValueError("invalid_content")
         return value
 

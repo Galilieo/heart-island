@@ -54,17 +54,12 @@ class Settings(BaseModel):
         """读取必需配置与可选 token 预算；缺失或非法时抛出不含配置值的 ValueError。"""
         try:
             return cls(
+                internal_token=os.environ["AI_INTERNAL_TOKEN"],
+                model_base_url=os.environ["OPENAI_BASE_URL"],
+                model_api_key=os.environ["OPENAI_API_KEY"],
+                model_name=os.environ["OPENAI_MODEL"],
+                model_thinking_mode=os.environ["DEEPSEEK_THINKING_MODE"],
                 model_max_tokens=int(os.environ.get("OPENAI_MAX_TOKENS", "4096")),
-                **{
-                    field: os.environ[env]
-                    for field, env in {
-                        "internal_token": "AI_INTERNAL_TOKEN",
-                        "model_base_url": "OPENAI_BASE_URL",
-                        "model_api_key": "OPENAI_API_KEY",
-                        "model_name": "OPENAI_MODEL",
-                        "model_thinking_mode": "DEEPSEEK_THINKING_MODE",
-                    }.items()
-                },
             )
         except (KeyError, ValueError):
             raise ValueError("invalid_ai_service_configuration") from None
