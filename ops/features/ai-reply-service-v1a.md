@@ -1,12 +1,12 @@
 # 阶段 1a：单实例异步心情回应设计
 
-2026-11-09 · 契约 v1.0设计修订（用户批准Task3 v2开工；3A实施中，后续worker／冷却尚未完成） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
+2026-11-09 · 契约 v1.0设计修订（用户批准Task3 v2开工；3A／worker／冷却已实现验证，3B主体及代表性测试已带读，3F／Task4未完成） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
 
 ## 1. 目标与范围
 
 用户写完日记即收到保存结果，AI 在后台生成。页面能区分保存、排队、生成、失败及回应完成，刷新后可回查；失败可手动重试。
 
-保留 Java / MySQL 的业务权威，新增独立 Python 服务。初始部署限定一个启用worker的Spring Boot进程；用户2026-11-09选定Task3同进程执行并发初值为3，Java执行槽位与Python内部生成请求门禁同步设为3，保留可配置并结合供应商额度与实测校准。定时扫描只补空闲执行槽位，数据库中queued是待办队列，不把全部待办塞进内存；3槽占满时第4条仍留queued，空闲后再领取。当前Java worker尚未实现，Python仍为单进程最多1个内部生成请求。
+保留 Java / MySQL 的业务权威，新增独立 Python 服务。初始部署限定一个启用worker的Spring Boot进程；用户2026-11-09选定Task3同进程执行并发初值为3，Java执行槽位与Python内部生成请求门禁同步设为3，保留可配置并结合供应商额度与实测校准。定时扫描只补空闲执行槽位，数据库中queued是待办队列，不把全部待办塞进内存；3槽占满时第4条仍留queued，空闲后再领取。当前Java worker及Python门禁已实现为默认3槽／3名额，并完成隔离验证。
 
 1a 包含内部认证、总超时、最小内置风险回应分支、日志隐私、条件提交。Redis 限流 / 租约 / 独立 attempt 表在 1b 按场景加入；聊天、SSE、周报、RAG 不在本阶段，周报仍是紧接着的阶段 2。
 
@@ -75,13 +75,13 @@ worker：读取 queued → CAS queued→running / attempt+1 → 校验当前来�
 
 提交还须匹配user_id、target_id、target_version、attempt_count、request_id；最终日记UPDATE的WHERE同时带status=1与content_version=预期版本，enabled=true也必须成立。来源软删除、缺失或版本不匹配时丢弃结果，只把仍属本次执行的未完成job标为superseded；不得写ai_reply日志或succeeded。不要假设软删除会移除job。若删除发生在生成前校验之后，外部调用仍可能执行；删除保证结果不可提交，不承诺供应商停止计算/计费。回复、兼容日志和succeeded在同一事务中；提交失败不显示完成。先提交后删除时，删除清空当前回复并撤销可见性；先删除后提交时，status与版本两道条件均阻止回写。
 
-失败只把本次 running 条件更新为 failed。手动重试仅接受同用户、来源status=1、当前版本、enabled=true的failed，且须通过同样的容量准入；CAS条件含job/user/target_version、status=failed、预期attempt_count及attempt_count<3，再failed→queued，清理最后结果 / 错误与运行时间，不改来源版本。所有幂等返回前先校验来源status=1与当前版本；符合时queued/running返回同job，succeeded返回已有结果，superseded/cancelled拒绝。来源已软删除或缺失时统一按不可用来源拒绝，不返回旧回复或重新入队。上述attempt_count<3与最多3次是当前Task2代码事实，Task3的3B按第10节替换为逐轮冷却、到期可继续；实现前不宣称已放宽。重复调度只允许一次 claim；迟到 attempt 不得提交到新 attempt。
+失败只把本次 running 条件更新为 failed。手动重试仅接受同用户、来源status=1、当前版本、enabled=true的failed，且须通过同样的容量准入；CAS条件含job/user/target_version、status=failed、预期attempt_count及第10节冷却条件，再failed→queued，清理最后结果 / 错误与运行时间，不改来源版本。所有幂等返回前先校验来源status=1与当前版本；符合时queued/running返回同job，succeeded返回已有结果，superseded/cancelled拒绝。来源已软删除或缺失时统一按不可用来源拒绝，不返回旧回复或重新入队。3B已替换原三次上限，按第10节逐轮冷却后继续手动重试；累计次数不重置。重复调度只允许一次 claim；迟到 attempt 不得提交到新 attempt。
 
 retry不显式锁来源，先普通快照读取检查来源，再仅对job做上述原子CAS；这是修改来源事务锁序规则的明确例外，不能持有job锁后再获取来源锁。删除先提交时，原failed已变superseded，retry CAS影响0行；retry先提交时，job变queued，后续删除仍会把queued/running置superseded。两种先后都不能恢复来源，执行前与最终提交仍检查status/版本。CAS带预期attempt_count防止旧retry误操作已完成另一尝试的failed；CAS失败后回查最新状态，不盲目循环重置任务。
 
 更新/关闭令旧未完成job为superseded；软删除按第3节置状态、版本递增并失效未完成任务，不删除job行。1a 不提供用户取消接口；cancelled 为后续扩展预留，不伪造已实现的取消功能。
 
-Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕获其异常，在新的短事务里调用带原jobId/attempt/request_id的fail(internal_error)，不得在rollback-only原事务中写失败。补“提交日志失败→回复／终态回滚→新事务标failed→可手动重试”的worker＋真实DB回归，以及来源已删除／尝试已变化时失败收尾不得覆盖新状态的用例。若数据库持续不可用导致fail也失败，要记录分类故障并保留恢复依据，不伪称已转failed、不自动重调模型。当前只有Task2方法，不能将Task3收尾写成已实现。
+Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕获其异常，在新的短事务里调用带原jobId/attempt/request_id的fail(internal_error)，不得在rollback-only原事务中写失败。补“提交日志失败→回复／终态回滚→新事务标failed→可手动重试”的worker＋真实DB回归，以及来源已删除／尝试已变化时失败收尾不得覆盖新状态的用例。若数据库持续不可用导致fail也失败，要记录分类故障并保留恢复依据，不伪称已转failed、不自动重调模型。该收尾已在3C实现，真实隔离MySQL回滚／失败落库／重试验收通过。
 
 仅AI_WORKER_ENABLED=true的worker启动流程执行恢复；worker关闭时不调用recoverInterrupted、不扫描/领取任务。单实例启动时还须确认旧进程已停止，再将遗留running标为failed，错误 execution_interrupted；queued 保留并恢复扫描。无自动供应商重试，无“重启必定没付费”承诺。多实例 / 滚动发布前必须完成 1b 租约与持有者方案，禁止两个 worker 同时运行此恢复逻辑。
 
@@ -94,7 +94,7 @@ Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕�
 | POST /mood/add | 原 moodType / content / needAiReply | MoodSaveVO：id、contentVersion、aiReplyEnabled、aiReplyState、jobId |
 | PUT /mood/update/{id} | 原修改 DTO | 同上；每次成功修改版本 +1；重新生成或关闭 |
 | GET /mood/list、GET /mood/detail/{id} | 保持原查询参数 | 日记 VO 原字段 + contentVersion、aiReplyEnabled、aiReplyState、jobId、resultKind；状态查询不得调用模型 |
-| GET /mood/ai-job/{id} | 无 | AiJobVO：id、targetId、targetVersion、status、attemptCount、resultKind、replyContent、errorCode、retryable；3B新增retryAfterSeconds（当前尚无） |
+| GET /mood/ai-job/{id} | 无 | AiJobVO：id、targetId、targetVersion、status、attemptCount、resultKind、replyContent、errorCode、retryable、retryAfterSeconds |
 | POST /mood/ai-job/{id}/retry | 无 | 返回当前 AiJobVO；仅来源status=1且当前版本的failed可入队，其余按第4节处理 |
 
 先校验来源归属与status=1，再计算aiReplyState；来源status=0或不存在时拒绝读取任务/重试，不返回replyContent，不映射为unavailable，不创建新任务。aiReplyState包含任务状态，以及disabled / legacy / unavailable；没有 job 且历史非空回复为 legacy；没有 job 且 enabled=false 为 disabled，enabled=true 且无回复 / 无任务为 unavailable（历史或异常状态缺少任务，提示重新加载，不自动生成）。请求 content 必须非空，最大 500 个 UTF-16 code unit，与现有浏览器 maxlength 和 Java String.length 一致；心情类型单选，三端统一为13项：正向开心、满足、期待、感动、平静；负向焦虑、难过、生气、委屈、孤独、迷茫、疲惫；其他。前端用无标题间距分为5项与8项两组，其他并入末组；按钮暂用纯文字且等宽，不用重复图标或正向／负向标签，不生成情绪评分；接口继续传一个moodType字符串，历史六项兼容。情绪强度和多选留待后续单独设计，不在1a增加字段。客户端不能提交 version / jobId 决定服务端写入。
@@ -137,7 +137,7 @@ DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解�
 
 列表 / 详情响应与轮询须同时匹配记录 ID、contentVersion 及本地请求代次，防止导航或编辑后迟到回包覆盖当前状态。轮询网络失败显示状态暂不可用，停止自动轮询并提供“刷新状态”；不能重发生成。最长自动观察 120 秒，之后停止并允许回查，不把任务改成失败。
 
-Task3D／3E已接入单进程有界worker，默认Java执行槽与Python生成名额均为3，分别由AI_WORKER_CONCURRENCY／AI_SERVICE_CONCURRENCY配置。恢复成功才扫描，实际领取入口复查停止闸门；关闭时取消HTTP，保留DB续接到收尾和HTTP实际清理结束后还槽，再等待执行器退出。三槽／门禁、隔离数据库及独立评审已通过，新增主体已带读，完整发布验收仍待后续任务。现有持久queued上限100、单用户queued/running上限3保留；全局执行3槽与单用户在途3名额是独立规则。单任务当前最多3次尝试，Task3按第10节处理冷却后可继续的修订。单实例准入使用进程内一把互斥锁包住容量查询与保存事务，提交后释放；它只保护短 DB 操作，绝不包住模型调用。容量不足仍保存日记，创建 status=failed、attempt_count=0、last_error_code=capacity_exceeded 的 job，提示“心情已保存，AI 暂忙，可稍后重试”；这是容量保护，不宣称付费总额或跨重启日额度。上线前按实际预算再补额度，1b 承接共享限流。
+Task3D／3E已接入单进程有界worker，默认Java执行槽与Python生成名额均为3，分别由AI_WORKER_CONCURRENCY／AI_SERVICE_CONCURRENCY配置。恢复成功才扫描，实际领取入口复查停止闸门；关闭时取消HTTP，保留DB续接到收尾和HTTP实际清理结束后还槽，再等待执行器退出。三槽／门禁、隔离数据库及独立评审已通过，新增主体已带读，完整发布验收仍待后续任务。现有持久queued上限100、单用户queued/running上限3保留；全局执行3槽与单用户在途3名额是独立规则。单任务按第10节逐轮冷却后继续手动重试，累计attempt不重置，不设三次业务总上限。单实例准入使用进程内一把互斥锁包住容量查询与保存事务，提交后释放；它只保护短 DB 操作，绝不包住模型调用。容量不足仍保存日记，创建 status=failed、attempt_count=0、last_error_code=capacity_exceeded 的 job，提示“心情已保存，AI 暂忙，可稍后重试”；这是容量保护，不宣称付费总额或跨重启日额度。上线前按实际预算再补额度，1b 承接共享限流。
 
 | 验收组 | 必须证明 |
 | --- | --- |
@@ -163,9 +163,9 @@ Task3D／3E已接入单进程有界worker，默认Java执行槽与Python生成�
 Task2提交用于评审，不代表获准部署；Task3／4尚未完成，仍需配套验收。Python与Java的13种心情回归共用test-contracts/mood-types.json输入基准；它是测试数据，不是运行时配置。Task3必须覆盖同一组13值的真实Java→Python回环HTTP矩阵，避免只靠单端测试宣称跨服务已验证。
 
 
-## 10. RETRY-001：逐轮冷却后继续手动重试（3B待实施）
+## 10. RETRY-001：逐轮冷却后继续手动重试（3B已实现、验证及带读）
 
-状态：用户2026-11-09批准Task3 v2执行；当前Task2及3A仍按attempt≤3，3B才同步放宽Java SQL／校验和Python契约。不将设计确认写成已实现。
+状态：3B已实现并完成本轮验证，Java SQL／校验与Python契约均放宽为attempt≥1，新增业务接入及代表性测试已带读；完整1a仍待3F／Task4，不部署。
 
 每累计3次执行失败进入一轮冷却：第3次180秒、第6次360秒、第9次720秒、第12次1440秒、第15次2880秒，第18／21／24……次均3600秒。其他失败次数无新增冷却。复用原job，attempt_count累计不清零，不设业务总次数上限；沿用当前INT／Integer的物理类型，不增加溢出专项或字段迁移。系统中断保留已领取attempt，也可能触发冷却；容量拒绝且attempt=0不消耗次数。到期只允许手动retry，不自动queued或调用模型；成功任务不提供重新生成入口。
 

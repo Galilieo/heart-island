@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - 初始部署限定一个启用worker的Spring Boot进程；用户2026-11-09选定Task3单进程执行并发初值为3，Java执行槽位与Python内部生成门禁同步设为3，上限保留可配置。供应商额度与实测用于后续校准，不将初值写成性能已验证。扫描间隔保留1秒，只领取空闲执行槽位可容纳的任务；不做多实例租约／Redis／SSE／聊天。
-- 任务状态 queued / running / succeeded / failed / cancelled / superseded；当前Task2代码最多3次尝试，Task3按已确认v2修订为每三次失败冷却180秒起逐轮翻倍、封顶3600秒后可手动继续、累计attempt不重置；Java/Python协议和SQL保护同步调整，不自动重试模型。
+- 任务状态 queued / running / succeeded / failed / cancelled / superseded；3B已按确认的v2实现为每三次失败冷却180秒起逐轮翻倍、封顶3600秒后可手动继续、累计attempt不重置；Java/Python协议和SQL保护同步调整，不自动重试模型。
 - content 最大 500 个 UTF-16 code unit；回复最多 2000；max_tokens由OPENAI_MAX_TOKENS配置，默认4096，本服务上限8192；thinking样例disabled，也允许enabled，预算与40秒deadline独立生效；未经真实模型校准。
 - Java connect 2秒／read 45秒，领取成功后生成阶段总时限50秒；complete与失败收尾分别配置5秒事务超时（3C实测有效边界）；Python 总时限 40 秒，供应商 connect 2 秒 / read 35 秒且受总时限约束。
 - 持久 queued 上限 100；单用户 queued/running 上限 3；单实例短事务准入锁只包容量检查与保存。
@@ -79,7 +79,7 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 
 用户已明确选择生成中允许修改与随时删除：修改令旧任务失效，按新版本及回应开关重新申请；不采用生成中锁定编辑，避免任务卡住后的解禁机制。短事务锁不跨模型调用，不等待上游结束才删除。
 
-**当前执行状态（2026-11-09）：Task2本地实现与验证完成。外部评审修订后全后端130项通过（含30真实隔离MySQL）；独立初审及小delta复核无阻断项，评审者另跑54项服务／DTO测试通过。本轮未改表结构或迁移，未执行云端操作；Task3网络客户端／worker调度及Task4页面接入尚未实现，不可部署。主体带读与用户掌握单独记录。**
+**历史执行状态（2026-11-09）：Task2本地实现与验证完成。外部评审修订后全后端130项通过（含30真实隔离MySQL）；独立初审及小delta复核无阻断项，评审者另跑54项服务／DTO测试通过。本轮未改表结构或迁移，未执行云端操作；Task3网络客户端／worker调度及Task4页面接入尚未实现，不可部署。主体带读与用户掌握单独记录。**
 
 **Interfaces**
 
@@ -123,12 +123,12 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 - [ ] **第一轮独立评审3A＋3C**：固定SHA／逐文件哈希快照；3A可先预审，3C用户完成后补齐同轮结论。
 - [ ] **3D启动停止＋3E三并发**：配置校验→唯一worker且旧进程退出前提→恢复一次→成功后扫描；恢复失败不扫描、worker关闭零恢复／领取，重复事件不注册第二份调度。停止先关领取闸门再清理I/O、等待执行退出。每秒按空槽补领，Java默认3槽、Python单应用进程门禁3；无无限内存待办。至少两用户及屏障证明3条重叠、第4条数据库queued、空槽补领、超时不影响另两槽、槽位／门禁回收和删除／修改交错不回写旧结果。跨实例租约仍1b。
 - [ ] **第二轮独立评审3D＋3E**：恢复、停止竞争、资源释放与门禁一致性。
-- [ ] **3B冷却**：每3次失败180秒起翻倍、封顶3600秒，累计attempt不重置；同步SQL／Java／Python去掉永久三次限制。用户手写cooldownSeconds与requeue冷却CAS，Codex脚手架／测试／评审。数据库计算retryAfterSeconds，异常NULL显式0；冷却retry经归属检查后429＋Retry-After，普通错误体无VO，前端GET回查。验证到期／NULL／第4与7次／双击／旧身份／删除与服务重建；跨job请求限频留1b。
+- [x] **3B冷却（实现／验证／独立预审及主体／代表性测试带读完成）**：每3次失败180秒起翻倍、封顶3600秒，累计attempt不重置；同步SQL／Java／Python去掉永久三次限制。用户手写cooldownSeconds与requeue冷却CAS，Codex脚手架／测试／评审。数据库计算retryAfterSeconds，异常NULL显式0；冷却retry经归属检查后429＋Retry-After，普通错误体无VO，前端GET回查。验证到期／NULL／第4与7次／双击／旧身份／删除与服务重建；跨job请求限频留1b。
 - [ ] **3F社区与隐私**：先最多5次授权真实模型合成采样校准2秒连接／15秒读等待初值，缺授权或环境就记待校准；真实慢HTTP验证帖子保留、AI失败NULL、编辑先清旧回复且不恢复、日志失败无兜底。旧解析器空／非法结果不得假成功，新日志不复制prompt或原始异常，后台AdminAiReplyVO及允许字段搜索，真实MVC权限与捕获日志隐私回归。
 - [ ] **第三轮独立评审3B＋3F**：冷却CAS／429、权限、社区与日志隐私。
 - [ ] 两端相关模块完整回归，真实MySQL与回环HTTP分别记录；Task4前不可部署，不自动提交／推送／部署。
 
-接口保持AiServiceClient.generate(MoodAiRequest, Duration remaining)→MoodAiResponse；worker.runOne最多领取一条，网络不包业务事务。3A仍按当前两端attempt1～3，3B统一放宽。配置AI_SERVICE_BASE_URL、AI_INTERNAL_TOKEN、AI_WORKER_ENABLED（默认false）、AI_WORKER_CONCURRENCY（默认3）；关闭实例不要求内部服务凭据。具体读取保护、时限与停止证据、每批带读和最终命令见v2同一文件，不另立执行口径。
+接口保持AiServiceClient.generate(MoodAiRequest, Duration remaining)→MoodAiResponse；worker.runOne最多领取一条，网络不包业务事务。3B已统一放宽两端为attempt≥1，累计次数不重置。配置AI_SERVICE_BASE_URL、AI_INTERNAL_TOKEN、AI_WORKER_ENABLED（默认false）、AI_WORKER_CONCURRENCY（默认3）；关闭实例不要求内部服务凭据。具体读取保护、时限与停止证据、每批带读和最终命令见v2同一文件，不另立执行口径。
 
 ## Task 4：页面轮询与跨服务闭环验收
 

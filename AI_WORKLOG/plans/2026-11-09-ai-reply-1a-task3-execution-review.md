@@ -1,10 +1,10 @@
 # 心屿 Task3 执行方案 v2（审查修订稿，附 Codex 复核）
 
 日期：2026-11-09
-状态：3A／3C已实现验证并完成主体带读；3D＋3E已实现并通过隔离验收、独立评审，新增主体及代表性测试已带读，准备分批本地提交后进入3B。后续3B、3F和Task4未完成，当前不发布。
+状态：3A／3C／3D＋3E已实现验证并完成主体带读；3B冷却函数、CAS、服务／协议接入及代表性测试已带读；验证与独立复核通过，不等于用户独立掌握。3F与Task4未完成，不发布。
 用途：用户提供并已授权开始的 Task3 执行依据。本文件在原位置整合 v2，并将沿用的 v1 内部协议、社区步骤、文件清单及命令收进附录，不要求读者另找旧版。v2 的改变优先于沿用内容；Codex复核意见单列第11节，已纳入实施验收要求；权威契约随本次开工同步，代码／验证／带读分别记录。
 
-当前交接：AiJobRuntime负责恢复后扫描、默认3槽及有序停止；AiJobRuntimeConfig按worker开关接入并核验Hikari／JDBC有限等待。客户端新增独立HTTP清理信号，worker在数据库收尾与HTTP清理都结束后还槽；Python门禁默认3、可配置。Java17最终256项、Python119项通过；3D／3E主链及代表性测试已带读；当前按用户授权整理本地提交，随后进入3B。可读性重构保留原线程／事务语义，用户独立掌握未验证，冷却函数／CAS仍留给用户；不推送或部署。
+当前交接：3B累计尝试次数、冷却重排、retryAfterSeconds及429＋Retry-After已接入。用户参照提示填写纯函数和CAS，Codex修正0判断／break及参数列名拼写并接入其余链路；不是用户独立实现整套机制。3B已沿retry→数据库剩余秒数→429→容量与CAS→VO→跨端及代表性测试完成带读；下一步3F，本批按用户授权分批整理本地提交，不推送或部署。
 
 ## 0. 相对 v1 的修订摘要
 
@@ -256,7 +256,7 @@ Codex 负责客户端、生命周期、并发、社区修复、测试与文档�
 - [x] 第1轮3A＋3C固定范围独立评审完成，两个SQL超时遗漏已修复；3D接入前置项见上方任务，不代表其已通过。
 - [x] 3D＋3E生命周期、三槽、清理信号及代表性测试已带读；实现、隔离验收及独立评审通过，不等于用户独立掌握。
 - [x] 第2轮固定范围独立评审完成，停止失败后继续清理、实际领取闸门两项问题已修复并复核。
-- [ ] 3B 冷却函数、CAS、429、attempt 范围放宽通过并带读。
+- [x] 3B实现、真实数据库验证和独立预审通过，主体及代表性测试已带读；独立掌握未验证。
 - [ ] 3F 社区、后台、日志修复通过，采样状态如实记录。
 - [ ] 第 3 轮独立评审完成。
 - [ ] 两端回归与后端全量完成，跳过与未验项单列。
@@ -361,6 +361,15 @@ JDK HttpClient 与 Apache HC5 各测无响应、持续慢正文、响应超界�
 - review_3c_db_boundaries固定14文件及后续4文件delta核哈希复审通过，修复两项停止边界；只读审查并核日志，未独立运行。快照：`/tmp/heartisland-3de-review-final/manifest.json`、`/tmp/heartisland-3de-last-delta/manifest.json`。临时MySQL已关闭、数据日志保留；未访问业务库／真实模型、未提交／推送／部署。下一步按源码带读新主体，3B／3F未开始。
 
 - 提交前收口（2026-11-10）：新增可读性规范`ops/12-code-readability.md`并由AGENTS入口引用；复核当前Runtime／Worker／Config的阶段拆分，停止、领取闸门与每次独立事务语义保持等价，修正执行槽位不等于数据库线程占用的注释。当前精确源码重新运行Java256项（含39项真实MySQL持久化、5项JDBC故障、15项合成Python HTTP）及Python119项通过；日志`/tmp/heartisland-3de-db-precommit.log`、`/tmp/heartisland-3de-precommit-python.log`。按独立目的分批本地提交，不推送／部署；3B尚未实施。
+
+### 11.11 3B冷却与重试接入（2026-11-10）
+
+- 用户参照分步代码填写cooldownSeconds并选择循环版；Codex修正0次数与break位置，14项纯函数RED→GREEN。用户按提示填写requeueAfterCooldown的OR三条件，Codex修正参数／列名拼写并保留原结构；真实MySQL占位RED→GREEN。固定初值下循环最多翻倍5次，是O(1)，不记为用户独立设计或掌握。
+- Codex接入：累计attempt不重置，移除SQL／Java请求与回包／Python的业务三次上限；数据库时间计算正剩余向上取整，NULL结束时间按约定放行且记安全分类。GET新增retryAfterSeconds，retry先校验归属／来源，再检查冷却和容量，最后完整CAS；到期仍需手动重试，不自动生成。
+- 429沿用ResponseStatusException与普通Result错误体，覆写默认只读空响应头并由既有异常处理器透传Retry-After。服务429、MVC丢头和第4／7次跨端限制分别先RED再GREEN；不新增专用错误体。
+- 独立评审确认当前读回查后再普通SELECT可能混用RR快照，已删除多余重算分支；CAS未命中且回查仍failed时直接409，不覆盖新尝试。正常冷却429不变。review_3b固定17文件及2文件delta复核通过，未独立跑测试；快照`/tmp/heartisland-3b-review/manifest.json`、`/tmp/heartisland-3b-review-delta/manifest.json`。
+- Java17同次282项、Python120项通过；含47项真实MySQL持久化、5项JDBC故障、17项真实Java→Python合成供应商HTTP。覆盖冷却前拒绝／到点放行、NULL、亚秒剩余不提前归0、第4／7次提交、并发重试保留同job、旧attempt不覆盖、删除优先404、服务重建资格一致。最终日志`/tmp/heartisland-3de-db-3b_final.log`、`/tmp/heartisland-3b-python-final.log`。亚秒探针复用实际Mapper SQL并用固定CTE输入，不修改表结构；生产／真实模型／前端尚未验。
+- 新增Service／VO／异常头透传、跨端及代表性测试已带读；本批按授权分批本地提交，不推送或部署。第三轮完整3B＋3F评审仍待3F，不把本次3B预审当整轮完成。
 
 ## 12. 后续社区异步 AI 回复（三并发意向，2026-11-09）
 

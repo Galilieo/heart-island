@@ -47,7 +47,7 @@ uv run --directory xinyu-ai --locked uvicorn app.main:app_from_env --factory \
 }
 ```
 
-ID／版本必须是正数的十进制字符串且在 Java signed long 范围内；attempt 为 1—3 的整数，budget_ms 为 1—40000。心情类型与前端、Java统一为13项：开心、满足、期待、感动、平静、焦虑、难过、生气、委屈、孤独、迷茫、疲惫、其他；目前仍为单选字符串，旧六项继续合法。content 非空，最多 500 个 UTF-16 单位；250 个 emoji 合法，251 个越界；孤立代理字符拒绝。未知字段、错误类型和非法 JSON 均拒绝。关联字段仅回传，不代表服务替 Java 校验了来源归属。
+ID／版本必须是正数的十进制字符串且在 Java signed long 范围内；attempt 为大于等于1的整数，不设三次业务上限，budget_ms 为 1—40000。心情类型与前端、Java统一为13项：开心、满足、期待、感动、平静、焦虑、难过、生气、委屈、孤独、迷茫、疲惫、其他；目前仍为单选字符串，旧六项继续合法。content 非空，最多 500 个 UTF-16 单位；250 个 emoji 合法，251 个越界；孤立代理字符拒绝。未知字段、错误类型和非法 JSON 均拒绝。关联字段仅回传，不代表服务替 Java 校验了来源归属。
 
 200 响应回传 request_id／job_id／attempt／source_version，并包含 reply_content、result_kind、model_called、template_version 和 model_name。回复去首尾空白后非空、最多 2000 个 UTF-16 单位。MODEL 必须 model_called=true 且模型名非空；SUPPORT 为 false／null。模板版本固定 `mood-reply-v1`。model_called=true 只说明已发起本地供应商请求，不证明供应商执行或计费。
 
@@ -86,7 +86,7 @@ uv run --directory xinyu-ai --locked pytest -q
 
 测试替换外部供应商，保留真实认证、风险、校验与 HTTP 适配；另以真实回环 TCP 验证挂起响应在总 deadline 后关闭连接。运行测试需要允许绑定 127.0.0.1 临时端口。协议测试及有限样例不证明真实模型质量、危机覆盖率或生产可用性。
 
-本地 RED/GREEN、依赖版本与后续接续见 `AI_WORKLOG/2026-11-07-ai-reply-1a-progress.md`。3A已完成Java内部HTTP联调与两条合成输入真实供应商验收；3D／3E自动worker和数据库提交闭环已实现验证，新增主体已带读；冷却、社区耗时校准、前端联调和完整发布验收尚待后续阶段。
+本地 RED/GREEN、依赖版本与后续接续见 `AI_WORKLOG/2026-11-07-ai-reply-1a-progress.md`。3A已完成Java内部HTTP联调与两条合成输入真实供应商验收；3D／3E自动worker和数据库提交闭环已实现验证，新增主体已带读；3B冷却和继续重试已实现、验证并完成主体带读；社区耗时校准、前端联调和完整发布验收尚待后续阶段。
 
 
 ### Java→Python 回环契约验收（3A）
