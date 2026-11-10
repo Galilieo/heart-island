@@ -39,7 +39,7 @@ class AiJobWorkerFailureLearningCases extends AiJobWorkerTests {
                 && definition.getPropagationBehavior() == TransactionDefinition.PROPAGATION_REQUIRES_NEW));
         order.verify(jobs).fail(10, 1, "req-A", "internal_error");
         order.verify(manager).commit(cleanup);
-        verify(client, times(1)).generateAsync(any(), any());
+        verify(client, times(1)).startGeneration(any(), any());
     }
 
     @Test
@@ -63,6 +63,6 @@ class AiJobWorkerFailureLearningCases extends AiJobWorkerTests {
         generated.complete(response());
         database.drain();
         assertThat(result.get(1, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.UNRESOLVED);
-        verify(client, times(1)).generateAsync(any(), any());
+        verify(client, times(1)).startGeneration(any(), any());
     }
 }

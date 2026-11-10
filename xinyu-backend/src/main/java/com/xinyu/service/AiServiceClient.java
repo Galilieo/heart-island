@@ -35,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -58,6 +59,9 @@ import java.util.function.LongSupplier;
  * 不携带原始响应、密钥或异常链。资源在 {@link #close} 时统一回收，业务事务由调用方管理。</p>
  */
 public final class AiServiceClient implements AutoCloseable {
+
+    /** response给出业务结果；terminated在本次HTTP执行及资源清理结束后完成，供worker归还槽位。 */
+    public record Generation(CompletableFuture<MoodAiResponse> response, CompletableFuture<Void> terminated) { }
 
     /** 单次调用的时间上限；只允许收紧，不允许超过生产初值。 */
     public record Limits(Duration connect, Duration read, Duration total) {
@@ -218,6 +222,11 @@ public final class AiServiceClient implements AutoCloseable {
      * 调用方的同步续接必须保持轻量；数据库操作等阻塞任务应使用whenCompleteAsync及显式执行器。
      */
     public CompletableFuture<MoodAiResponse> generateAsync(MoodAiRequest request, Duration remaining) {
+        return startGeneration(request, remaining).response();
+    }
+
+    /** worker同时观察结果与清理信号；取消response只取消本请求，不取消共享DNS。 */
+    public Generation startGeneration(MoodAiRequest request, Duration remaining) {
         Call call;
         try {
             if (Thread.currentThread().isInterrupted() || closed) throw failure(EXECUTION_INTERRUPTED);
@@ -237,11 +246,11 @@ public final class AiServiceClient implements AutoCloseable {
                 }, Math.max(0, nanosUntil(deadline)), TimeUnit.NANOSECONDS);
             }
         } catch (AiServiceException invalid) {
-            return CompletableFuture.failedFuture(invalid);
+            return new Generation(CompletableFuture.failedFuture(invalid), CompletableFuture.completedFuture(null));
         }
         call.result.whenComplete((value, problem) -> release(call));
         dns.prepare().whenComplete((ignored, problem) -> afterDns(call, problem));
-        return call.result;
+        return new Generation(call.result, call.terminated);
     }
 
     private void afterDns(Call call, Throwable dnsFailure) {
@@ -260,6 +269,8 @@ public final class AiServiceClient implements AutoCloseable {
                 httpWorkers.execute(call.task);
             }
         } catch (RejectedExecutionException full) {
+            // 任务未进入HTTP执行器，没有等待中的HTTP资源。
+            call.terminated.complete(null);
             finish(call, null, failure(closed ? EXECUTION_INTERRUPTED : "overloaded"));
         } catch (AiServiceException safe) {
             finish(call, null, safe);
@@ -267,8 +278,8 @@ public final class AiServiceClient implements AutoCloseable {
     }
 
     private void executeHttp(Call call) {
-        if (call.result.isDone()) return;
         try {
+            if (call.result.isDone()) return;
             checkDeadline(call.deadline, call.expired);
             MoodAiResponse result = http.execute(call.post, response -> {
                 try {
@@ -286,6 +297,9 @@ public final class AiServiceClient implements AutoCloseable {
             finish(call, null, safe);
         } catch (Exception problem) {
             finish(call, null, classifyTransportFailure(problem, call.deadline, call.expired));
+        } finally {
+            // http.execute已退出，响应处理和连接清理均已结束；超时结果可能比这里先发布。
+            call.terminated.complete(null);
         }
     }
 
@@ -301,7 +315,10 @@ public final class AiServiceClient implements AutoCloseable {
         synchronized (lifecycle) {
             call.alarm.cancel(false);
             call.cancelPost();
-            if (call.task != null) httpWorkers.remove(call.task);
+            if (call.task == null || httpWorkers.remove(call.task)) {
+                // 尚在DNS阶段，或HTTP任务还在队列内，取消后无HTTP执行需要等待。
+                call.terminated.complete(null);
+            }
             active.remove(call);
         }
     }
@@ -315,6 +332,7 @@ public final class AiServiceClient implements AutoCloseable {
         final AtomicBoolean expired = new AtomicBoolean();
         final AtomicBoolean finished = new AtomicBoolean();
         final CompletableFuture<MoodAiResponse> result = new CompletableFuture<>();
+        final CompletableFuture<Void> terminated = new CompletableFuture<>();
         volatile HttpPost post;
         Runnable task;
         ScheduledFuture<?> alarm;
@@ -589,17 +607,28 @@ public final class AiServiceClient implements AutoCloseable {
     @Override
     public void close() {
         Call[] pending;
+        List<Runnable> abandoned;
         synchronized (lifecycle) {
             if (closed) return;
             closed = true;
             pending = active.toArray(Call[]::new);
             for (Call call : pending) call.cancelPost();
             deadlines.shutdownNow();
-            httpWorkers.shutdownNow();
+            abandoned = httpWorkers.shutdownNow();
         }
         dns.close();
         http.close(CloseMode.IMMEDIATE);
         // 不持有生命周期锁执行Future续接；迟到DNS和HTTP结果不能覆盖已终止的结果。
-        for (Call call : pending) finish(call, null, failure(EXECUTION_INTERRUPTED));
+        for (Call call : pending) {
+            if (abandoned.contains(call.task)) {
+                call.terminated.complete(null);
+            }
+            finish(call, null, failure(EXECUTION_INTERRUPTED));
+        }
+    }
+
+    /** close后等待HTTP执行器实际退出；不等待可能忽略中断的系统DNS daemon。 */
+    public boolean awaitTermination(Duration remaining) throws InterruptedException {
+        return httpWorkers.awaitTermination(Math.max(0, remaining.toNanos()), TimeUnit.NANOSECONDS);
     }
 }

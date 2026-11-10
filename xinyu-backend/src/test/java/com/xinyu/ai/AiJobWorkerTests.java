@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -58,7 +59,36 @@ class AiJobWorkerTests {
         generated = new CompletableFuture<>();
         when(jobs.claimNext()).thenReturn(job());
         when(jobs.sourceForAttempt(10, 1, "req-A")).thenReturn(source());
-        when(client.generateAsync(any(), any())).thenReturn(generated);
+        when(client.startGeneration(any(), any()))
+                .thenReturn(new AiServiceClient.Generation(generated, CompletableFuture.completedFuture(null)));
+    }
+
+    @Test
+    void queuedClaimDoesNotReadDatabaseAfterLifecycleGateCloses() throws Exception {
+        AtomicBoolean accepting = new AtomicBoolean(true);
+        AiJobWorker gated = new AiJobWorker(jobs, client, manager, database, clock::get, accepting::get);
+        var result = gated.runOne();
+        accepting.set(false);
+        database.drain();
+
+        assertThat(result.get(1, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.IDLE);
+        verifyNoInteractions(jobs, client, manager);
+    }
+
+    @Test
+    void settledReplyDoesNotFinishExecutionBeforeHttpCleanup() throws Exception {
+        CompletableFuture<Void> httpTerminated = new CompletableFuture<>();
+        when(client.startGeneration(any(), any()))
+                .thenReturn(new AiServiceClient.Generation(generated, httpTerminated));
+        when(jobs.complete(10, 1, "req-A", response())).thenReturn(true);
+        var result = worker.runOne();
+        database.drain();
+        generated.complete(response());
+        database.drain();
+
+        assertThat(result).isNotDone();
+        httpTerminated.complete(null);
+        assertThat(result.get(1, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
     }
 
     @Test
@@ -123,7 +153,7 @@ class AiJobWorkerTests {
         });
         worker.runOne();
         database.drain();
-        verify(client).generateAsync(eq(new MoodAiRequest("req-A", "10", 1, "7", "平静", "合成记录", 40000)),
+        verify(client).startGeneration(eq(new MoodAiRequest("req-A", "10", 1, "7", "平静", "合成记录", 40000)),
                 eq(Duration.ofSeconds(48)));
     }
 
@@ -133,7 +163,7 @@ class AiJobWorkerTests {
         database.pending.remove().run();
         clock.addAndGet(Duration.ofSeconds(2).toNanos());
         database.drain();
-        verify(client).generateAsync(any(), eq(Duration.ofSeconds(48)));
+        verify(client).startGeneration(any(), eq(Duration.ofSeconds(48)));
     }
 
     @Test
@@ -173,7 +203,7 @@ class AiJobWorkerTests {
         assertThat(result.get(1, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.FAILED);
         verify(jobs).fail(10, 1, "req-A", code);
         verify(jobs, never()).complete(anyLong(), anyInt(), anyString(), any());
-        verify(client, times(1)).generateAsync(any(), any());
+        verify(client, times(1)).startGeneration(any(), any());
     }
 
     @Test
