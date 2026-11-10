@@ -6,6 +6,10 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.dto.MoodAiResponse;
+import com.xinyu.dto.MoodAiRequest;
+import com.xinyu.service.AiJobWorker;
+import com.xinyu.service.AiServiceClient;
+import com.xinyu.service.AiServiceException;
 import com.xinyu.mapper.MoodRecordMapper;
 import com.xinyu.service.AiJobAdmission;
 import com.xinyu.service.AiJobService;
@@ -28,6 +32,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
 /** 使用实际 MySQL、MyBatis 与 Spring 事务；没有指定隔离库时明确跳过。 */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -710,6 +716,329 @@ class AiJobPersistenceIT {
             assertThat(result.getJobId()).isNull();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE target_id=?", Integer.class, saved.getId())).isZero();
             assertThat(service.getDetailView(saved.getId(), userId).aiReply()).isEqualTo("legacy".equals(state) ? "保留旧回复" : null);
+        }
+    }
+
+    @Test
+    void completeFailureIsMarkedFailedInNewTransactionAndCanRetry() throws Exception {
+        var saved = service.add(input());
+        jdbc.execute("CREATE TRIGGER xinyu_test_fail_log_insert BEFORE INSERT ON ai_reply "
+                + "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='synthetic log failure'");
+
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var first = execution.worker.runOne();
+            ModelCall firstModel = execution.nextModelCall();
+            firstModel.succeed();
+
+            assertThat(first.get(5, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.FAILED);
+            var failed = jobs.selectById(saved.getJobId());
+            assertThat(failed.getStatus()).isEqualTo("failed");
+            assertThat(failed.getLastErrorCode()).isEqualTo("internal_error");
+            assertThat(failed.getAttemptCount()).isEqualTo(1);
+            assertThat(failed.getModelCalled()).isNull();
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isNull();
+            assertThat(logs()).isZero();
+            assertThat(jobService.getOwned(userId, saved.getJobId()).retryable()).isTrue();
+
+            jdbc.execute("DROP TRIGGER xinyu_test_fail_log_insert");
+            assertThat(jobService.retry(userId, saved.getJobId()).id()).isEqualTo(saved.getJobId());
+            var second = execution.worker.runOne();
+            ModelCall secondModel = execution.nextModelCall();
+            assertThat(secondModel.request().attempt()).isEqualTo(2);
+            assertThat(secondModel.request().requestId()).isNotEqualTo(firstModel.request().requestId());
+            secondModel.succeed();
+
+            assertThat(second.get(5, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
+            assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("succeeded");
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isEqualTo("合成worker回复。");
+            assertThat(logs()).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT prompt FROM ai_reply WHERE user_id=?", String.class, userId)).isNull();
+            verify(execution.client, times(2)).generateAsync(any(), any());
+        }
+    }
+
+    @Test
+    void workerLateFailureCannotOverwriteSupersededSource() throws Exception {
+        var saved = service.add(input());
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var result = execution.worker.runOne();
+            ModelCall oldModel = execution.nextModelCall();
+            MoodRecord edit = input();
+            edit.setContent("新版本合成内容");
+            var updated = service.update(saved.getId(), userId, edit);
+            oldModel.reply().completeExceptionally(new AiServiceException("provider_error"));
+
+            assertThat(result.get(5, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SKIPPED);
+            assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("superseded");
+            assertThat(jobs.selectById(updated.getJobId()).getStatus()).isEqualTo("queued");
+            assertThat(moods.selectById(saved.getId()).getContentVersion()).isEqualTo(2);
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isNull();
+            assertThat(logs()).isZero();
+        }
+    }
+
+    @Test
+    void workerLateFailureCannotOverwriteNewAttempt() throws Exception {
+        var saved = service.add(input());
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var oldResult = execution.worker.runOne();
+            ModelCall oldModel = execution.nextModelCall();
+            assertThat(jobService.fail(saved.getJobId(), 1, oldModel.request().requestId(), "provider_timeout")).isTrue();
+            jobService.retry(userId, saved.getJobId());
+            var current = jobService.claimNext();
+            assertThat(current.getAttemptCount()).isEqualTo(2);
+            oldModel.reply().completeExceptionally(new AiServiceException("provider_error"));
+
+            assertThat(oldResult.get(5, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SKIPPED);
+            var after = jobs.selectById(saved.getJobId());
+            assertThat(after.getStatus()).isEqualTo("running");
+            assertThat(after.getAttemptCount()).isEqualTo(2);
+            assertThat(after.getRequestId()).isEqualTo(current.getRequestId());
+            assertThat(after.getLastErrorCode()).isNull();
+            assertThat(logs()).isZero();
+        }
+    }
+
+    @Test
+    void workerLateSuccessDoesNotRestoreReplyAfterDeletion() throws Exception {
+        var saved = service.add(input());
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var result = execution.worker.runOne();
+            ModelCall model = execution.nextModelCall();
+            assertThat(service.delete(saved.getId(), userId)).isTrue();
+            model.succeed();
+
+            assertThat(result.get(5, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SKIPPED);
+            assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("superseded");
+            assertThat(moods.selectById(saved.getId()).getStatus()).isZero();
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isNull();
+            assertThat(logs()).isZero();
+        }
+    }
+
+    @Test
+    void completionRowLockTimeoutRollsBackAndFailureMarkCanCommit() throws Exception {
+        var saved = service.add(input());
+        ExecutorService locker = Executors.newSingleThreadExecutor();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var result = execution.worker.runOne();
+            ModelCall model = execution.nextModelCall();
+            Future<?> holding = locker.submit(() -> tx.execute(status -> {
+                moods.selectOwnedForUpdate(saved.getId(), userId);
+                locked.countDown();
+                awaitProbeRelease(release);
+                return null;
+            }));
+            assertThat(locked.await(3, TimeUnit.SECONDS)).isTrue();
+            // 服务器行锁上限须大于5秒，避免把服务器锁超时误认为Spring语句超时。
+            assertThat(jdbc.queryForObject("SELECT @@innodb_lock_wait_timeout", Integer.class)).isGreaterThan(5);
+            long started = System.nanoTime();
+            model.succeed();
+
+            assertThat(result.get(9, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.FAILED);
+            Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+            assertThat(elapsed).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(9));
+            assertThat(holding).isNotDone();
+            assertThat(release.getCount()).isEqualTo(1);
+            assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("failed");
+            assertThat(jobs.selectById(saved.getJobId()).getLastErrorCode()).isEqualTo("internal_error");
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isNull();
+            assertThat(logs()).isZero();
+            System.out.println("3C_REAL_DB completion_lock_timeout_ms=" + elapsed.toMillis());
+            release.countDown();
+            holding.get(3, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            locker.shutdownNow();
+            assertThat(locker.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void cleanupRowLockTimeoutReturnsUnresolvedAndLeavesRunning() throws Exception {
+        var saved = service.add(input());
+        ExecutorService locker = Executors.newSingleThreadExecutor();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var result = execution.worker.runOne();
+            ModelCall model = execution.nextModelCall();
+            Future<?> holding = locker.submit(() -> tx.execute(status -> {
+                jobs.selectForUpdate(saved.getJobId());
+                locked.countDown();
+                awaitProbeRelease(release);
+                return null;
+            }));
+            assertThat(locked.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(jdbc.queryForObject("SELECT @@innodb_lock_wait_timeout", Integer.class)).isGreaterThan(5);
+            long started = System.nanoTime();
+            model.reply().completeExceptionally(new AiServiceException("provider_error"));
+
+            assertThat(result.get(9, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.UNRESOLVED);
+            Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+            assertThat(elapsed).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(9));
+            assertThat(holding).isNotDone();
+            assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("running");
+            assertThat(jobs.selectById(saved.getJobId()).getLastErrorCode()).isNull();
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isNull();
+            assertThat(logs()).isZero();
+            System.out.println("3C_REAL_DB cleanup_lock_timeout_ms=" + elapsed.toMillis());
+            release.countDown();
+            holding.get(3, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            locker.shutdownNow();
+            assertThat(locker.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void claimRowLockTimeoutLeavesJobQueuedAndDoesNotCallModel() throws Exception {
+        var saved = service.add(input());
+        ExecutorService locker = Executors.newSingleThreadExecutor();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        try (WorkerExecution execution = new WorkerExecution()) {
+            Future<?> holding = locker.submit(() -> tx.execute(status -> {
+                jobs.selectForUpdate(saved.getJobId());
+                locked.countDown();
+                awaitProbeRelease(release);
+                return null;
+            }));
+            try {
+                assertThat(locked.await(3, TimeUnit.SECONDS)).isTrue();
+                assertThat(jdbc.queryForObject("SELECT @@innodb_lock_wait_timeout", Integer.class)).isGreaterThan(5);
+                long started = System.nanoTime();
+                var result = execution.worker.runOne();
+
+                assertThatThrownBy(() -> result.get(9, TimeUnit.SECONDS))
+                        .isInstanceOf(ExecutionException.class)
+                        .hasRootCauseInstanceOf(java.sql.SQLTimeoutException.class);
+                Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+                assertThat(elapsed).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(9));
+                assertThat(holding).isNotDone();
+                assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("queued");
+                assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isZero();
+                verifyNoInteractions(execution.client);
+                System.out.println("3C_REAL_DB claim_lock_timeout_ms=" + elapsed.toMillis());
+            } finally {
+                release.countDown();
+                holding.get(3, TimeUnit.SECONDS);
+            }
+        } finally {
+            release.countDown();
+            locker.shutdownNow();
+            assertThat(locker.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void invalidSourcePrecheckRowLockTimeoutDoesNotKeepDatabaseThreadWaiting() throws Exception {
+        var saved = service.add(input());
+        // 暂存交接步骤，便于在真实领取提交后、来源预检前构造失效来源和行锁。
+        BlockingQueue<Runnable> steps = new ArrayBlockingQueue<>(3);
+        ExecutorService locker = Executors.newSingleThreadExecutor();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        try (WorkerExecution execution = new WorkerExecution(steps::add)) {
+            var result = execution.worker.runOne();
+            execution.database.submit(steps.poll(3, TimeUnit.SECONDS)).get(3, TimeUnit.SECONDS);
+            assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("running");
+            jdbc.update("UPDATE mood_record SET status=0 WHERE id=?", saved.getId());
+
+            Future<?> holding = locker.submit(() -> tx.execute(status -> {
+                jobs.selectForUpdate(saved.getJobId());
+                locked.countDown();
+                awaitProbeRelease(release);
+                return null;
+            }));
+            try {
+                assertThat(locked.await(3, TimeUnit.SECONDS)).isTrue();
+                assertThat(jdbc.queryForObject("SELECT @@innodb_lock_wait_timeout", Integer.class)).isGreaterThan(5);
+                long started = System.nanoTime();
+                Future<?> precheck = execution.database.submit(steps.poll(3, TimeUnit.SECONDS));
+
+                // 预检更新和后续fail各等最多5秒；锁不释放，两者都应退出，不能假称已落库。
+                assertThat(result.get(13, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.UNRESOLVED);
+                precheck.get(1, TimeUnit.SECONDS);
+                Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+                assertThat(elapsed).isBetween(Duration.ofSeconds(8), Duration.ofSeconds(13));
+                assertThat(holding).isNotDone();
+                assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("running");
+                verifyNoInteractions(execution.client);
+                System.out.println("3C_REAL_DB precheck_and_cleanup_lock_timeout_ms=" + elapsed.toMillis());
+            } finally {
+                release.countDown();
+                holding.get(3, TimeUnit.SECONDS);
+            }
+        } finally {
+            release.countDown();
+            locker.shutdownNow();
+            assertThat(locker.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private static void awaitProbeRelease(CountDownLatch release) {
+        try {
+            assertThat(release.await(15, TimeUnit.SECONDS)).as("锁探针必须在15秒内显式释放").isTrue();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("隔离锁探针被中断");
+        }
+    }
+
+    /** 真实数据库执行器及worker，只替换模型返回；不使用直接执行器隐藏线程交接。 */
+    private final class WorkerExecution implements AutoCloseable {
+        private final ExecutorService database = Executors.newSingleThreadExecutor();
+        private final BlockingQueue<ModelCall> calls = new LinkedBlockingQueue<>(3);
+        private final ConcurrentLinkedQueue<ModelCall> inflight = new ConcurrentLinkedQueue<>();
+        private final AiServiceClient client = mock(AiServiceClient.class);
+        private final AiJobWorker worker;
+
+        WorkerExecution() {
+            this(null);
+        }
+
+        WorkerExecution(Executor stagedDatabase) {
+            worker = new AiJobWorker(jobService, client, manager,
+                    stagedDatabase == null ? database : stagedDatabase, System::nanoTime);
+            when(client.generateAsync(any(), any())).thenAnswer(invocation -> {
+                ModelCall call = new ModelCall(invocation.getArgument(0), new CompletableFuture<>());
+                inflight.add(call);
+                if (!calls.offer(call)) {
+                    throw new IllegalStateException("测试模型请求队列已满");
+                }
+                return call.reply();
+            });
+        }
+
+        ModelCall nextModelCall() throws InterruptedException {
+            ModelCall call = calls.poll(3, TimeUnit.SECONDS);
+            assertThat(call).as("worker应在预检后发出一次合成模型请求").isNotNull();
+            return call;
+        }
+
+        @Override
+        public void close() throws InterruptedException {
+            for (ModelCall call : inflight) {
+                call.reply().completeExceptionally(new AiServiceException("execution_interrupted"));
+            }
+            database.shutdown();
+            if (!database.awaitTermination(10, TimeUnit.SECONDS)) {
+                database.shutdownNow();
+                assertThat(database.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+            }
+        }
+    }
+
+    private record ModelCall(MoodAiRequest request, CompletableFuture<MoodAiResponse> reply) {
+        void succeed() {
+            reply.complete(new MoodAiResponse(request.requestId(), request.jobId(), request.attempt(),
+                    request.sourceVersion(), "合成worker回复。", "MODEL", true, "mood-reply-v1", "synthetic-model"));
         }
     }
 
