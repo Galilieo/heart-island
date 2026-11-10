@@ -18,7 +18,7 @@ public interface AiJobMapper extends BaseMapper<AiJob> {
      *
      * @return 最早一条 queued 任务；没有时返回 null
      */
-    @Select("SELECT * FROM ai_job WHERE task_type='MOOD_REPLY' AND status='queued' AND attempt_count<3 ORDER BY id LIMIT 1")
+    @Select("SELECT * FROM ai_job WHERE task_type='MOOD_REPLY' AND status='queued'  ORDER BY id LIMIT 1")
     AiJob selectNextQueued();
 
     /**
@@ -31,7 +31,7 @@ public interface AiJobMapper extends BaseMapper<AiJob> {
     AiJob selectForUpdate(@Param("id") long id);
 
     /**
-     * 原子领取任务：只有 queued、尝试次数未达上限且仍为预期值时成功。
+     * 原子领取任务：只有queued且累计次数仍为预期值时成功，领取才递增次数。
      *
      * @param id 任务 ID
      * @param expectedAttempt 领取前的尝试次数
@@ -43,7 +43,7 @@ public interface AiJobMapper extends BaseMapper<AiJob> {
           started_at=CURRENT_TIMESTAMP, finished_at=NULL, last_error_code=NULL,
           result_kind=NULL, model_name=NULL, model_called=NULL, update_time=CURRENT_TIMESTAMP
         WHERE id=#{id} AND task_type='MOOD_REPLY' AND status='queued'
-          AND attempt_count=#{expectedAttempt} AND attempt_count<3
+          AND attempt_count=#{expectedAttempt}
         """)
     int claim(@Param("id") long id, @Param("expectedAttempt") int expectedAttempt,
               @Param("requestId") String requestId);
@@ -72,20 +72,40 @@ public interface AiJobMapper extends BaseMapper<AiJob> {
                       @Param("modelCalled") Boolean modelCalled, @Param("modelName") String modelName);
 
     /**
-     * 重试只重排同一任务，不重置次数，也不持有任务锁后再锁来源。
+     * 用数据库时间计算当前尝试的冷却剩余秒数；正剩余向上取整，异常空结束时间放行。
      *
-     * @param job 重试前的任务快照，提供全部 CAS 条件
-     * @return 命中并更新 1 行时返回 1，否则返回 0
+     * @param job 已校验归属和来源的任务快照
+     * @param cooldownSeconds 根据同一快照累计次数计算的冷却时长
+     * @return 剩余秒数；本次尝试已变化或任务不存在时返回null，由调用方重新核验
      */
+    @Select("""
+        SELECT CASE
+          WHEN status != 'failed' OR #{cooldownSeconds} = 0 OR finished_at IS NULL THEN 0
+          ELSE CAST(GREATEST(0, CEIL(
+            TIMESTAMPDIFF(MICROSECOND, CURRENT_TIMESTAMP,
+              TIMESTAMPADD(SECOND, #{cooldownSeconds}, finished_at)) / 1000000.0
+          )) AS SIGNED)
+        END
+        FROM ai_job
+        WHERE id=#{job.id} AND attempt_count=#{job.attemptCount}
+        """)
+    Integer selectRetryAfterSeconds(@Param("job") AiJob job, @Param("cooldownSeconds") int cooldownSeconds);
+
+    /** 按尝试快照和数据库冷却条件重排；不重置累计次数，不反向获取来源锁。 */
     @Update("""
         UPDATE ai_job SET status='queued', request_id=NULL, started_at=NULL, finished_at=NULL,
           last_error_code=NULL, result_kind=NULL, model_called=NULL, model_name=NULL,
           update_time=CURRENT_TIMESTAMP
         WHERE id=#{job.id} AND task_type='MOOD_REPLY' AND user_id=#{job.userId}
           AND target_id=#{job.targetId} AND target_version=#{job.targetVersion}
-          AND status='failed' AND attempt_count=#{job.attemptCount} AND attempt_count<3
+          AND status='failed' AND attempt_count=#{job.attemptCount}
+          AND (
+              #{cooldownSeconds} = 0
+              OR finished_at IS NULL
+              OR CURRENT_TIMESTAMP >= TIMESTAMPADD(SECOND, #{cooldownSeconds}, finished_at)
+          )
         """)
-    int requeue(@Param("job") AiJob job);
+    int requeueAfterCooldown(@Param("job") AiJob job, @Param("cooldownSeconds") int cooldownSeconds);
 
     /**
      * 启动恢复：把上次进程遗留的 running 标记为 execution_interrupted。

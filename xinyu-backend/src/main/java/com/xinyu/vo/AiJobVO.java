@@ -11,9 +11,10 @@ package com.xinyu.vo;
  * @param resultKind 结果类型 MODEL 或 SUPPORT；未成功时为空
  * @param replyContent 仅成功时返回的回复正文
  * @param errorCode 失败时的安全错误分类
- * @param retryable 是否可重试：failed 且累计尝试次数未达上限
+ * @param retryable 是否可重试：failed且冷却已结束，实际重排仍须通过容量与CAS校验
+ * @param retryAfterSeconds 冷却剩余秒数，正剩余向上取整；无需等待时为0
  */
 public record AiJobVO(Long id, Long targetId, Long targetVersion, String status,
                       Integer attemptCount, String resultKind, String replyContent,
-                      String errorCode, boolean retryable) {
+                      String errorCode, boolean retryable, int retryAfterSeconds) {
 }

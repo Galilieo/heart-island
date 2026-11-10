@@ -187,7 +187,7 @@ class AuthHttpTests {
 
     @Test
     void jobReadAndRetryUseJwtIdentityAndSerializeLongsAsStrings() throws Exception {
-        AiJobVO view = new AiJobVO(10L, 2054153819121537036L, 7L, "queued", 0, null, null, null, false);
+        AiJobVO view = new AiJobVO(10L, 2054153819121537036L, 7L, "queued", 0, null, null, null, false, 0);
         when(jobs.getOwned(11, 10)).thenReturn(view);
         when(jobs.retry(11, 10)).thenReturn(view);
         mvc.perform(get("/mood/ai-job/10").header("token", memberToken).param("userId", "22"))
@@ -196,6 +196,25 @@ class AuthHttpTests {
                 .andExpect(jsonPath("$.data.targetVersion").value("7"));
         mvc.perform(post("/mood/ai-job/10/retry").header("token", memberToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("queued"));
+    }
+
+    @Test
+    void coolingRetryPreservesRetryAfterAndNormalErrorBody() throws Exception {
+        ResponseStatusException cooling = new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "回应任务冷却中") {
+            @Override
+            public org.springframework.http.HttpHeaders getHeaders() {
+                org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+                headers.set("Retry-After", "120");
+                return headers;
+            }
+        };
+        when(jobs.retry(11, 10)).thenThrow(cooling);
+
+        mvc.perform(post("/mood/ai-job/10/retry").header("token", memberToken))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "120"))
+                .andExpect(jsonPath("$.code").value(429))
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test

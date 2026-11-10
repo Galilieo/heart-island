@@ -569,9 +569,9 @@ class AiJobPersistenceIT {
         CountDownLatch requeued = new CountDownLatch(1), release = new CountDownLatch(1);
         AiJobMapper paused = org.mockito.Mockito.mock(AiJobMapper.class, org.mockito.AdditionalAnswers.delegatesTo(jobs));
         org.mockito.Mockito.doAnswer(call -> {
-            int rows = jobs.requeue(call.getArgument(0));
+            int rows = jobs.requeueAfterCooldown(call.getArgument(0), call.getArgument(1));
             requeued.countDown(); await(release); return rows;
-        }).when(paused).requeue(org.mockito.ArgumentMatchers.any());
+        }).when(paused).requeueAfterCooldown(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
         AiJobService retrying = new AiJobService(paused, moods, replies, admission, true);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -605,7 +605,7 @@ class AiJobPersistenceIT {
         } finally { executor.shutdownNow(); }
         var second = jobService.claimNext();
         jobService.fail(second.getId(), 2, second.getRequestId(), "provider_error");
-        assertThat(jobs.requeue(oldFailed)).isZero();
+        assertThat(jobs.requeueAfterCooldown(oldFailed, 0)).isZero();
         assertThat(jobs.selectById(job.getId()).getAttemptCount()).isEqualTo(2);
         assertThat(jobs.selectById(job.getId()).getStatus()).isEqualTo("failed");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE user_id=?", Integer.class, userId)).isEqualTo(1);

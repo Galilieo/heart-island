@@ -27,6 +27,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<?>> handleHttpStatus(ResponseStatusException e) {
         int code = e.getStatusCode().value();
         return ResponseEntity.status(e.getStatusCode())
+                .headers(e.getHeaders())
                 .body(new Result<>(code, e.getReason(), null));
     }
 

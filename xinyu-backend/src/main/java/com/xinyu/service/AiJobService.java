@@ -10,8 +10,11 @@ import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.MoodRecordMapper;
 import com.xinyu.vo.AiJobVO;
 import com.xinyu.vo.MoodRecordVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,6 +26,7 @@ import java.util.UUID;
 /** 管理持久任务；本阶段保存路径仅做数据库操作，不调用模型。 */
 @Service
 public class AiJobService {
+    private static final Logger logger = LoggerFactory.getLogger(AiJobService.class);
 
     /** 任务类型，来源：ai_job.task_type 列注释；当前 worker 只处理日记回应。 */
     private static final String TASK_TYPE_MOOD_REPLY = "MOOD_REPLY";
@@ -186,12 +190,20 @@ public class AiJobService {
         return admission.save(() -> {
             AiJob job = ownedJob(userId, jobId);
             MoodRecord source = ownedCurrentSource(job);
-            if (ACTIVE_OR_SUCCEEDED.contains(job.getStatus())) return view(job, source);
-            if (!STATUS_FAILED.equals(job.getStatus()) || job.getAttemptCount() >= 3) {
+            if (ACTIVE_OR_SUCCEEDED.contains(job.getStatus())) {
+                return view(job, source);
+            }
+            if (!STATUS_FAILED.equals(job.getStatus())) {
                 throw http(HttpStatus.CONFLICT, "当前任务不可重试");
             }
-            if (capacityFull(userId)) throw http(HttpStatus.SERVICE_UNAVAILABLE, "回应任务较多，请稍后重试");
-            int changed = jobs.requeue(job);
+
+            int cooldownSeconds = AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount());
+            requireCooldownElapsed(job, cooldownSeconds);
+            if (capacityFull(userId)) {
+                throw http(HttpStatus.SERVICE_UNAVAILABLE, "回应任务较多，请稍后重试");
+            }
+
+            int changed = jobs.requeueAfterCooldown(job, cooldownSeconds);
             // CAS 失败后只回查一次当前行：用来区分“已进入 queued/running/succeeded 的幂等返回”
             // 与真实状态冲突，不循环重置已经完成了另一轮的失败任务。
             AiJob current = jobs.selectForUpdate(jobId);
@@ -275,7 +287,7 @@ public class AiJobService {
         return job != null
                 && TASK_TYPE_MOOD_REPLY.equals(job.getTaskType())
                 && STATUS_RUNNING.equals(job.getStatus())
-                && attempt >= 1 && attempt <= 3
+                && attempt >= 1
                 && Integer.valueOf(attempt).equals(job.getAttemptCount())
                 && requestId != null && !requestId.isBlank() && requestId.equals(job.getRequestId());
     }
@@ -321,15 +333,50 @@ public class AiJobService {
                 .anyMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c) && c != NEXT_LINE);
     }
 
-    private static AiJobVO view(AiJob job, MoodRecord source) {
+    private AiJobVO view(AiJob job, MoodRecord source) {
         boolean succeeded = STATUS_SUCCEEDED.equals(job.getStatus());
         boolean failed = STATUS_FAILED.equals(job.getStatus());
         String resultKind = succeeded ? job.getResultKind() : null;
         String replyContent = succeeded ? source.getAiReply() : null;
         String errorCode = failed ? job.getLastErrorCode() : null;
-        boolean retryable = failed && job.getAttemptCount() < 3;
+        int retryAfterSeconds = failed
+                ? retryAfterSeconds(job, AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount()))
+                : 0;
+        boolean retryable = failed && retryAfterSeconds == 0;
         return new AiJobVO(job.getId(), job.getTargetId(), job.getTargetVersion(), job.getStatus(),
-                job.getAttemptCount(), resultKind, replyContent, errorCode, retryable);
+                job.getAttemptCount(), resultKind, replyContent, errorCode, retryable, retryAfterSeconds);
+    }
+
+    /** GET与retry预检共用数据库时间；真正放行仍由UPDATE中的完整CAS决定。 */
+    private int retryAfterSeconds(AiJob job, int cooldownSeconds) {
+        if (cooldownSeconds == 0) {
+            return 0;
+        }
+        if (job.getFinishedAt() == null) {
+            logger.warn("冷却任务缺少结束时间 jobId={} attempt={} code=missing_finished_at",
+                    job.getId(), job.getAttemptCount());
+            return 0;
+        }
+        Integer remainingSeconds = jobs.selectRetryAfterSeconds(job, cooldownSeconds);
+        if (remainingSeconds == null) {
+            throw http(HttpStatus.CONFLICT, "任务状态已变化，请刷新");
+        }
+        return remainingSeconds;
+    }
+
+    private void requireCooldownElapsed(AiJob job, int cooldownSeconds) {
+        int remainingSeconds = retryAfterSeconds(job, cooldownSeconds);
+        if (remainingSeconds > 0) {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.RETRY_AFTER, Integer.toString(remainingSeconds));
+            // ResponseStatusException默认返回只读空头；覆盖取头方法，沿用既有异常响应结构。
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "回应任务冷却中，请稍后重试") {
+                @Override
+                public HttpHeaders getHeaders() {
+                    return headers;
+                }
+            };
+        }
     }
 
     private static ResponseStatusException http(HttpStatus status, String message) {

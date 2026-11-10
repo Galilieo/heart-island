@@ -125,8 +125,27 @@ class AiJobLifecycleTests {
     }
 
     @Test
-    void retryLimitAndCapacityNeverCreateANewJob() {
-        when(jobs.selectById(10L)).thenReturn(job("failed", 3));
+    void retryDuringCooldownReturns429AndPositiveRetryAfterWithoutRequeue() {
+        AiJob failed = job("failed", 3);
+        failed.setFinishedAt(java.time.LocalDateTime.of(2026, 1, 1, 12, 0));
+        when(jobs.selectById(10L)).thenReturn(failed);
+        when(moods.selectById(9L)).thenReturn(source());
+        when(jobs.selectRetryAfterSeconds(failed, 180)).thenReturn(120);
+
+        assertThatThrownBy(() -> service.retry(2, 10))
+                .isInstanceOfSatisfying(ResponseStatusException.class, failure -> {
+                    assertThat(failure.getStatusCode().value()).isEqualTo(429);
+                    assertThat(failure.getHeaders().getFirst("Retry-After")).isEqualTo("120");
+                });
+        verify(jobs, never()).requeueAfterCooldown(any(), anyInt());
+    }
+
+    @Test
+    void cooldownAndCapacityNeverCreateANewJob() {
+        AiJob failed = job("failed", 3);
+        failed.setFinishedAt(java.time.LocalDateTime.of(2026, 1, 1, 12, 0));
+        when(jobs.selectRetryAfterSeconds(failed, 180)).thenReturn(180);
+        when(jobs.selectById(10L)).thenReturn(failed);
         when(moods.selectById(9L)).thenReturn(source());
         assertThat(service.getOwned(2, 10).retryable()).isFalse();
         assertThatThrownBy(() -> service.retry(2, 10)).isInstanceOf(ResponseStatusException.class);
