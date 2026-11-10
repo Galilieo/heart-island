@@ -44,22 +44,36 @@ class AiJobLifecycleTests {
         service = new AiJobService(jobs, moods, replies, admission, true);
     }
 
+    /** 构造一条属于用户 2、来源版本 7 的任务，由各用例指定状态与尝试次数。 */
     AiJob job(String status, int attempt) {
         AiJob j = new AiJob();
-        j.setId(10L); j.setUserId(2L); j.setTargetId(9L); j.setTaskType("MOOD_REPLY");
-        j.setTargetVersion(7L); j.setStatus(status); j.setAttemptCount(attempt); j.setRequestId("req-A");
+        j.setId(10L);
+        j.setUserId(2L);
+        j.setTargetId(9L);
+        j.setTaskType("MOOD_REPLY");
+        j.setTargetVersion(7L);
+        j.setStatus(status);
+        j.setAttemptCount(attempt);
+        j.setRequestId("req-A");
         return j;
     }
 
+    /** 构造一条有效、已开启 AI 回应、版本 7 的来源日记。 */
     MoodRecord source() {
         MoodRecord s = new MoodRecord();
-        s.setId(9L); s.setUserId(2L); s.setStatus(1); s.setContentVersion(7L);
-        s.setAiReplyEnabled(true); s.setMoodType("平静"); s.setContent("合成内容");
+        s.setId(9L);
+        s.setUserId(2L);
+        s.setStatus(1);
+        s.setContentVersion(7L);
+        s.setAiReplyEnabled(true);
+        s.setMoodType("平静");
+        s.setContent("合成内容");
         return s;
     }
 
     MoodAiResponse result() {
-        return new MoodAiResponse("req-A", "10", 1, "7", "  合成回复。  ", "MODEL", true, "mood-reply-v1", "test-model");
+        return new MoodAiResponse("req-A", "10", 1, "7", "  合成回复。  ",
+                "MODEL", true, "mood-reply-v1", "test-model");
     }
 
     @Test
@@ -89,7 +103,8 @@ class AiJobLifecycleTests {
     @Test
     void disabledOrDeletedSourcesCannotReachGeneration() {
         when(jobs.selectById(10L)).thenReturn(job("running", 1));
-        MoodRecord source = source(); source.setStatus(0);
+        MoodRecord source = source();
+        source.setStatus(0);
         when(moods.selectById(9L)).thenReturn(source);
         assertThat(service.sourceForAttempt(10, 1, "req-A")).isNull();
         verifyNoInteractions(replies);
@@ -99,11 +114,13 @@ class AiJobLifecycleTests {
     void readRejectsForeignAndDeletedSourcesBeforeReturningReply() {
         when(jobs.selectById(10L)).thenReturn(job("succeeded", 1));
         assertThatThrownBy(() -> service.getOwned(3, 10)).isInstanceOf(ResponseStatusException.class)
-                .extracting(e -> ((ResponseStatusException)e).getStatusCode().value()).isEqualTo(403);
-        MoodRecord source = source(); source.setStatus(0); source.setAiReply("不能泄露");
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value()).isEqualTo(403);
+        MoodRecord source = source();
+        source.setStatus(0);
+        source.setAiReply("不能泄露");
         when(moods.selectById(9L)).thenReturn(source);
         assertThatThrownBy(() -> service.getOwned(2, 10)).isInstanceOf(ResponseStatusException.class)
-                .extracting(e -> ((ResponseStatusException)e).getStatusCode().value()).isEqualTo(404);
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value()).isEqualTo(404);
         assertThatThrownBy(() -> service.retry(2, 10)).isInstanceOf(ResponseStatusException.class);
     }
 
@@ -130,10 +147,12 @@ class AiJobLifecycleTests {
 
     @Test
     void historyWithoutJobIsLegacyAndDisabledIsNotUnavailable() {
-        MoodRecord s = source(); s.setAiReply("历史回复");
+        MoodRecord s = source();
+        s.setAiReply("历史回复");
         assertThat(service.toMoodView(s).aiReplyState()).isEqualTo("legacy");
         assertThat(service.toMoodView(s).resultKind()).isNull();
-        s.setAiReply(null); s.setAiReplyEnabled(false);
+        s.setAiReply(null);
+        s.setAiReplyEnabled(false);
         assertThat(service.toMoodView(s).aiReplyState()).isEqualTo("disabled");
         s.setAiReplyEnabled(true);
         assertThat(service.toMoodView(s).aiReplyState()).isEqualTo("unavailable");
@@ -144,7 +163,8 @@ class AiJobLifecycleTests {
     @Test
     void staleVersionCannotBeReadOrRetried() {
         when(jobs.selectById(10L)).thenReturn(job("failed", 1));
-        MoodRecord s = source(); s.setContentVersion(8L);
+        MoodRecord s = source();
+        s.setContentVersion(8L);
         when(moods.selectById(9L)).thenReturn(s);
         assertThatThrownBy(() -> service.retry(2, 10)).isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> service.getOwned(2, 10)).isInstanceOf(ResponseStatusException.class);
