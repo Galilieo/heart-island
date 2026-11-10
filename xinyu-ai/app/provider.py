@@ -1,6 +1,7 @@
 """适配供应商的非流式 Chat Completions 接口，每次生成只发送一次请求。"""
 
 import asyncio
+import json
 from typing import Literal, Protocol
 
 import httpx
@@ -49,6 +50,12 @@ SYSTEM_PROMPT = """
 回复：拖了两周的东西终于放下，那种轻松很实在。今天可以理直气壮地什么都不想，好好享受这份清爽。
 """.strip()
 
+# 供应商阶段等待上限（秒），均受本次剩余总时限约束，见 README「请求与结果」。
+CONNECT_TIMEOUT_SECONDS = 2
+READ_TIMEOUT_SECONDS = 35
+# 上游响应体最多读取 64 KiB，超限按非法模型响应处理，避免无界占用内存。
+MAX_RESPONSE_BYTES = 65536
+
 
 class ProviderFailure(Exception):
     """携带安全错误分类的供应商调用异常，不保存原始响应正文。"""
@@ -72,6 +79,39 @@ def messages(request: MoodReplyRequest) -> list[dict[str, str]]:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": request.model_dump_json(include={"mood_type", "content"})},
     ]
+
+
+def _request_body(settings: Settings, request: MoodReplyRequest) -> dict:
+    """构造非流式 Chat Completions 请求体；思考模式按配置显式传给供应商。"""
+    return {
+        "model": settings.model_name,
+        "messages": messages(request),
+        "max_tokens": settings.model_max_tokens,
+        "thinking": {"type": settings.model_thinking_mode},
+        "stream": False,
+    }
+
+
+async def _read_response_body(response: httpx.Response) -> bytes:
+    """累计读取上游正文；超过上限时按非法模型响应终止，不保留部分内容。"""
+    body = bytearray()
+    async for chunk in response.aiter_bytes():
+        body.extend(chunk)
+        if len(body) > MAX_RESPONSE_BYTES:
+            raise ProviderFailure("invalid_model_response")
+    return bytes(body)
+
+
+def _parse_model_reply(body: bytes, model_name: str) -> ModelReply:
+    """提取协议必需字段；字段缺失、类型错误或非正常结束均视为非法响应。"""
+    data = json.loads(body)
+    choice = data["choices"][0]
+    if choice.get("finish_reason") not in {None, "stop"}:
+        raise ProviderFailure("invalid_model_response")
+    return ModelReply(
+        reply_content=choice["message"]["content"],
+        model_name=model_name,
+    )
 
 
 class HttpProvider:
@@ -104,37 +144,21 @@ class HttpProvider:
                     transport=self.transport or httpx.AsyncHTTPTransport(retries=0),
                     trust_env=False, follow_redirects=False,
                     timeout=httpx.Timeout(
-                        connect=min(2, remaining), read=min(35, remaining),
+                        connect=min(CONNECT_TIMEOUT_SECONDS, remaining),
+                        read=min(READ_TIMEOUT_SECONDS, remaining),
                         write=remaining, pool=remaining,
                     ),
                 ) as client:
                     async with client.stream(
                         "POST", self.settings.model_base_url + "/chat/completions",
                         headers={"Authorization": "Bearer " + self.settings.model_api_key.get_secret_value()},
-                        json={
-                            "model": self.settings.model_name, "messages": messages(request),
-                            "max_tokens": self.settings.model_max_tokens,
-                            "thinking": {"type": self.settings.model_thinking_mode},
-                            "stream": False,
-                        },
+                        json=_request_body(self.settings, request),
                     ) as response:
                         if response.status_code != 200:
                             raise ProviderFailure("provider_error")
-                        body = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            body.extend(chunk)
-                            if len(body) > 65536:
-                                raise ProviderFailure("invalid_model_response")
+                        body = await _read_response_body(response)
                         # 仅提取协议必需字段，错误响应和日志均不得回显上游正文。
-                        import json
-                        data = json.loads(body)
-                        choice = data["choices"][0]
-                        if choice.get("finish_reason") not in {None, "stop"}:
-                            raise ProviderFailure("invalid_model_response")
-                        return ModelReply(
-                            reply_content=choice["message"]["content"],
-                            model_name=self.settings.model_name,
-                        )
+                        return _parse_model_reply(body, self.settings.model_name)
         except (TimeoutError, httpx.TimeoutException):
             raise ProviderFailure("provider_timeout") from None
         except httpx.HTTPError:
