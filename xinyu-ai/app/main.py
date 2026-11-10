@@ -17,6 +17,59 @@ from app.settings import Settings
 
 logger = logging.getLogger("xinyu_ai")
 
+# 接入层限制：请求头合计 8 KiB、正文累计 16 KiB，与 README「请求与结果」记录一致。
+MAX_HEADER_BYTES = 8192
+MAX_BODY_BYTES = 16384
+# 请求头字节数按“名称 + 值 + 分隔与行结束开销”计算。
+HEADER_ENTRY_OVERHEAD_BYTES = 4
+# 单进程同时只处理一次生成，超出的请求直接拒绝而不排队。
+MAX_CONCURRENT_REQUESTS = 1
+
+# 错误分类到 HTTP 状态码的固定映射，与 Java 客户端约定的错误码一一对应。
+ERROR_STATUS = {
+    "invalid_request": 400,
+    "unauthorized": 401,
+    "provider_timeout": 504,
+    "provider_error": 502,
+    "invalid_model_response": 502,
+    "overloaded": 503,
+}
+
+
+def _header_bytes(headers: list[tuple[bytes, bytes]]) -> int:
+    """按请求头名称、值和分隔开销累计字节数，口径与接入层限制一致。"""
+    return sum(len(key) + len(value) + HEADER_ENTRY_OVERHEAD_BYTES for key, value in headers)
+
+
+def _authenticate(headers: list[tuple[bytes, bytes]], settings: Settings) -> bool:
+    """要求恰好一个认证头，并与配置的内部令牌做常量时间比较。"""
+    auth = [value for key, value in headers if key.lower() == b"authorization"]
+    expected = b"Bearer " + settings.internal_token.get_secret_value().encode("ascii")
+    return len(auth) == 1 and hmac.compare_digest(auth[0], expected)
+
+
+async def _read_limited_body(request: Request) -> bytes | None:
+    """累计读取请求正文；超过上限时返回 None，由调用方按参数错误处理。"""
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_BODY_BYTES:
+            return None
+    return bytes(body)
+
+
+def _parse_request(body: bytes) -> MoodReplyRequest | None:
+    """解析并校验内部请求；非 JSON、结构不符或非法 Unicode 均返回 None。"""
+    try:
+        return MoodReplyRequest.model_validate(json.loads(body))
+    except (ValueError, TypeError, RecursionError):
+        return None
+
+
+def _deadline_reached(deadline: float) -> bool:
+    """判断事件循环单调时钟是否已到达绝对截止时间。"""
+    return asyncio.get_running_loop().time() >= deadline
+
 
 def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
     """创建内部回应服务，风险分支使用内置文案，无需外部资源文件。
@@ -35,10 +88,7 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
 
     def error(code: str, request_id: str | None = None) -> JSONResponse:
         """将内部错误分类映射为 HTTP 响应，仅记录安全追踪字段。"""
-        status = {
-            "invalid_request": 400, "unauthorized": 401, "provider_timeout": 504,
-            "provider_error": 502, "invalid_model_response": 502, "overloaded": 503,
-        }[code]
+        status = ERROR_STATUS[code]
         logger.info("request_finished request_id=%s code=%s", request_id, code)
         return JSONResponse({"request_id": request_id, "code": code}, status_code=status)
 
@@ -56,33 +106,28 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
         try:
             async with asyncio.timeout_at(start + settings.request_timeout_seconds):
                 headers = request.scope["headers"]
-                if sum(len(k) + len(v) + 4 for k, v in headers) > 8192:
+                if _header_bytes(headers) > MAX_HEADER_BYTES:
                     return error("invalid_request")
-                auth = [value for key, value in headers if key.lower() == b"authorization"]
-                expected = b"Bearer " + settings.internal_token.get_secret_value().encode("ascii")
-                if len(auth) != 1 or not hmac.compare_digest(auth[0], expected):
+                if not _authenticate(headers, settings):
                     return error("unauthorized")
-                body = bytearray()
-                async for chunk in request.stream():
-                    body.extend(chunk)
-                    if len(body) > 16384:
-                        return error("invalid_request")
-                try:
-                    data = MoodReplyRequest.model_validate(json.loads(body))
-                except (ValueError, TypeError, RecursionError):
+                body = await _read_limited_body(request)
+                if body is None:
+                    return error("invalid_request")
+                data = _parse_request(body)
+                if data is None:
                     return error("invalid_request")
                 request_id = data.request_id
-                if active >= 1:
+                if active >= MAX_CONCURRENT_REQUESTS:
                     return error("overloaded", request_id)
                 # 检查与计数递增之间不能出现 await，避免同一事件循环中的请求交错准入。
                 active += 1
                 try:
                     deadline = min(start + settings.request_timeout_seconds, start + data.budget_ms / 1000)
-                    if asyncio.get_running_loop().time() >= deadline:
+                    if _deadline_reached(deadline):
                         raise TimeoutError
                     async with asyncio.timeout_at(deadline):
                         support = build_support_reply(data.content)
-                        if asyncio.get_running_loop().time() >= deadline:
+                        if _deadline_reached(deadline):
                             raise TimeoutError
                         if support is not None:
                             text, kind, called, model = support, "SUPPORT", False, None
@@ -99,7 +144,7 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                         )
                         result = JSONResponse(response.model_dump())
                         # 异步超时无法抢占同步校验和序列化，返回成功前必须再次检查截止时间。
-                        if asyncio.get_running_loop().time() >= deadline:
+                        if _deadline_reached(deadline):
                             raise TimeoutError
                         return result
                 finally:
