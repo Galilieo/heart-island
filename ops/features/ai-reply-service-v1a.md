@@ -111,13 +111,13 @@ Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕�
 
 200 响应：关联字段 + `reply_content`、`result_kind`（MODEL / SUPPORT）、`model_called`、`template_version`、`model_name`。正文去空白后非空、至多 2000 个 UTF-16 单位；MODEL 必须 model_called=true 且模型名非空；SUPPORT 必须 model_called=false 且模型名空。Java再校验一遍。
 
-3A客户端实施状态（2026-11-09）：采用Boot管理的Apache HttpClient 5.5.2，不改Boot或Java版本。成功与错误响应正文最多16KiB，状态行及响应头累计最多8KiB，在解析期间拒绝超界；禁止重定向、自动重试及自动内容解压。严格检查重复键、尾随JSON、必需／未知字段和实际JSON类型，再校验关联与语义。worker关闭时不创建客户端、不要求内部地址／凭据。新增generateAsync返回CompletableFuture，DNS等待仅登记续接；同一客户端逻辑请求及实际HTTP执行线程均受concurrency限制（默认3），交接队列上限同为concurrency，超容量安全overloaded。同步generate保留为明确阻塞的兼容入口，3C worker须使用异步入口；同步回调保持轻量，数据库收尾必须使用显式执行器。关闭取消未完成请求、DNS调度及HTTP资源，worker生命周期本身仍3D待实施。
+3A客户端实施状态（2026-11-09）：采用Boot管理的Apache HttpClient 5.5.2，不改Boot或Java版本。成功与错误响应正文最多16KiB，状态行及响应头累计最多8KiB，在解析期间拒绝超界；禁止重定向、自动重试及自动内容解压。严格检查重复键、尾随JSON、必需／未知字段和实际JSON类型，再校验关联与语义。worker关闭时不创建客户端、不要求内部地址／凭据。新增generateAsync返回CompletableFuture，DNS等待仅登记续接；同一客户端逻辑请求及实际HTTP执行线程均受concurrency限制（默认3），交接队列上限同为concurrency，超容量安全overloaded。同步generate保留为明确阻塞的兼容入口，3C worker须使用异步入口；同步回调保持轻量，数据库收尾必须使用显式执行器。关闭取消未完成请求、DNS调度及HTTP资源，worker生命周期已在3D接入，默认关闭，新增主体已带读。
 
 DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解析，A／B／C共享一项查询并登记各自续接；成功后当前仍有效的请求使用剩余预算发送。失败后当前等待者分别provider_error，缓存失败默认10秒（AI_DNS_FAILURE_CACHE_SECONDS，配置范围1～3600秒）；缓存期内直接失败，到期新请求触发重查。物理查询单线程、最多一项；解析等待上限沿用connect预算（默认2秒），逻辑超时后若原生调用仍卡住就保留进行中标记，不因缓存过期不断创建线程；迟到地址丢弃，实际查询退出后才可发起新查询。DNS等待计入原总deadline，单请求取消／超时不取消共享查询；过期或关闭后的请求不再发送HTTP。成功地址缓存到客户端关闭，本轮不含动态IP／成功TTL刷新，不宣称强制终止不可中断的原生DNS。已完成180项Java普通／合成Python联调验证；独立评审状态和证据见执行稿11.7／11.8及本地progress。
 
 错误响应：`request_id`、`code`（invalid_request / unauthorized / provider_timeout / provider_error / invalid_model_response / overloaded），无原始正文。格式 / 关联字段不匹配均按 invalid_model_response 失败，不存默认安慰话。请求头 / body 大小上限、非法 UTF-16 代理输入需拒绝；Python用同样 UTF-16 计数标准，不能把 emoji 按一个字符放宽。
 
-时间预算（Task3 v2已确认）：领取成功后的来源预检、构造请求、HTTP与解析／语义校验共同受生成阶段50秒单调时钟绝对截止约束；Java→Python connect 2秒、read 45秒且受剩余时间限制。Python整个处理最多40秒（含风险判断、等待及供应商调用），budget_ms=min(40000,剩余时间减本地余量)，供应商connect 2秒／read 35秒也受剩余预算约束。complete与独立失败收尾各配置5秒事务超时，与生成阶段分开；实际JDBC连接、statement、锁、网络及commit／rollback的有界效果须3C实测，不把配置值称为严格墙上时间保证。claim与来源预检也不得无限占槽。真实取消网络／关闭资源，执行线程实际退出后才还槽；不靠Future返回假装I/O结束。无自动重试，不保证供应商停止计算或计费。当前3A先验证HTTP；worker、数据库超时和失败收尾尚未实施。
+时间预算（Task3 v2已确认）：领取成功后的来源预检、构造请求、HTTP与解析／语义校验共同受生成阶段50秒单调时钟绝对截止约束；Java→Python connect 2秒、read 45秒且受剩余时间限制。Python整个处理最多40秒（含风险判断、等待及供应商调用），budget_ms=min(40000,剩余时间减本地余量)，供应商connect 2秒／read 35秒也受剩余预算约束。complete与独立失败收尾各配置5秒事务超时，与生成阶段分开；实际JDBC连接、statement、锁、网络及commit／rollback的有界效果须3C实测，不把配置值称为严格墙上时间保证。claim与来源预检也不得无限占槽。真实取消网络／关闭资源，执行线程实际退出后才还槽；不靠Future返回假装I/O结束。无自动重试，不保证供应商停止计算或计费。3C／3D已实现单次执行、独立失败收尾与条件启用的生命周期。数据库有限配置及回环IP故障探针已验，JDBC主机名原生DNS与生产等待未验；不承诺整体硬5秒或响应丢失时事务结果确定。
 
 供应商配置使用 OPENAI_BASE_URL、OPENAI_API_KEY、OPENAI_MODEL、DEEPSEEK_THINKING_MODE；健康检查不返回其值。可选 OPENAI_MAX_TOKENS 控制输出预算，默认4096，本服务允许1～8192的整数（不是供应商上限）；thinking样例仍为disabled，同时允许enabled。思考模式也消耗输出预算，调大不保证在40秒总预算或64 KiB上游正文限制内完成；截断仍判失败，不自动重试，不回传思考内容。该初值未经真实模型校准。thinking作为供应商适配参数，供应商不支持时必须显式调整适配配置，不能默默丢掉参数。prompt 在 Python 模板集中管理，日记作为数据隔离；不复制到业务日志。
 
@@ -137,7 +137,7 @@ DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解�
 
 列表 / 详情响应与轮询须同时匹配记录 ID、contentVersion 及本地请求代次，防止导航或编辑后迟到回包覆盖当前状态。轮询网络失败显示状态暂不可用，停止自动轮询并提供“刷新状态”；不能重发生成。最长自动观察 120 秒，之后停止并允许回查，不把任务改成失败。
 
-当前Task2只提供任务方法，尚无worker调度；Task3计划实现单进程有界执行并发并同步Python门禁，用户选定两端并发初值均为3，尚待实现与实测。现有持久queued上限100、单用户queued/running上限3保留；全局执行3槽与单用户在途3名额是独立规则。单任务当前最多3次尝试，Task3按第10节处理冷却后可继续的修订。单实例准入使用进程内一把互斥锁包住容量查询与保存事务，提交后释放；它只保护短 DB 操作，绝不包住模型调用。容量不足仍保存日记，创建 status=failed、attempt_count=0、last_error_code=capacity_exceeded 的 job，提示“心情已保存，AI 暂忙，可稍后重试”；这是容量保护，不宣称付费总额或跨重启日额度。上线前按实际预算再补额度，1b 承接共享限流。
+Task3D／3E已接入单进程有界worker，默认Java执行槽与Python生成名额均为3，分别由AI_WORKER_CONCURRENCY／AI_SERVICE_CONCURRENCY配置。恢复成功才扫描，实际领取入口复查停止闸门；关闭时取消HTTP，保留DB续接到收尾和HTTP实际清理结束后还槽，再等待执行器退出。三槽／门禁、隔离数据库及独立评审已通过，新增主体已带读，完整发布验收仍待后续任务。现有持久queued上限100、单用户queued/running上限3保留；全局执行3槽与单用户在途3名额是独立规则。单任务当前最多3次尝试，Task3按第10节处理冷却后可继续的修订。单实例准入使用进程内一把互斥锁包住容量查询与保存事务，提交后释放；它只保护短 DB 操作，绝不包住模型调用。容量不足仍保存日记，创建 status=failed、attempt_count=0、last_error_code=capacity_exceeded 的 job，提示“心情已保存，AI 暂忙，可稍后重试”；这是容量保护，不宣称付费总额或跨重启日额度。上线前按实际预算再补额度，1b 承接共享限流。
 
 | 验收组 | 必须证明 |
 | --- | --- |
