@@ -44,9 +44,9 @@ xinyu-vue/src/views/PostDetail.vue                   (插入 PostAiReply)
 
 Docs
 ─────────────────────────────────────
-docs/project/04-数据库设计说明书.md
-docs/project/05-接口设计说明书.md
-docs/project/06-详细设计说明书.md
+docs/history/project-before-1a/04-数据库设计说明书.md
+docs/history/project-before-1a/05-接口设计说明书.md
+docs/history/project-before-1a/06-详细设计说明书.md
 docs/project/08-测试说明书.md
 ```
 
@@ -681,9 +681,9 @@ git commit -m "feat(community): render PostAiReply card on post detail page"
 ## Task 9: 文档同步
 
 **Files:**
-- Modify: `docs/project/04-数据库设计说明书.md`
-- Modify: `docs/project/05-接口设计说明书.md`
-- Modify: `docs/project/06-详细设计说明书.md`
+- Modify: `docs/history/project-before-1a/04-数据库设计说明书.md`
+- Modify: `docs/history/project-before-1a/05-接口设计说明书.md`
+- Modify: `docs/history/project-before-1a/06-详细设计说明书.md`
 - Modify: `docs/project/08-测试说明书.md`
 
 - [ ] **Step 1: 04-数据库设计 加 community_post.ai_reply 字段说明**
@@ -781,7 +781,7 @@ AiReplyService.generateReplyForPost 内部捕获异常返回默认陪伴文案�
 - [ ] **Step 5: 提交**
 
 ```bash
-git add docs/project/04-数据库设计说明书.md docs/project/05-接口设计说明书.md docs/project/06-详细设计说明书.md docs/project/08-测试说明书.md
+git add docs/history/project-before-1a/04-数据库设计说明书.md docs/history/project-before-1a/05-接口设计说明书.md docs/history/project-before-1a/06-详细设计说明书.md docs/project/08-测试说明书.md
 git commit -m "docs: sync docs with post AI reply feature"
 ```
 

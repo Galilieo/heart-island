@@ -177,9 +177,9 @@ PostReplyList
 实施时一并处理：
 
 1. `sql/xinyu.sql` —— community_post 建表语句加 ai_reply 列。
-2. `docs/project/04-数据库设计说明书.md` —— 补这一列字段说明。
-3. `docs/project/05-接口设计说明书.md` —— 发帖 / 改帖 / 帖子详情响应中说明含 `aiReply`。
-4. `docs/project/06-详细设计说明书.md` —— 10.1 发布帖子流程加 AI 回写步骤；新增 10.x 帖子 AI 回复设计小节。
+2. `docs/history/project-before-1a/04-数据库设计说明书.md` —— 补这一列字段说明。
+3. `docs/history/project-before-1a/05-接口设计说明书.md` —— 发帖 / 改帖 / 帖子详情响应中说明含 `aiReply`。
+4. `docs/history/project-before-1a/06-详细设计说明书.md` —— 10.1 发布帖子流程加 AI 回写步骤；新增 10.x 帖子 AI 回复设计小节。
 5. `docs/project/08-测试说明书.md` —— 社区模块新增「发帖后详情页可见 AI 回复」「AI 失败时显示兜底文案」等用例。
 
 ---

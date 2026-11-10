@@ -226,7 +226,7 @@ http://localhost:5173
 | 后台 | PUT | `/admin/topic/{id}` | 编辑话题 |
 | 后台 | GET | `/admin/ai-replies/page` | AI 回复记录分页 |
 
-更完整的接口说明见 [docs/project/05-接口设计说明书.md](docs/project/05-接口设计说明书.md)。
+更完整的接口说明见 [docs/history/project-before-1a/05-接口设计说明书.md](docs/history/project-before-1a/05-接口设计说明书.md)。
 
 ## 运行验证
 
