@@ -110,7 +110,6 @@ public final class AiServiceClient implements AutoCloseable {
     /** 给协议处理留的本地余量：剩余时间的 10%，最多 250ms。是本服务初值，不是供应商 SLA。 */
     private static final long LOCAL_MARGIN_CAP_MS = 250;
     private static final int MAX_CONTENT_LENGTH = 500;
-    private static final int MAX_ATTEMPT = 3;
     private static final String REQUEST_ID_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,63}";
     private static final String POSITIVE_LONG_PATTERN = "[1-9][0-9]{0,18}";
     private static final Set<String> MOODS = Set.of(
@@ -494,7 +493,7 @@ public final class AiServiceClient implements AutoCloseable {
             require(matches(request.requestId(), REQUEST_ID_PATTERN));
             require(isPositiveLong(request.jobId()));
             require(isPositiveLong(request.sourceVersion()));
-            require(request.attempt() >= 1 && request.attempt() <= MAX_ATTEMPT);
+            require(request.attempt() >= 1);
             require(MOODS.contains(request.moodType() == null ? "" : request.moodType()));
             require(request.budgetMs() >= 1 && request.budgetMs() <= MAX_BUDGET_MS);
             require(isValidContent(request.content()));

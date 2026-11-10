@@ -230,7 +230,7 @@ class AiServiceClientTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"blank", "long", "emoji-long", "bad-unicode", "zero-id", "overflow-id", "bad-request", "attempt-four", "budget-zero"})
+    @ValueSource(strings = {"blank", "long", "emoji-long", "bad-unicode", "zero-id", "overflow-id", "bad-request", "attempt-zero", "budget-zero"})
     void invalidRequestBoundariesNeverReachPeer(String kind) throws Exception {
         MoodAiRequest r = switch (kind) {
             case "blank" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "\u0085\u00a0\u3000", 40000);
@@ -240,7 +240,7 @@ class AiServiceClientTests {
             case "zero-id" -> new MoodAiRequest("req-A", "0", 1, "7", "平静", "text", 40000);
             case "overflow-id" -> new MoodAiRequest("req-A", "9223372036854775808", 1, "7", "平静", "text", 40000);
             case "bad-request" -> new MoodAiRequest("req\nA", "10", 1, "7", "平静", "text", 40000);
-            case "attempt-four" -> new MoodAiRequest("req-A", "10", 4, "7", "平静", "text", 40000);
+            case "attempt-zero" -> new MoodAiRequest("req-A", "10", 0, "7", "平静", "text", 40000);
             case "budget-zero" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "text", 0);
             default -> throw new AssertionError(kind);
         };

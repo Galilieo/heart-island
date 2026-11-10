@@ -48,7 +48,7 @@ async def test_unauthorized_requests_never_call_provider(headers):
     {"job_id": 1}, {"job_id": "0"}, {"job_id": "-1"}, {"job_id": "01"},
     {"job_id": "9223372036854775808"}, {"source_version": "x"},
     {"source_version": "0"}, {"request_id": ""}, {"request_id": "x" * 65},
-    {"request_id": "raw\ntext"}, {"attempt": True}, {"attempt": 0}, {"attempt": 4},
+    {"request_id": "raw\ntext"}, {"attempt": True}, {"attempt": 0},
     {"budget_ms": 0}, {"budget_ms": 40001}, {"budget_ms": "40"},
     {"content": "文" * 501}, {"content": "😀" * 251}, {"content": ""},
     {"content": " \n"}, {"content": "\ud800"}, {"content": "\udfff"},
@@ -240,3 +240,12 @@ def test_service_concurrency_requires_positive_integer(capacity):
     """门禁配置拒绝零、负数和隐式类型转换。"""
     with pytest.raises(ValueError):
         make_settings(max_concurrent_requests=capacity)
+
+
+@pytest.mark.parametrize("attempt", [4, 7])
+async def test_later_attempts_preserve_monotonic_correlation(attempt):
+    """冷却后允许继续尝试，回包保持累计attempt而非重置为1。"""
+    async with client_for(application()) as client:
+        response = await client.post("/internal/v1/mood-replies", json=payload(attempt=attempt), headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()["attempt"] == attempt

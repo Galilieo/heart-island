@@ -49,7 +49,7 @@ class Correlation(Contract):
 
     request_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
     job_id: str = Field(pattern=r"^[1-9][0-9]{0,18}$")
-    attempt: int = Field(ge=1, le=3)
+    attempt: int = Field(ge=1)
     source_version: str = Field(pattern=r"^[1-9][0-9]{0,18}$")
 
     @field_validator("job_id", "source_version")

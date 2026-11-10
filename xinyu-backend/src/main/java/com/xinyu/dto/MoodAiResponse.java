@@ -16,9 +16,14 @@ public record MoodAiResponse(
         @JsonProperty("model_name") String modelName) {
     /** 校验关联字段和结果语义，返回清理首尾白字符后的正文。 */
     public String validatedReply(long expectedJobId, int expectedAttempt, String expectedRequestId, long expectedVersion) {
-        if (expectedJobId <= 0 || expectedVersion <= 0 || expectedAttempt < 1 || expectedAttempt > 3
-                || expectedRequestId == null || expectedRequestId.isBlank()
-                || !Long.toString(expectedJobId).equals(jobId)
+        if (expectedJobId <= 0 || expectedVersion <= 0 || expectedAttempt < 1) {
+            throw invalid();
+        }
+        if (expectedRequestId == null || expectedRequestId.isBlank()) {
+            throw invalid();
+        }
+
+        if (!Long.toString(expectedJobId).equals(jobId)
                 || !Integer.valueOf(expectedAttempt).equals(attempt)
                 || !Objects.equals(expectedRequestId, requestId)
                 || !Long.toString(expectedVersion).equals(sourceVersion)

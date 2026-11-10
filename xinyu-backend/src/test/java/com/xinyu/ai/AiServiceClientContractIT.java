@@ -57,6 +57,15 @@ class AiServiceClientContractIT {
     }
 
     @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {4, 7})
+    void laterAttemptsCrossBothJavaAndPythonContracts(int attempt) {
+        var result = client.generate(new MoodAiRequest("req-later", "10", attempt, "7", "平静",
+                "继续尝试的合成内容。", 40000), Duration.ofSeconds(3));
+        assertThat(result.attempt()).isEqualTo(attempt);
+        assertThat(result.resultKind()).isEqualTo("MODEL");
+    }
+
+    @ParameterizedTest
     @MethodSource("moods")
     void eachSharedMoodCrossesActualPythonContract(String mood) throws Exception {
         int before = calls();
