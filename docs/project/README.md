@@ -9,6 +9,8 @@
 - [05-接口设计说明书.md](../history/project-before-1a/05-接口设计说明书.md)
 - [06-详细设计说明书.md](../history/project-before-1a/06-详细设计说明书.md)
 - [07-前端界面与交互设计说明.md](../history/project-before-1a/07-前端界面与交互设计说明.md)
+- [08-测试说明书.md](../history/project-before-1a/08-测试说明书.md)
+- [09-部署与运行说明.md](../history/project-before-1a/09-部署与运行说明.md)
 
 
 本目录是 heart-island / 心屿 的项目交付文档，适合长期维护和对外展示。它描述项目当前状态，但如果和源码冲突，以当前源码、SQL、配置和实际验证结果为准。
