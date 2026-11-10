@@ -1,5 +1,12 @@
 # project 项目文档导航
 
+已归档的旧说明见以下入口，当前开发见[接续状态](../../ops/features/xinyu-next-session.md)：
+
+- [01-项目背景与可行性分析.md](../history/project-before-1a/01-项目背景与可行性分析.md)
+- [02-需求分析说明书.md](../history/project-before-1a/02-需求分析说明书.md)
+- [03-系统概要设计说明书.md](../history/project-before-1a/03-系统概要设计说明书.md)
+
+
 本目录是 heart-island / 心屿 的项目交付文档，适合长期维护和对外展示。它描述项目当前状态，但如果和源码冲突，以当前源码、SQL、配置和实际验证结果为准。
 
 ## 阅读顺序

@@ -8,7 +8,7 @@
 | --- | --- |
 | 继续当前开发 | [功能入口](../ops/features/README.md) → [接续状态](../ops/features/xinyu-next-session.md) |
 | 了解项目交付文档 | [交付文档导航](project/README.md)，按问题查阅，不要求全部顺读 |
-| 查需求、架构、接口、数据库 | `docs/project/01-项目背景与可行性分析.md` 到 `11-分阶段开发计划.md` |
+| 查需求、架构、接口、数据库 | `docs/history/project-before-1a/01-项目背景与可行性分析.md` 到 `11-分阶段开发计划.md` |
 | 查历史方案和旧计划 | [归档索引](history/README.md)，不作为实施入口 |
 | 查个人求职、学习、面试资料 | 仓库外本地资料入口（不纳入 Git） |
 | 查 Agent 开发规则 | `AGENTS.md` 和 `ops/*.md` |
