@@ -1,8 +1,11 @@
 # 心屿升级：新会话接续入口
 
-更新：2026-11-09。工作目录：`/Users/jiangqiuyu/pre/heartisland/heart-island`。
+更新：2026-11-10。工作目录：`/Users/jiangqiuyu/pre/heartisland/heart-island`。
 
 ## 当前状态
+
+- **当前接续（2026-11-10）：3C单次执行的真实事务／行锁验收及首轮评审通过；先补讲领取／预检超时，再进入3D+3E。** 用户参照分步代码填好finishFailure，不记为独立掌握；Codex补齐claim与预检的独立5秒短事务、预检前过期检查，均有RED→GREEN证据。同次Java17回归236项通过（0失败／错误／跳过），含38项真实临时MySQL、15项真实Python合成供应商HTTP及显式3项LearningCases。日志失败原子回滚后可failed／重试，迟到结果不覆盖新版本／attempt或删除；锁未释放时claim约5.0秒、complete约5.1秒、fail约5.0秒退出，预检＋fail两次等待共约10.0秒返回UNRESOLVED。22文件固定哈希独立评审通过，核对日志未独立运行，不认证范围外可读性diff。11.3整体仍未通过：连接池／网络／commit与rollback等待验收及停止续接／实际I/O退出确认已明确列入3D启用worker前任务。临时MySQL已关闭，未访问业务库／真实模型；worker仍无Bean／扫描；本批按用户授权分批整理本地提交，不推送或部署。提交前可读性与行为两轴复核通过，最终写法版本Java198项、Python114项通过，未重跑MySQL。证据见现有progress与执行稿11.9。
+
 
 - **当前接续：3A实现／验证／带读已完成，可接3C（2026-11-09）**：用户完成旧主体带读后明确授权“赶紧处理”。现有HC5新增generateAsync，DNS按需共享Future，失败缓存默认10秒（AI_DNS_FAILURE_CACHE_SECONDS），到期由新请求触发恢复。最多3个逻辑请求和3个HTTP线程，有限交接队列上限3；等待DNS不占HTTP线程，原deadline覆盖等待，单请求取消隔离共享查询，关闭／过期不续发，卡住的原生查询不再启动第二项。成功IP缓存到close，成功TTL刷新仍暂缓。同步generate明确阻塞，仅兼容；3C必须async，DB收尾用显式执行器，禁止在DNS／deadline线程同步执行事务。
 - **当前证据与边界**：Java17普通*Tests＋显式AiServiceClientContractIT共180项通过（0失败／错误／跳过），含15项Java→真实Python合成Provider。独立review_dns_recovery按/tmp/heartisland-dns-review/manifest.json 9文件哈希只读审查通过，另外实测卡住查询退出后重查恢复、HTTP取消后断连并复用两个完整闭环。低优先级建议把这两个探针纳入长期自动回归，已记progress；没有阻断项。未调用真实模型／业务库或MySQL IT，未验证生产DNS和穷举纳秒竞态；用户随后授权整理本地提交（具体SHA见本地progress）；本轮无推送／部署，不认证无关工作区修改。新增7项客户端DNS测试及升级3项resolver测试；一次完成回调立即续接误报overloaded已单项RED→GREEN修复。具体设计／取舍见执行稿11.7／11.8、证据见既有progress。

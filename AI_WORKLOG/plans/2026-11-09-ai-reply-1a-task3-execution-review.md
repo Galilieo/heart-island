@@ -1,10 +1,10 @@
 # 心屿 Task3 执行方案 v2（审查修订稿，附 Codex 复核）
 
 日期：2026-11-09
-状态：用户于2026-11-09明确“可以开始”，v2及复核补充已获准进入实施；当前实施3A，其他批次未完成。
+状态：3A已完成；3C单次执行、用户失败收尾及真实MySQL事务／行锁验收已通过。数据库连接／网络等待验收在3D启用worker前完成，11.3整体尚未通过。
 用途：用户提供并已授权开始的 Task3 执行依据。本文件在原位置整合 v2，并将沿用的 v1 内部协议、社区步骤、文件清单及命令收进附录，不要求读者另找旧版。v2 的改变优先于沿用内容；Codex复核意见单列第11节，已纳入实施验收要求；权威契约随本次开工同步，代码／验证／带读分别记录。
 
-当前交接：Claude源补丁d9a0dcc256576f548017f0bb714663503fa5a8fc已由Codex应用本地，并修复其Duration转换溢出的小回归；当前为未提交diff。Java17本轮173项（含15项真JavaPython合成Provider）通过，独立固定4文件快照复核无新增可操作问题。下一步按重构源码重新带读。原3A实现基线a94dd810e94ff10f7f5153579647f174a87b56f0与提交交接基准392211bb0e230d38b2bb990c26a2c81579e222fb保留为对照；3C失败收尾和3B冷却函数／CAS继续由用户亲手实现，不因本次可读性维护提前代写。
+当前交接：3C的finishFailure由用户参照分步提示填写；领取、预检、complete及fail均用独立5秒短事务，AI HTTP调用在数据库事务外。Java17本轮236项通过（含38项真实MySQL、15项合成供应商Python HTTP），不启扫描或注册Bean；第一轮固定范围复审已通过。下一步先带读领取／预检超时补充，再进入3D+3E。本批按用户授权分批整理本地提交；既有3A提交至6687e52，历史文档整理至63e80d7，未推送。3B冷却函数／CAS仍由用户手写。
 
 ## 0. 相对 v1 的修订摘要
 
@@ -160,6 +160,12 @@ GREATEST(0, TIMESTAMPDIFF(SECOND, CURRENT_TIMESTAMP,
 3. 停止：关闭领取闸门 → 停扫描 → 取消在途 I/O → 等待执行退出 → 释放资源。已提交的结果不倒退。
 4. 重复启动／停止幂等，不重复恢复，不注册第二个定时器。
 5. 文档写清单服务器部署顺序：先停旧进程并确认退出，再启动新进程。代码内幂等不等于跨进程互斥，不引入租约或主机锁。
+6. 停止时先取消客户端实际I/O，数据库执行器保留到收尾续接结束，再关闭执行器；用屏障验证shutdown不拒绝handleAsync。取消runOne的组合Future不等于取消底层调用；正常超时与停止时，都须确认HTTP／DB实际退出后才归还槽位，不能只看逻辑Future完成。
+
+启用worker Bean前的数据库门槛（承接11.3，当前未通过）：
+- [ ] 沿用Hikari，明确有限的connectionTimeout／validationTimeout，以及Connector/J的connectTimeout／socketTimeout；核对实际数据源生效值，不新增池或修改数据库全局参数。
+- [ ] 在隔离环境验证连接耗尽／不可用、慢读取／网络停滞、commit／rollback响应停滞时的线程退出与槽位归还；不以事务SQL超时代替这些证据。
+- [ ] 若JDBC使用主机名，说明驱动原生DNS等待的限制；按实测写清分段预算和无法严格保证的墙上时间，不宣称所有等待均为硬5秒。
 
 三并发：
 1. Java 默认 3 槽；调度只在有空槽时提交执行单元，由执行单元领取任务；数据库是唯一待办队列。
@@ -245,9 +251,9 @@ Codex 负责客户端、生命周期、并发、社区修复、测试与文档�
 ## 10. 实施检查单
 
 - [x] 用户确认开始，3.1～3.3节已同步权威契约；实现状态单独记录。
-- [x] 3A客户端、取消与DNS修复、13种心情真HTTP通过；独立客户端预审及delta复核完成。带读入口与调用链本轮交付，用户理解不等于测试通过；第一轮仍待3C。
-- [ ] 3C 单次执行、新事务失败收尾、提交超时通过并带读。
-- [ ] 第 1 轮独立评审完成，阻断问题已处理。
+- [x] 3A客户端、取消与DNS修复、13种心情真HTTP通过；独立客户端预审及delta复核完成。带读入口与调用链已交付，用户理解不等于测试通过；第一轮3A＋3C评审已通过。
+- [ ] 3C单次执行、新事务失败收尾及SQL行锁验收已通过；领取／预检超时补充待带读，11.3剩余边界由3D接续。
+- [x] 第1轮3A＋3C固定范围独立评审完成，两个SQL超时遗漏已修复；3D接入前置项见上方任务，不代表其已通过。
 - [ ] 3D+3E 生命周期、三并发、槽位与门禁回收通过并带读。
 - [ ] 第 2 轮独立评审完成。
 - [ ] 3B 冷却函数、CAS、429、attempt 范围放宽通过并带读。
@@ -281,6 +287,8 @@ v2 第 3.2 节选择 finished_at=NULL 时放行并记录异常，这是用户修
 3C 必须核验实际 MyBatis／驱动是否应用 statement timeout，连接获取、行锁、网络阻塞、commit／rollback 的等待边界，以及超时后的线程退出。innodb_lock_wait_timeout 只约束相应锁等待，session 级配置在连接池复用时还须恢复／保持明确策略；不修改全局数据库参数。生成阶段中的来源预检，以及 50 秒开始前的 claim，也不能因分段而无限占住槽位。
 
 补充验收：真实锁等待之外，覆盖连接不可用／慢数据库读取及收尾失败。槽位必须在线程与 I/O 实际结束后归还。如果当前驱动无法兑现 5 秒的严格墙上时间上限，先如实记录约束与可测清理界限，再修订这句承诺；不扩大成新的复杂控制平台，也不把仅有配置的测试当资源释放证据。
+
+2026-11-10核验：MyBatis确实把Spring事务剩余时间应用到Statement查询超时；claim、预检、complete、fail的真实行锁探针通过。连接获取／事务启动发生在该计时边界之前，commit／rollback也不受同一查询计时器覆盖，因此本条整体保持未完成；剩余配置与故障注入已列为上方3D启用worker前的明确门槛。
 
 依据：[Spring DataSourceTransactionManager 的事务超时应用条件](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/jdbc/datasource/DataSourceTransactionManager.html)。
 
@@ -328,6 +336,19 @@ JDK HttpClient 与 Apache HC5 各测无响应、持续慢正文、响应超界�
 - 步骤：先添加共享／失败缓存恢复、无HTTP线程等待、取消隔离、迟到成功、关闭、卡住解析和容量测试并观察RED；实现后运行目标测试及Java普通回归／显式Java→Python合成Provider IT；固定文件哈希交独立agent审并处理发现。
 
 **11.8执行结果**：实现及180项Java普通／合成Python IT验证通过；review_dns_recovery固定9文件SHA256评审通过，无必须修复项，并实测原生式DNS卡住退出后的重查恢复、HTTP Future取消断连及复用。完成回调立即续接曾误报overloaded，已单项RED→GREEN修复；队列上限concurrency不增加HTTP线程或逻辑容量。两项独立探针纳入自动回归为低优先级后续建议，当前未并入JUnit。原生DNS可能仍留单条daemon至系统返回，成功IP TTL刷新暂缓；未验生产，未访问业务库／真实模型，用户在新增段／测试带读后授权整理本地提交；下一步进入3C，用户独立掌握未验证。
+
+### 11.9 3C单次执行与验证（2026-11-10）
+
+- 用户授权“推进”，先实现领取至多一条、保存attempt／requestId／版本及deadline、来源预检、事务外generateAsync、数据库执行器handleAsync续接、complete的独立5秒事务。新类不注册Spring Bean，不启动自动worker，不新增表／外部接口。涉及新AiJobWorker、AiJobWorkerTests、AiJobWorkerFailureLearningCases；保留工作区其余7文件改动。
+- 用户手写位置为AiJobWorker.finishFailure：独立短事务按本attempt调用fail，CAS未命中不覆盖新状态，收尾也失败时只记录安全追踪字段并如实返回未收尾状态；原TODO已由用户参照分步提示填写；Codex清除占位异常残留，3项替身验收转GREEN，完整数据库验收前仍不接入自动worker。该共用入口同时用于客户端失败，避免Codex先写同一核心再让用户象征性补一行。success／complete=false链可测试，不能据此称完整闭环已完成。
+- 设计依据：Spring Framework v6.2.18 TransactionTemplate.execute，先getTransaction、运行回调，回调异常时rollbackOnException后向外抛；正常时commit后返回。固定源码：https://github.com/spring-projects/spring-framework/blob/v6.2.18/spring-tx/src/main/java/org/springframework/transaction/support/TransactionTemplate.java 。因此catch放在execute之外，现有AiJobService.complete内部admission.transaction加入外层短事务。选择现有Spring模板，不增加消息队列／重试框架；5秒配置不是锁／网络／commit已验证的硬上限，MySQL实测仍待后续。
+- 先写普通主体测试观察类缺失RED，再实现；新增领取后交接排队预算测试明确RED（预期48秒，实际50秒），修复为claim成功立即保存deadline。Java17普通*Tests＋合成Python契约IT共187项通过（0失败／错误／跳过），7项新主体测试为服务／客户端／事务管理器替身，不证明真实MySQL回滚。
+- 用户失败收尾的3条LearningCases起初为RED，用户填写后转GREEN；当时普通回归＋合成PythonIT＋显式3项共197通过。LearningCases不由默认*Tests发现，仍须显式运行；用户参照代码填写，不记为独立掌握。
+- 本轮在/tmp独立MySQL8.4实例的新建空合成库运行：日志插入失败时回滚回复／成功终态，新事务failed(internal_error)可落库且可重试；迟到成功／失败不能覆盖修改、删除和新attempt。新增8项真实数据库测试，持久化IT共38项通过；未访问业务库／真实模型，测试后独立实例已关闭，数据／日志保留。
+- 评审发现claim与来源预检缺少SQL超时；分别真实行锁RED→GREEN，复用独立5秒短事务，并补预检前过期检查RED→GREEN。最新同次Java17回归236通过、0失败／错误／跳过，含15项真实Python合成供应商HTTP、38项MySQL及显式3项LearningCases。日志`/tmp/heartisland-3c-db-full.log`：claim5020ms、complete5090ms、fail5017ms、预检与fail同时被锁住合计10046ms，锁保持到断言后才释放。它们证明SQL行锁等待退出，不证明整个方法硬5秒。
+- 第一轮3A＋3C复审固定22文件于`/tmp/heartisland-3a3c-final-review/manifest.json`，review_3c_db_boundaries核验全部哈希、只读审查通过，无新增必须修复项；核对上述日志，未独立重跑测试。新worker仍不注册Bean／扫描，3D前置门槛尚待完成；本批按用户授权分批整理本地提交，不推送或部署。
+
+- 提交前可读性复核（2026-11-10）：Standards与Spec分别固定快照审查；补齐新worker及测试的分支／循环分段、单调纳秒命名，修正加锁前读取的事务注释，去除测试进度注释，均仅写法调整。两轴delta复核通过；本轮Java17普通／合成HTTP／显式LearningCases共198项、Python离线／回环114项通过，未重跑MySQL，前述38项保留为本轮写法调整前的真实组件证据。
 
 ## 12. 后续社区异步 AI 回复（三并发意向，2026-11-09）
 
