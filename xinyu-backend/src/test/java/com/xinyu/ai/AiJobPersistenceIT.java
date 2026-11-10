@@ -8,6 +8,7 @@ import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.dto.MoodAiResponse;
 import com.xinyu.dto.MoodAiRequest;
 import com.xinyu.service.AiJobWorker;
+import com.xinyu.service.AiJobRuntime;
 import com.xinyu.service.AiServiceClient;
 import com.xinyu.service.AiServiceException;
 import com.xinyu.mapper.MoodRecordMapper;
@@ -753,7 +754,7 @@ class AiJobPersistenceIT {
             assertThat(moods.selectById(saved.getId()).getAiReply()).isEqualTo("合成worker回复。");
             assertThat(logs()).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT prompt FROM ai_reply WHERE user_id=?", String.class, userId)).isNull();
-            verify(execution.client, times(2)).generateAsync(any(), any());
+            verify(execution.client, times(2)).startGeneration(any(), any());
         }
     }
 
@@ -982,6 +983,55 @@ class AiJobPersistenceIT {
         }
     }
 
+    @Test
+    void runtimeRunsThreeAcrossUsersAndLeavesFourthInDatabaseUntilSlotReturns() throws Exception {
+        long secondUser = userSequence.incrementAndGet();
+        jdbc.update("INSERT INTO user(id) VALUES (?)", secondUser);
+        try (WorkerExecution execution = new WorkerExecution()) {
+            service.add(input());
+            service.add(input());
+            MoodRecord other = input();
+            other.setUserId(secondUser);
+            service.add(other);
+            var fourth = service.add(other);
+            doAnswer(invocation -> {
+                for (ModelCall call : execution.inflight) {
+                    call.reply().completeExceptionally(new AiServiceException("execution_interrupted"));
+                }
+                return null;
+            }).when(execution.client).close();
+            when(execution.client.awaitTermination(any())).thenReturn(true);
+
+            try (AiJobRuntime runtime = new AiJobRuntime(jobService, execution.client, manager,
+                    3, Duration.ofMillis(20), Duration.ofSeconds(10))) {
+                runtime.start();
+                ModelCall first = execution.nextModelCall();
+                ModelCall second = execution.nextModelCall();
+                ModelCall third = execution.nextModelCall();
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE status='running'", Integer.class))
+                        .isEqualTo(3);
+                assertThat(jobs.selectById(fourth.getJobId()).getStatus()).isEqualTo("queued");
+                assertThat(execution.calls.poll(100, TimeUnit.MILLISECONDS)).isNull();
+
+                first.succeed();
+                ModelCall replacement = execution.nextModelCall();
+                assertThat(replacement.request().jobId()).isEqualTo(fourth.getJobId().toString());
+                assertThat(second.reply()).isNotDone();
+                assertThat(third.reply()).isNotDone();
+                second.succeed();
+                third.succeed();
+                replacement.succeed();
+            }
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE status='succeeded'", Integer.class))
+                    .isEqualTo(4);
+        } finally {
+            jdbc.update("DELETE FROM ai_reply WHERE user_id=?", secondUser);
+            jdbc.update("DELETE FROM ai_job WHERE user_id=?", secondUser);
+            jdbc.update("DELETE FROM mood_record WHERE user_id=?", secondUser);
+            jdbc.update("DELETE FROM user WHERE id=?", secondUser);
+        }
+    }
+
     private static void awaitProbeRelease(CountDownLatch release) {
         try {
             assertThat(release.await(15, TimeUnit.SECONDS)).as("锁探针必须在15秒内显式释放").isTrue();
@@ -1006,13 +1056,13 @@ class AiJobPersistenceIT {
         WorkerExecution(Executor stagedDatabase) {
             worker = new AiJobWorker(jobService, client, manager,
                     stagedDatabase == null ? database : stagedDatabase, System::nanoTime);
-            when(client.generateAsync(any(), any())).thenAnswer(invocation -> {
+            when(client.startGeneration(any(), any())).thenAnswer(invocation -> {
                 ModelCall call = new ModelCall(invocation.getArgument(0), new CompletableFuture<>());
                 inflight.add(call);
                 if (!calls.offer(call)) {
                     throw new IllegalStateException("测试模型请求队列已满");
                 }
-                return call.reply();
+                return new AiServiceClient.Generation(call.reply(), CompletableFuture.completedFuture(null));
             });
         }
 
