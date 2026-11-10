@@ -1032,6 +1032,149 @@ class AiJobPersistenceIT {
         }
     }
 
+    @Test
+    void subsecondCooldownProbeRoundsUpUntilExactDeadline() throws Exception {
+        // 复用实际Mapper的SELECT，仅将来源和当前时刻换为固定探针输入；不改DATETIME表结构。
+        var method = AiJobMapper.class.getMethod("selectRetryAfterSeconds", com.xinyu.entity.AiJob.class, int.class);
+        String query = String.join(" ", method.getAnnotation(org.apache.ibatis.annotations.Select.class).value())
+                .replace("#{cooldownSeconds}", "180")
+                .replace("#{job.id}", "123")
+                .replace("#{job.attemptCount}", "3")
+                .replace("CURRENT_TIMESTAMP", "CAST(? AS DATETIME(6))");
+        String probe = "WITH ai_job AS (SELECT 123 AS id, 3 AS attempt_count, 'failed' AS status, "
+                + "CAST(? AS DATETIME(6)) AS finished_at) " + query;
+
+        assertThat(jdbc.queryForObject(probe, Integer.class,
+                "2026-01-01 12:00:00.500000", "2026-01-01 12:03:00.499999")).isEqualTo(1);
+        assertThat(jdbc.queryForObject(probe, Integer.class,
+                "2026-01-01 12:00:00.500000", "2026-01-01 12:03:00.500000")).isZero();
+        assertThat(jdbc.queryForObject(probe, Integer.class,
+                "2026-01-01 12:00:00.500000", "2026-01-01 12:03:00.500001")).isZero();
+    }
+
+    @Test
+    void cooldownStateComesFromDatabaseAndExpiryOnlyEnablesManualRetry() {
+        var saved = failedJobAtAttempt(3);
+        var cooling = jobService.getOwned(userId, saved.getJobId());
+        assertThat(cooling.retryAfterSeconds()).isBetween(175, 180);
+        assertThat(cooling.retryable()).isFalse();
+        assertThatThrownBy(() -> jobService.retry(userId, saved.getJobId()))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class, failure -> {
+                    assertThat(failure.getStatusCode().value()).isEqualTo(429);
+                    assertThat(Integer.parseInt(failure.getHeaders().getFirst("Retry-After"))).isBetween(175, 180);
+                });
+
+        // 服务对象重建不改变资格，冷却依据保存在数据库中。
+        AiJobService restarted = new AiJobService(jobs, moods, replies, admission, true);
+        assertThat(restarted.getOwned(userId, saved.getJobId()).retryable()).isFalse();
+        jdbc.update("UPDATE ai_job SET finished_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE id=?",
+                saved.getJobId());
+        assertThat(restarted.getOwned(userId, saved.getJobId()).retryAfterSeconds()).isZero();
+        assertThat(restarted.getOwned(userId, saved.getJobId()).retryable()).isTrue();
+        assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("failed");
+        assertThat(jobService.retry(userId, saved.getJobId()).status()).isEqualTo("queued");
+        assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isEqualTo(3);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {3, 6})
+    void expiredFailureRoundCanGenerateAndCommitNextAttempt(int previousAttempts) throws Exception {
+        var saved = failedJobAtAttempt(previousAttempts);
+        jdbc.update("UPDATE ai_job SET finished_at=TIMESTAMPADD(SECOND,-3601,CURRENT_TIMESTAMP) WHERE id=?",
+                saved.getJobId());
+        assertThat(jobService.retry(userId, saved.getJobId()).status()).isEqualTo("queued");
+
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var result = execution.worker.runOne();
+            ModelCall model = execution.nextModelCall();
+            assertThat(model.request().attempt()).isEqualTo(previousAttempts + 1);
+            model.succeed();
+            assertThat(result.get(5, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
+            assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isEqualTo(previousAttempts + 1);
+            assertThat(moods.selectById(saved.getId()).getAiReply()).isEqualTo("合成worker回复。");
+            assertThat(logs()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void nullFinishTimeAllowsRetryAndNonFailedTaskHasNoCooldown() {
+        var saved = failedJobAtAttempt(3);
+        jdbc.update("UPDATE ai_job SET finished_at=NULL WHERE id=?", saved.getJobId());
+        assertThat(jobService.getOwned(userId, saved.getJobId()).retryAfterSeconds()).isZero();
+        assertThat(jobService.getOwned(userId, saved.getJobId()).retryable()).isTrue();
+        assertThat(jobService.retry(userId, saved.getJobId()).status()).isEqualTo("queued");
+
+        var running = jobService.claimNext();
+        assertThat(running.getAttemptCount()).isEqualTo(4);
+        assertThat(jobService.getOwned(userId, saved.getJobId()).retryAfterSeconds()).isZero();
+        assertThat(jobService.getOwned(userId, saved.getJobId()).retryable()).isFalse();
+    }
+
+    @Test
+    void sourceDeletionIsCheckedBeforeCooldownAndReturns404() {
+        var saved = failedJobAtAttempt(3);
+        assertThat(service.delete(saved.getId(), userId)).isTrue();
+        assertThatThrownBy(() -> jobService.retry(userId, saved.getJobId()))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                        failure -> assertThat(failure.getStatusCode().value()).isEqualTo(404));
+    }
+
+    @Test
+    void simultaneousRetriesAfterCooldownRequeueOnlyOnePersistentJob() throws Exception {
+        var saved = failedJobAtAttempt(3);
+        jdbc.update("UPDATE ai_job SET finished_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE id=?",
+                saved.getJobId());
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> first = executor.submit(() -> {
+                await(start);
+                assertThat(jobService.retry(userId, saved.getJobId()).status()).isEqualTo("queued");
+            });
+            Future<?> second = executor.submit(() -> {
+                await(start);
+                assertThat(jobService.retry(userId, saved.getJobId()).status()).isEqualTo("queued");
+            });
+            start.countDown();
+            first.get(5, TimeUnit.SECONDS);
+            second.get(5, TimeUnit.SECONDS);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE user_id=?", Integer.class, userId))
+                    .isEqualTo(1);
+            assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isEqualTo(3);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private com.xinyu.vo.MoodSaveVO failedJobAtAttempt(int attemptCount) {
+        var saved = service.add(input());
+        jdbc.update("UPDATE ai_job SET status='failed', attempt_count=?, finished_at=CURRENT_TIMESTAMP, "
+                + "last_error_code='provider_error' WHERE id=?", attemptCount, saved.getJobId());
+        return saved;
+    }
+
+    @Test
+    void cooldownRequeueRejectsBeforeDeadlineAndAllowsAtDeadline() {
+        var saved = service.add(input());
+        jdbc.update("UPDATE ai_job SET status='failed', attempt_count=3, "
+                + "finished_at=CURRENT_TIMESTAMP WHERE id=?", saved.getJobId());
+        var failed = jobs.selectById(saved.getJobId());
+
+        assertThat(jobs.selectRetryAfterSeconds(failed, 180)).isBetween(175, 180);
+        assertThat(jobs.requeueAfterCooldown(failed, 180)).isZero();
+        assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("failed");
+
+        // 调整结束时间模拟到期，无需真实等待180秒。
+        jdbc.update("UPDATE ai_job SET finished_at=TIMESTAMPADD(SECOND,-180,CURRENT_TIMESTAMP) WHERE id=?",
+                saved.getJobId());
+        assertThat(jobs.selectRetryAfterSeconds(failed, 180)).isZero();
+        assertThat(jobs.requeueAfterCooldown(failed, 180)).isEqualTo(1);
+        assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("queued");
+        assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isEqualTo(3);
+    }
+
     private static void awaitProbeRelease(CountDownLatch release) {
         try {
             assertThat(release.await(15, TimeUnit.SECONDS)).as("锁探针必须在15秒内显式释放").isTrue();
