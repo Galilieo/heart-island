@@ -112,9 +112,9 @@ heart_island
 ├─ docs
 │  ├─ README.md
 │  ├─ project
-│  │  └─ 01-11 项目交付文档
+│  │  └─ 当前项目资料入口
 │  ├─ history
-│  │  └─ 历史设计与实施记录
+│  │  └─ 旧交付文档、设计与实施记录
 │  └─ personal
 │     └─ 本地个人资料，不提交到仓库
 ├─ sql
@@ -129,7 +129,7 @@ heart_island
 │     ├─ vo
 │     └─ common
 ├─ xinyu-ai
-│  └─ 独立 Python 单次回应服务（Task 1，尚未接 Java）
+│  └─ 独立 Python AI 服务（Java 客户端已接入，worker闭环进行中）
 └─ xinyu-vue
    └─ src
       ├─ api
@@ -226,7 +226,7 @@ http://localhost:5173
 | 后台 | PUT | `/admin/topic/{id}` | 编辑话题 |
 | 后台 | GET | `/admin/ai-replies/page` | AI 回复记录分页 |
 
-更完整的接口说明见 [docs/history/project-before-1a/05-接口设计说明书.md](docs/history/project-before-1a/05-接口设计说明书.md)。
+接口入口见[项目文档导航](docs/project/README.md)；当前AI升级接口以[1a契约](ops/features/ai-reply-service-v1a.md)为准。
 
 ## 运行验证
 
@@ -260,7 +260,7 @@ npm run build
 | 继续当前升级开发 | [功能首页](ops/features/README.md) → [接续状态](ops/features/xinyu-next-session.md) |
 | 查当前方案与契约 | [升级总方案](ops/features/xinyu-upgrade-master-plan.md)、[1a 功能契约](ops/features/ai-reply-service-v1a.md) |
 | 查 Agent 工作规则 | [AGENTS.md](AGENTS.md) 与 `ops/00-10` 相关规则 |
-| 查需求、架构、接口、数据库与部署说明 | [正式交付文档导航](docs/project/README.md)，按问题选读 |
+| 查需求、架构、接口、数据库与部署说明 | [项目文档入口](docs/project/README.md)，按问题选读 |
 | 查旧方案、旧计划 | [历史归档索引](docs/history/README.md) |
 | 查参考方案和品牌素材 | [参考资料索引](ops/features/references/README.md) |
 | 查本地计划、验证和学习记录 | `AI_WORKLOG/`，已忽略，不纳入 Git |

@@ -1,42 +1,11 @@
-# docs 文档导航
+# 文档导航
 
-`docs/` 只保存 heart-island 的项目说明和历史记录。个人学习、求职、面试和私人运维资料保存在仓库外的本地私有目录，不纳入 Git。这里不放开发期 Agent 工作流；Agent 协作规则看根目录 `AGENTS.md` 和 `ops/`。
-
-## 快速入口
-
-| 你要做什么 | 先看哪里 |
+| 用途 | 入口 |
 | --- | --- |
-| 继续当前开发 | [功能入口](../ops/features/README.md) → [接续状态](../ops/features/xinyu-next-session.md) |
-| 了解项目交付文档 | [交付文档导航](project/README.md)，按问题查阅，不要求全部顺读 |
-| 查需求、架构、接口、数据库 | `docs/history/project-before-1a/01-项目背景与可行性分析.md` 到 `11-分阶段开发计划.md` |
-| 查历史方案和旧计划 | [归档索引](history/README.md)，不作为实施入口 |
-| 查个人求职、学习、面试资料 | 仓库外本地资料入口（不纳入 Git） |
-| 查 Agent 开发规则 | `AGENTS.md` 和 `ops/*.md` |
+| 了解项目与当前资料 | [项目入口](project/README.md) |
+| 继续开发 | [接续状态](../ops/features/xinyu-next-session.md) |
+| 当前设计与长期路线 | [功能契约](../ops/features/ai-reply-service-v1a.md) · [升级总方案](../ops/features/xinyu-upgrade-master-plan.md) |
+| 执行记录 | 本地 `AI_WORKLOG/`，多数文件不随克隆提供 |
+| 查旧设计与交付说明 | [历史归档](history/README.md) |
 
-## 目录结构
-
-```text
-docs/
-├─ project/    当前项目交付文档，可公开、可随项目维护
-└─ history/    历史设计规格与实施计划，只作追溯参考
-```
-
-## 可信度顺序
-
-当文档、代码、历史计划不一致时，按下面顺序判断：
-
-1. 当前源码、SQL、配置。
-2. 当前构建、测试和手动验证结果。
-3. Git 历史。
-4. `docs/project/` 当前项目文档。
-5. `docs/history/` 历史规格与计划。
-6. 仓库外本地资料中的个人话术、学习记录和求职材料。
-
-不要把历史计划、简历话术或未来规划说成已经实现。
-
-## 维护规则
-
-- `project/`：适合提交，记录项目当前交付状态。
-- `history/`：适合保留，不建议频繁改旧内容，可新增 README 或索引说明。
-- 个人资料：集中保存在仓库外本地目录，不纳入 Git；其中私人运维资料不得公开。
-- 新增正式功能说明时，优先放到 `docs/project/` 或 `ops/features/`，不要散落在根目录。
+`project/` 保持简短入口；旧设计与已结束阶段放到 `history/`，不另维护重复的进度或路线。
