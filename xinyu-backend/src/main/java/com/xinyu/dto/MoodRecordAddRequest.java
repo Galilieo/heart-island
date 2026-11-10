@@ -1,10 +1,15 @@
 package com.xinyu.dto;
 
+/** 新增心情请求；needAiReply 缺省 true，兼容不传该字段的旧客户端。 */
 public class MoodRecordAddRequest {
+
+    /** 心情类型，必填。 */
     private String moodType;
+
+    /** 心情正文，必填。 */
     private String content;
 
-    /** 是否需要 AI 回复，缺省 true（兼容不传该字段的旧客户端） */
+    /** 是否需要 AI 回复，缺省 true。 */
     private Boolean needAiReply = true;
 
     public String getMoodType() {
