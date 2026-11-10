@@ -1,8 +1,10 @@
 package com.xinyu.ai;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xinyu.entity.AiJob;
 import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiJobMapper;
+import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.MoodRecordMapper;
 import com.xinyu.service.AiJobAdmission;
 import com.xinyu.service.AiJobService;
@@ -11,12 +13,16 @@ import com.xinyu.vo.MoodSaveVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -38,7 +44,7 @@ class AiJobStateTests {
         transaction = mock(TransactionStatus.class);
         when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(transaction);
         AiJobAdmission admission = new AiJobAdmission(manager);
-        AiJobService jobService = new AiJobService(jobs, moods, mock(com.xinyu.mapper.AiReplyMapper.class), admission, true);
+        AiJobService jobService = new AiJobService(jobs, moods, mock(AiReplyMapper.class), admission, true);
         service = new MoodRecordService(moods, jobService, admission);
         when(moods.insert(any(MoodRecord.class))).thenAnswer(invocation -> {
             invocation.<MoodRecord>getArgument(0).setId(9L);
@@ -138,7 +144,8 @@ class AiJobStateTests {
     @Test
     void closingReplySupersedesButDoesNotCreateNewJob() {
         when(moods.selectOwnedForUpdate(9L, 2L)).thenReturn(stored());
-        when(moods.updateContentAtVersion(anyLong(), anyLong(), anyLong(), anyString(), anyString(), eq(false))).thenReturn(1);
+        when(moods.updateContentAtVersion(anyLong(), anyLong(), anyLong(), anyString(), anyString(), eq(false)))
+                .thenReturn(1);
         MoodRecord edit = input();
         edit.setNeedAiReply(false);
         assertThat(service.update(9L, 2L, edit).getAiReplyState()).isEqualTo("disabled");
@@ -166,7 +173,8 @@ class AiJobStateTests {
         assertThat(service.delete(9L, 2L)).isFalse();
         assertThat(service.update(9L, 2L, input())).isNull();
         verify(moods, never()).softDeleteAtVersion(anyLong(), anyLong(), anyLong());
-        verify(moods, never()).updateContentAtVersion(anyLong(), anyLong(), anyLong(), anyString(), anyString(), anyBoolean());
+        verify(moods, never()).updateContentAtVersion(
+                anyLong(), anyLong(), anyLong(), anyString(), anyString(), anyBoolean());
         verifyNoInteractions(jobs);
     }
 
@@ -216,17 +224,17 @@ class AiJobStateTests {
 
     @Test
     void admissionRejectsAmbientTransactionBeforeTakingCapacityLock() {
-        org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(true);
+        TransactionSynchronizationManager.setActualTransactionActive(true);
         try {
             assertThatThrownBy(() -> service.add(input())).isInstanceOf(IllegalStateException.class);
             verifyNoInteractions(moods, jobs, manager);
         } finally {
-            org.springframework.transaction.support.TransactionSynchronizationManager.setActualTransactionActive(false);
+            TransactionSynchronizationManager.setActualTransactionActive(false);
         }
     }
 
     @ParameterizedTest
-    @org.junit.jupiter.params.provider.MethodSource("productMoods")
+    @MethodSource("productMoods")
     void allProductMoodsCanBeSavedAndKeepTheirOriginalValue(String mood) {
         MoodRecord value = input();
         value.setMoodType(mood);
@@ -239,8 +247,8 @@ class AiJobStateTests {
 
     /** 与Python接口回归共用输入基准，避免两边各维护一份测试枚举。 */
     static String[] productMoods() throws Exception {
-        return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
-                java.nio.file.Files.readString(java.nio.file.Path.of("../test-contracts/mood-types.json")), String[].class);
+        return new ObjectMapper().readValue(
+                Files.readString(Path.of("../test-contracts/mood-types.json")), String[].class);
     }
 
 }
