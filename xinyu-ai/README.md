@@ -1,6 +1,6 @@
 # 心屿 Python 单次回应服务 · Task 1
 
-内部服务只负责认证、输入校验、有限风险分支与一次模型生成；Java 管用户身份、来源版本、任务状态和结果持久化。此目录独立运行，不引用 agent-lab，不连接业务数据库。3A已接入独立Java内部HTTP客户端并完成回环及少量真实API验收，尚无自动worker和业务数据库闭环。
+内部服务只负责认证、输入校验、有限风险分支与一次模型生成；Java 管用户身份、来源版本、任务状态和结果持久化。此目录独立运行，不引用 agent-lab，不连接业务数据库。Java已接入内部HTTP客户端、单次执行及条件启用的自动worker，事务和三槽调度已用隔离MySQL验证；完整1a发布验收尚待后续任务。
 
 ## 安装与运行
 
@@ -60,11 +60,11 @@ ID／版本必须是正数的十进制字符串且在 Java signed long 范围内
 | 502 | provider_error | 供应商非 200、连接错误等 |
 | 502 | invalid_model_response | 非 JSON、非法结构、空白／超长回复、非正常结束 |
 | 504 | provider_timeout | 本地阶段等待或总 deadline 到期 |
-| 503 | overloaded | 已有一个生成在处理，不额外排队 |
+| 503 | overloaded | 生成名额已满，默认3个，不额外排队 |
 
 请求头合计上限 8 KiB，正文上限 16 KiB（包括流式接收的累计字节）；供应商响应最多读取 64 KiB。应用限制不能替代网关／HTTP 服务器的接入层限制。错误日志只记录安全追踪 ID 与分类，不输出原文或 traceback。
 
-请求处理总时限默认 40 秒；验证请求后按 budget_ms 缩短，同样从请求开始计时。供应商连接最多 2 秒、单次读等待最多 35 秒，均受剩余总时限约束。`asyncio.timeout_at` 包住可取消的异步网络 I/O，超时退出上下文关闭连接；不承诺远端停止计算／计费。单进程生成并发为 1，不提供持久化队列，Java 的数据库 worker 在 Task 3 接入。
+请求处理总时限默认 40 秒；验证请求后按 budget_ms 缩短，同样从请求开始计时。供应商连接最多 2 秒、单次读等待最多 35 秒，均受剩余总时限约束。`asyncio.timeout_at` 包住可取消的异步网络 I/O，超时退出上下文关闭连接；不承诺远端停止计算／计费。单进程生成并发默认 3，可通过 `AI_SERVICE_CONCURRENCY` 调整；超出名额立即返回 overloaded，不在 Python 内存排队。Java 数据库 worker 通过 `AI_WORKER_ENABLED=true` 条件接入，默认 3 个执行槽位，由 `AI_WORKER_CONCURRENCY` 配置；数据库仍是唯一持久待办队列。
 
 ## 有限风险回应
 
@@ -86,7 +86,7 @@ uv run --directory xinyu-ai --locked pytest -q
 
 测试替换外部供应商，保留真实认证、风险、校验与 HTTP 适配；另以真实回环 TCP 验证挂起响应在总 deadline 后关闭连接。运行测试需要允许绑定 127.0.0.1 临时端口。协议测试及有限样例不证明真实模型质量、危机覆盖率或生产可用性。
 
-本地 RED/GREEN、依赖版本与后续接续见 `AI_WORKLOG/2026-11-07-ai-reply-1a-progress.md`。3A已完成Java内部HTTP联调与两条合成输入真实供应商验收；自动worker、数据库提交闭环、社区耗时校准和部署仍待后续阶段。
+本地 RED/GREEN、依赖版本与后续接续见 `AI_WORKLOG/2026-11-07-ai-reply-1a-progress.md`。3A已完成Java内部HTTP联调与两条合成输入真实供应商验收；3D／3E自动worker和数据库提交闭环已实现验证，新增主体已带读；冷却、社区耗时校准、前端联调和完整发布验收尚待后续阶段。
 
 
 ### Java→Python 回环契约验收（3A）

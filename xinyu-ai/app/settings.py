@@ -21,6 +21,8 @@ class Settings(BaseModel):
     # 这是本服务的预算初值和本地上限，不是供应商限制，也不保证思考模式一定完成。
     model_max_tokens: int = Field(default=4096, strict=True, ge=1, le=8192)
     request_timeout_seconds: float = Field(default=40, gt=0, le=40)
+    # 单进程生成名额，Task3初值3；与Java执行槽位独立配置，超出直接拒绝。
+    max_concurrent_requests: int = Field(default=3, strict=True, ge=1)
 
     @field_validator("internal_token", "model_api_key")
     @classmethod
@@ -60,6 +62,7 @@ class Settings(BaseModel):
                 model_name=os.environ["OPENAI_MODEL"],
                 model_thinking_mode=os.environ["DEEPSEEK_THINKING_MODE"],
                 model_max_tokens=int(os.environ.get("OPENAI_MAX_TOKENS", "4096")),
+                max_concurrent_requests=int(os.environ.get("AI_SERVICE_CONCURRENCY", "3")),
             )
         except (KeyError, ValueError):
             raise ValueError("invalid_ai_service_configuration") from None

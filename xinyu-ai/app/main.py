@@ -22,8 +22,6 @@ MAX_HEADER_BYTES = 8192
 MAX_BODY_BYTES = 16384
 # 请求头字节数按“名称 + 值 + 分隔与行结束开销”计算。
 HEADER_ENTRY_OVERHEAD_BYTES = 4
-# 单进程同时只处理一次生成，超出的请求直接拒绝而不排队。
-MAX_CONCURRENT_REQUESTS = 1
 
 # 错误分类到 HTTP 状态码的固定映射，与 Java 客户端约定的错误码一一对应。
 ERROR_STATUS = {
@@ -117,7 +115,7 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                 if data is None:
                     return error("invalid_request")
                 request_id = data.request_id
-                if active >= MAX_CONCURRENT_REQUESTS:
+                if active >= settings.max_concurrent_requests:
                     return error("overloaded", request_id)
                 # 检查与计数递增之间不能出现 await，避免同一事件循环中的请求交错准入。
                 active += 1

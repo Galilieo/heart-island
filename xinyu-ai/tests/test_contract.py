@@ -174,7 +174,7 @@ async def test_busy_service_rejects_excess_work_without_queueing():
             started.set()
             await release.wait()
             return await super().generate(request, deadline)
-    async with client_for(application(Blocked())) as client:
+    async with client_for(application(Blocked(), max_concurrent_requests=1)) as client:
         first = asyncio.create_task(client.post("/internal/v1/mood-replies", json=payload(), headers=AUTH))
         await asyncio.wait_for(started.wait(), 1)
         try:
@@ -195,3 +195,48 @@ async def test_all_product_moods_reach_provider_without_changing_their_value(moo
     assert response.status_code == 200
     assert len(provider.calls) == 1
     assert provider.calls[0][0].mood_type == mood
+
+
+async def test_default_three_slots_reject_fourth_and_reuse_only_finished_slot():
+    """三项生成同时等待时拒绝第四项；一项结束后名额可复用，不影响另外两项。"""
+    entered = asyncio.Queue()
+    releases = {}
+
+    class GatedProvider(StubProvider):
+        async def generate(self, request, deadline):
+            release = releases.setdefault(request.request_id, asyncio.Event())
+            await entered.put(request.request_id)
+            await release.wait()
+            return await super().generate(request, deadline)
+
+    async with client_for(application(GatedProvider())) as client:
+        pending = [asyncio.create_task(client.post(
+            "/internal/v1/mood-replies", json=payload(request_id=f"request-{i}"), headers=AUTH,
+        )) for i in range(3)]
+        try:
+            for _ in range(3):
+                await asyncio.wait_for(entered.get(), 1)
+            rejected = await client.post("/internal/v1/mood-replies", json=payload(request_id="fourth"), headers=AUTH)
+            assert rejected.status_code == 503
+            releases["request-0"].set()
+            assert (await pending[0]).status_code == 200
+            replacement = asyncio.create_task(client.post(
+                "/internal/v1/mood-replies", json=payload(request_id="replacement"), headers=AUTH,
+            ))
+            pending.append(replacement)
+            assert await asyncio.wait_for(entered.get(), 1) == "replacement"
+            assert not pending[1].done()
+            assert not pending[2].done()
+        finally:
+            for release in releases.values():
+                release.set()
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+
+@pytest.mark.parametrize("capacity", [0, -1, True, "3"])
+def test_service_concurrency_requires_positive_integer(capacity):
+    """门禁配置拒绝零、负数和隐式类型转换。"""
+    with pytest.raises(ValueError):
+        make_settings(max_concurrent_requests=capacity)
