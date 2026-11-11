@@ -93,6 +93,8 @@ function goLogin() {
       @click="handleRegister"
     >注册</BaseButton>
 
+    <p>注册前请阅读 <RouterLink to="/privacy">隐私政策</RouterLink>，了解记录、AI回复和管理员排障访问的范围。</p>
+
     <template #footer>
       <BaseButton variant="link" @click="goLogin">
         已经有账号？回到登录 →

@@ -73,6 +73,8 @@ function goRegister() {
       @click="handleLogin"
     >登录</BaseButton>
 
+    <RouterLink to="/privacy">隐私政策</RouterLink>
+
     <template #footer>
       <BaseButton variant="link" @click="goRegister">
         还没有账号？去注册 →

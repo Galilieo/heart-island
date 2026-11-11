@@ -5,6 +5,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
+  { path: '/privacy', component: () => import('../views/Privacy.vue'), meta: { title: '隐私政策' } },
   { path: '/', component: () => import('../views/Login.vue'), meta: { title: '登录' } },
   {
     path: '/home',

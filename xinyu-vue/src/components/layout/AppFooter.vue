@@ -8,6 +8,7 @@ import Doodle from '../ui/Doodle.vue'
     <div class="container app-footer__inner">
       <Doodle name="leaf" :size="20" color="var(--ink-3)" />
       <span>心屿 · 记心情，聊日常</span>
+      <RouterLink to="/privacy">隐私政策</RouterLink>
       <Doodle name="leaf" :size="20" color="var(--ink-3)" style="transform: scaleX(-1)" />
     </div>
   </footer>
