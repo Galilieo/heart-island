@@ -8,9 +8,9 @@ import { moodExpression } from '../utils/mood'
 import { PALETTE_OPTIONS } from './styleOptions'
 import { toneStyle } from './mock'
 import { inject, ref } from 'vue'
-import brandLockup from './assets/xinyu-lockup.svg'
+import brandLockup from '../assets/brand/xinyu-lockup.svg'
 
-// 字标取当前选中的版本；单独使用时退回素材包原版
+// 字标取当前选中的版本；单独使用时退回正式字标（站酷小薇加粗版）
 const logoSrc = inject('logoSrc', ref(brandLockup))
 
 // 暖杏与“生气”等暖色心情容易混淆，不进入并排对比

@@ -6,7 +6,7 @@ import { MOOD_GROUPS, moodExpression } from '../utils/mood'
 import { toneStyle } from './mock'
 import XiaoyaNote from './XiaoyaNote.vue'
 import { inject, ref } from 'vue'
-import brandLockup from './assets/xinyu-lockup.svg'
+import brandLockup from '../assets/brand/xinyu-lockup.svg'
 
 const logoSrc = inject('logoSrc', ref(brandLockup))
 

@@ -2,9 +2,9 @@
 // 手账风格的全站顶栏：左侧为横版字标图片，导航为纯文字，当前页用品牌色下划线标示。
 import { inject, ref } from 'vue'
 import { MOCK_USER } from './mock'
-import brandLockup from './assets/xinyu-lockup.svg'
+import brandLockup from '../assets/brand/xinyu-lockup.svg'
 
-// 字标由设计对比页按当前选项与主题提供；单独使用时退回素材包原版
+// 字标由设计对比页按当前选项与主题提供；单独使用时退回正式字标（站酷小薇加粗版）
 const logoSrc = inject('logoSrc', ref(brandLockup))
 
 defineProps({

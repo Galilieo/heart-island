@@ -1,5 +1,6 @@
 <script setup>
-// 顶部导航条。包含 Logo、心情/社区 两个 Tab、深夜模式开关、右侧用户菜单。
+// 顶部导航条。包含横版字标、心情/社区/收藏导航、深夜模式开关、右侧用户菜单。
+// 导航为纯文字，当前页用品牌色下划线标示；字标随主题切换日夜两版。
 // 用户菜单里的"退出登录"会弹确认框，确认后清登录态并跳回登录页。
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute, RouterLink } from 'vue-router'
@@ -9,8 +10,9 @@ import { useToast } from '../../composables/useToast'
 import { useTheme } from '../../composables/useTheme'
 import Doodle from '../ui/Doodle.vue'
 import { navigationItems, isNavigationActive } from './navigation'
-import logoUrl from '../../assets/xiaoya/xinyu-mascot.svg'
-import logoDarkUrl from '../../assets/xiaoya/xinyu-mascot-dark.svg'
+// 横版字标：小芽 + 站酷小薇转曲线的「心屿」，来源见 AI_WORKLOG 前端风格定稿记录
+import lockupUrl from '../../assets/brand/xinyu-lockup.svg'
+import lockupDarkUrl from '../../assets/brand/xinyu-lockup-dark.svg'
 import avatarUrl from '../../assets/xiaoya/xinyu-avatar.svg'
 
 const router = useRouter()
@@ -68,8 +70,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
   <header class="app-header">
     <div class="app-header__inner container">
       <RouterLink to="/home" class="brand" @click="closeMenu">
-        <img :src="theme === 'night' ? logoDarkUrl : logoUrl" alt="心屿" class="brand__logo" />
-        <span class="brand__name">心屿</span>
+        <img :src="theme === 'night' ? lockupDarkUrl : lockupUrl" alt="心屿" class="brand__logo" />
       </RouterLink>
 
       <nav class="nav" aria-label="主导航">
@@ -176,54 +177,60 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: var(--ink-1);
   text-decoration: none;
-  font-weight: 700;
 }
 
+/* 字标高 32px，对应品牌素材包“页头 32px”的规范；宽度按 SVG 比例自适应 */
 .brand__logo {
-  width: 32px;
+  display: block;
   height: 32px;
-  object-fit: contain;
-}
-
-.brand__name {
-  font-family: var(--font-display);
-  font-size: var(--fs-lg);
-  letter-spacing: 1px;
+  width: auto;
 }
 
 .nav {
   flex: 1;
   display: flex;
-  gap: 6px;
+  gap: 20px;
 }
 
+/* 纯文字导航：保留 44px 触控高度，当前页用底部品牌色短线标示 */
 .nav__item {
   min-height: 44px;
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 8px 16px;
-  border-radius: var(--radius-pill);
+  padding: 8px 2px;
   color: var(--ink-2);
   font-size: var(--fs-md);
   font-weight: 600;
   text-decoration: none;
-  transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft);
+  transition: color var(--t-fast) var(--ease-soft);
 }
 
 .nav__item:hover {
-  background: var(--sea-soft);
-  color: var(--sea-deep);
+  color: var(--ink-1);
 }
 
 .nav__item.is-active {
-  background: linear-gradient(135deg, var(--sea), var(--brand));
-  color: #fff;
-  box-shadow: 0 6px 14px rgba(61, 111, 110, 0.30);
+  color: var(--ink-1);
+  font-weight: 700;
+}
+
+.nav__item.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+}
+
+.nav__item:focus-visible {
+  outline: none;
+  border-radius: var(--radius-1);
+  box-shadow: var(--shadow-focus);
 }
 
 /* 深夜模式开关：浅色时显示月亮（点我去深夜），深夜时显示太阳 */
@@ -366,8 +373,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
 @media (max-width: 768px) {
   .app-header__inner { gap: 12px; }
   .brand { margin-right: auto; }
+  .brand__logo { height: 26px; }
   .nav { display: none; }
-  .brand__name { display: inline; }
   .user__name { display: none; }
   .nav__item {
     min-height: 44px;

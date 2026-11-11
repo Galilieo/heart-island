@@ -1,12 +1,12 @@
 // 设计对比页的风格候选：标题字体、日间配色、小芽批注样式。
 // 候选字体在 demo 阶段从 jsDelivr 按需加载 fontsource 切片样式；定稿后改为本地依赖自托管。
 
-import brandLockup from './assets/xinyu-lockup.svg'
-import brandLockupDark from './assets/xinyu-lockup-dark.svg'
+import brandLockup from './assets/xinyu-lockup-source-han.svg'
+import brandLockupDark from './assets/xinyu-lockup-source-han-dark.svg'
 import xiaoweiLockup from './assets/xinyu-lockup-xiaowei-regular.svg'
 import xiaoweiLockupDark from './assets/xinyu-lockup-xiaowei-regular-dark.svg'
-import xiaoweiBoldLockup from './assets/xinyu-lockup-xiaowei-bold.svg'
-import xiaoweiBoldLockupDark from './assets/xinyu-lockup-xiaowei-bold-dark.svg'
+import xiaoweiBoldLockup from '../assets/brand/xinyu-lockup.svg'
+import xiaoweiBoldLockupDark from '../assets/brand/xinyu-lockup-dark.svg'
 
 const FONTSOURCE_CDN = 'https://cdn.jsdelivr.net/npm'
 
