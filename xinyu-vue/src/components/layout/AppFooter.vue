@@ -1,15 +1,12 @@
 <script setup>
-// 页脚：一行 slogan 加两片叶子涂鸦。
-import Doodle from '../ui/Doodle.vue'
+// 页脚：一行 slogan 加隐私政策链接。
 </script>
 
 <template>
   <footer class="app-footer">
     <div class="container app-footer__inner">
-      <Doodle name="leaf" :size="20" color="var(--ink-3)" />
       <span>心屿 · 记心情，聊日常</span>
       <RouterLink to="/privacy">隐私政策</RouterLink>
-      <Doodle name="leaf" :size="20" color="var(--ink-3)" style="transform: scaleX(-1)" />
     </div>
   </footer>
 </template>

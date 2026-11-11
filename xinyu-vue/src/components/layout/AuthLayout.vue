@@ -1,10 +1,10 @@
 <script setup>
 // 登录／注册页共用的居中单栏布局。
-// 从上到下：吉祥物 → 标语（页面主标题）→ 副标题 → 表单卡 → 隐私说明。
+// 从上到下：品牌字标 → 标语（页面主标题）→ 副标题 → 表单卡 → 隐私说明。
 // 宽屏和窄屏用同一结构，只收紧尺寸，不再切换两栏／堆叠两套布局。
 import Doodle from '../ui/Doodle.vue'
-import logoUrl from '../../assets/xiaoya/xinyu-mascot.svg'
-import logoDarkUrl from '../../assets/xiaoya/xinyu-mascot-dark.svg'
+import logoUrl from '../../assets/brand/xinyu-lockup.svg'
+import logoDarkUrl from '../../assets/brand/xinyu-lockup-dark.svg'
 import { useTheme } from '../../composables/useTheme'
 
 const { theme } = useTheme()
@@ -104,10 +104,11 @@ defineProps({
   text-align: center;
 }
 
+/* 正式字标（小芽 + 「心屿」横版），按高度缩放；深夜随主题切换深色版 */
 .auth__logo {
   display: block;
-  width: 72px;
-  height: 72px;
+  width: auto;
+  height: 44px;
   margin: 0 auto 16px;
   object-fit: contain;
 }
@@ -178,8 +179,7 @@ defineProps({
   }
   .auth__column { gap: 18px; }
   .auth__logo {
-    width: 52px;
-    height: 52px;
+    height: 36px;
     margin-bottom: 10px;
   }
   /* 22px 下最长的注册标语（13 字）在 375px 宽度内可单行显示 */

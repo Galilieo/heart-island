@@ -47,7 +47,7 @@ function goRegister() {
   <AuthLayout
     slogan="今天过得怎么样？"
     subtitle="记记今天的心情，也看看大家的近况。"
-    title="登录心屿"
+    title="登录"
   >
     <BaseInput
       v-model="username"

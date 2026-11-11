@@ -52,7 +52,7 @@ function goLogin() {
   <AuthLayout
     slogan="开心的、烦心的，都可以写。"
     subtitle="注册后就能记心情、发帖子，和大家聊聊。"
-    title="注册心屿"
+    title="注册"
   >
     <BaseInput
       v-model="username"
@@ -80,7 +80,7 @@ function goLogin() {
     <BaseInput
       v-model="nickname"
       label="昵称"
-      placeholder="其他人会看到的名字"
+      placeholder="显示在顶栏和个人页"
       size="lg"
       @enter="handleRegister"
     />
