@@ -115,7 +115,10 @@ async function handleFavorite() {
 
 async function handleSavePost(payload) {
   const res = await doUpdatePost(payload)
-  if (res.ok) editOpen.value = false
+  if (res.ok) {
+    editOpen.value = false
+    if (res.refreshFailed) toast.warn('帖子已保存，页面刷新失败，请刷新查看')
+  }
 }
 
 async function handleDeletePost() {

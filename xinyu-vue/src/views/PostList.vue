@@ -73,6 +73,7 @@ async function handlePublish(payload) {
   if (res.ok) {
     publishRef.value?.resetAfterSuccess()
     showPublish.value = false
+    if (res.refreshFailed) toast.warn('帖子已保存，列表刷新失败，请刷新查看')
   }
 }
 

@@ -6,6 +6,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { communityApi, topicApi } from '../api'
+import { refreshAfterSave } from '../utils/saved-result.js'
 
 export const useCommunityStore = defineStore('community', () => {
   const topics = ref([])
@@ -68,19 +69,20 @@ export const useCommunityStore = defineStore('community', () => {
 
   async function publishPost(payload) {
     const res = await communityApi.createPost(payload)
-    if (res.ok) await fetchPosts()
-    return res
+    if (!res.ok) return res
+    const refreshFailed = await refreshAfterSave(fetchPosts)
+    return { ...res, refreshFailed }
   }
 
   async function updatePost(payload) {
     const res = await communityApi.updatePost(payload)
-    if (res.ok) {
-      await fetchPosts()
-      if (currentPost.value && currentPost.value.id === payload.id) {
-        await fetchPostDetail(payload.id)
-      }
+    if (!res.ok) return res
+    const refreshers = [fetchPosts]
+    if (currentPost.value && currentPost.value.id === payload.id) {
+      refreshers.push(() => fetchPostDetail(payload.id))
     }
-    return res
+    const refreshFailed = await refreshAfterSave(...refreshers)
+    return { ...res, refreshFailed }
   }
 
   async function removePost(id) {

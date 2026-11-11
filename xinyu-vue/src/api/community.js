@@ -3,6 +3,21 @@
 // （不是请求体），所以这里都走 params 形式。
 import { request, unwrap } from './_helpers'
 
+// 已用有限真实调用校准：同步社区生成使用独立20秒等待，不改变全局5秒。
+const SAVE_TIMEOUT_MS = 20_000
+
+async function savePost(url, payload) {
+  try {
+    return await unwrap(request.post(url, payload, { timeout: SAVE_TIMEOUT_MS }))
+  } catch (error) {
+    // 未收到响应无法判断是否已落库；保留输入，由用户刷新核对，不自动重发。
+    if (!error.response) {
+      error.userMessage = '发布或修改结果尚未确认，帖子可能已保存，请先刷新核对，避免重复提交。'
+    }
+    throw error
+  }
+}
+
 export const communityApi = {
   /* ───── posts ───── */
 
@@ -20,11 +35,11 @@ export const communityApi = {
   },
 
   createPost(payload) {
-    return unwrap(request.post('/community/post/add', payload))
+    return savePost('/community/post/add', payload)
   },
 
   updatePost(payload) {
-    return unwrap(request.post('/community/post/update', payload))
+    return savePost('/community/post/update', payload)
   },
 
   removePost(id) {
