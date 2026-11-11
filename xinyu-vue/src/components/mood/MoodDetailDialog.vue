@@ -4,14 +4,14 @@
 // editing 状态留在组件内部，关闭/切换记录时自动重置。
 import { ref, watch, computed } from 'vue'
 import BaseDialog from '../ui/BaseDialog.vue'
-import BaseTag from '../ui/BaseTag.vue'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseSwitch from '../ui/BaseSwitch.vue'
-import { moodTone, moodExpression, formatTime } from '../../utils/mood'
-import Xiaoya from '../ui/Xiaoya.vue'
+import XiaoyaNote from '../ui/XiaoyaNote.vue'
+import { isSupportReply, formatTime } from '../../utils/mood'
 import MoodPicker from './MoodPicker.vue'
 import MoodAiStatus from './MoodAiStatus.vue'
+import MoodTag from './MoodTag.vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -93,10 +93,11 @@ function close() {
   >
     <div v-if="mood" class="md">
       <div class="md__meta">
-        <BaseTag :tone="moodTone(mood.moodType)" variant="soft" size="lg">
-          <Xiaoya :expression="moodExpression(mood.moodType)" :size="36" />
-          {{ mood.moodType }}
-        </BaseTag>
+        <MoodTag
+          :mood-type="mood.moodType"
+          :hide-mascot="isSupportReply(mood)"
+          size="lg"
+        />
         <span>创建于 {{ formatTime(mood.createTime) }}</span>
         <span v-if="mood.updateTime && mood.updateTime !== mood.createTime">
           · 更新于 {{ formatTime(mood.updateTime) }}
@@ -108,9 +109,13 @@ function close() {
         <p>{{ mood.content }}</p>
       </section>
 
-      <section class="md__block md__block--ai">
+      <section class="md__block">
         <h4>AI 回复</h4>
-        <p v-if="mood.aiReply">{{ mood.aiReply }}</p>
+        <XiaoyaNote
+          v-if="mood.aiReply"
+          :text="mood.aiReply"
+          :support="isSupportReply(mood)"
+        />
         <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || updating"
           @retry="id => emit('retry', id)" @refresh="emit('refresh')" />
       </section>
@@ -179,23 +184,6 @@ function close() {
   line-height: 1.85;
   font-size: var(--fs-md);
   white-space: pre-wrap;
-}
-
-.md__block--ai {
-  position: relative;
-  background: linear-gradient(135deg, var(--accent-soft), var(--bg-soft));
-  border-color: var(--accent-line);
-}
-
-.md__block--ai::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 14%;
-  bottom: 14%;
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
 }
 
 .md__edit {

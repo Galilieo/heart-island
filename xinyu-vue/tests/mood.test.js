@@ -28,3 +28,26 @@ test('焦虑与生气使用独立的紧绷色，不借用状态提示色 warn', 
 test('历史未知类型保留文本展示时可安全使用中性色', () => {
   assert.equal(moodTone('历史未知值'), 'neutral')
 })
+
+test('十三种心情都有小芽的一句回应，未选心情时有默认提示', () => {
+  for (const item of MOOD_OPTIONS) {
+    const line = mood.MOOD_RESPONSE_LINES[item.value]
+    assert.equal(typeof line, 'string', `${item.value} 缺少回应文案`)
+    assert.ok(line.trim().length > 0, `${item.value} 的回应文案不能为空`)
+  }
+  assert.deepEqual(
+    Object.keys(mood.MOOD_RESPONSE_LINES).sort(),
+    expected.slice().sort(),
+    '回应文案不应多出或遗漏心情'
+  )
+  assert.equal(mood.MOOD_DEFAULT_HINT, '选一个最接近的，写几句就好。')
+})
+
+test('仅危机流程回复 resultKind 为 SUPPORT 时隐藏小芽', () => {
+  assert.equal(mood.isSupportReply({ resultKind: 'SUPPORT' }), true)
+  assert.equal(mood.isSupportReply({ resultKind: 'MODEL' }), false)
+  assert.equal(mood.isSupportReply({ resultKind: null }), false)
+  assert.equal(mood.isSupportReply({}), false)
+  assert.equal(mood.isSupportReply(null), false)
+  assert.equal(mood.isSupportReply(undefined), false)
+})

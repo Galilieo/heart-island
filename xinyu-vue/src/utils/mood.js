@@ -47,3 +47,30 @@ export function formatTime(time) {
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
+
+// 小芽对每种心情的一句回应，用于书写卡在选中心情后的副标题；
+// 文案与品牌素材包的设计稿一致（取自 design-lab/mock.js 的 MASCOT_LINES，真实页面不依赖设计对比页）。
+export const MOOD_RESPONSE_LINES = {
+  开心: '真好！是什么让你开心的？说给我听听。',
+  满足: '这种刚刚好的感觉很珍贵，记下来吧。',
+  期待: '在期待什么呢？我也想知道。',
+  感动: '是被什么打动了吗？慢慢写。',
+  平静: '平平静静的也很好。今天有什么想留下的？',
+  焦虑: '心里有点乱的时候，写下来会清楚一些。',
+  难过: '嗯，难过的时候我在这儿。想说说吗？',
+  生气: '生气也没关系，先把发生了什么写下来。',
+  委屈: '委屈的感觉不好受。是发生了什么？',
+  孤独: '我陪着你。想写点什么都可以。',
+  迷茫: '不知道往哪走的时候，先写下现在在哪儿。',
+  疲惫: '辛苦了。写几句就好，不用写很多。',
+  其他: '说不清是什么心情也没关系，写写看。'
+}
+
+// 尚未选中心情时的书写卡副标题，语气与 MOOD_RESPONSE_LINES 一致。
+export const MOOD_DEFAULT_HINT = '选一个最接近的，写几句就好。'
+
+// 危机流程回复：品牌素材包规定，高风险走危机流程时不显示卡通表情，
+// 因此 resultKind 为 SUPPORT 的记录要隐藏小芽并改用心屿署名。
+export function isSupportReply(record) {
+  return record?.resultKind === 'SUPPORT'
+}
