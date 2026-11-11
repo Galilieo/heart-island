@@ -1,19 +1,42 @@
 package com.xinyu.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.xinyu.dto.AiReplyResult;
+import org.apache.hc.core5.http.ConnectionRequestTimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/** 社区同步生成与旧调用兼容入口；失败不发布兜底，诊断详情只供管理员日志使用。 */
 @Service
 public class AiReplyService {
+    private static final Logger logger = LoggerFactory.getLogger(AiReplyService.class);
+    // 保留原社区／旧心情请求参数；2000 UTF-16上限沿用1a回复正文约定，prompt仍要求社区120字。
+    private static final int POST_MAX_TOKENS = 200;
+    private static final int LEGACY_MOOD_MAX_TOKENS = 300;
+    private static final int MAX_REPLY_UTF16 = 2000;
+    private static final int NEXT_LINE = 0x85;
+    // ai_reply.error_message为TEXT；限制详情规模，避免异常长响应占满调用记录。
+    private static final int MAX_ERROR_DETAIL_UTF16 = 8_192;
+    private static final String PROVIDER_TIMEOUT = "provider_timeout";
+    private static final String PROVIDER_ERROR = "provider_error";
+    private static final String INVALID_MODEL_RESPONSE = "invalid_model_response";
 
     @Value("${deepseek.api-key}")
     private String apiKey;
@@ -27,67 +50,108 @@ public class AiReplyService {
     @Autowired
     private RestTemplate restTemplate;
 
+    /** 旧调用兼容入口；失败返回null，不能将公开兜底当成生成成功。 */
     public String generateReply(String moodType, String content) {
         return generateReplyResult(moodType, content).getReplyContent();
     }
 
     public AiReplyResult generateReplyResult(String moodType, String content) {
-        String prompt = buildPromptText(moodType, content);
-
-        try {
-            String replyContent = doGenerateReply(moodType, content);
-            return AiReplyResult.success(replyContent, prompt, model);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return AiReplyResult.failure(getDefaultReply(), prompt, model, e.getMessage());
-        }
+        return generate(buildMessages(moodType, content), LEGACY_MOOD_MAX_TOKENS);
     }
 
-    /**
-     * 为社区帖子生成 AI 回复。和 mood 版的区别：
-     * - prompt 是公开社区语境，不是私人陪伴
-     * - 长度限制 120 字
-     * - 注入话题名以让 AI 知道讨论背景
-     */
+    /** 社区使用原公开语境prompt；同步请求不自动重试，失败不影响已保存的帖子。 */
     public AiReplyResult generateReplyForPost(String topicName, String moodType, String content) {
-        String prompt = buildPostPromptText(topicName, moodType, content);
-
-        try {
-            String replyContent = doGenerateReplyForPost(topicName, moodType, content);
-            return AiReplyResult.success(replyContent, prompt, model);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return AiReplyResult.failure(getDefaultReply(), prompt, model, e.getMessage());
-        }
+        return generate(buildPostMessages(topicName, moodType, content), POST_MAX_TOKENS);
     }
 
-    private String doGenerateReplyForPost(String topicName, String moodType, String content) {
-        String url = baseUrl + "/chat/completions";
-
+    private AiReplyResult generate(List<Map<String, String>> messages, int maxTokens) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(apiKey);
 
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("messages", buildPostMessages(topicName, moodType, content));
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        body.put("thinking", Map.of("type", "disabled"));
+        body.put("max_tokens", maxTokens);
 
-        Map<String, Object> thinking = new HashMap<>();
-        thinking.put("type", "disabled");
-        requestBody.put("thinking", thinking);
+        try {
+            ResponseEntity<JsonNode> response = restTemplate.postForEntity(
+                    baseUrl + "/chat/completions", new HttpEntity<>(body, headers), JsonNode.class);
+            if (response.getStatusCode() != HttpStatus.OK) {
+                return failure(PROVIDER_ERROR);
+            }
 
-        // 社区回复要求 120 字内，给的额度比 mood 小
-        requestBody.put("max_tokens", 200);
+            String reply = parseReply(response.getBody());
+            if (reply == null) {
+                return failure(INVALID_MODEL_RESPONSE);
+            }
 
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+            return AiReplyResult.success(reply, null, model);
+        } catch (RestClientException problem) {
+            return failure(classifyFailure(problem), problem);
+        } catch (RuntimeException problem) {
+            return failure(PROVIDER_ERROR, problem);
+        }
+    }
 
-        ResponseEntity<Map> response = restTemplate.postForEntity(url, requestEntity, Map.class);
-
-        if (response.getBody() == null) {
-            return getDefaultReply();
+    private static String parseReply(JsonNode root) {
+        if (root == null || !root.isObject()) {
+            return null;
         }
 
-        return parseReply(response.getBody());
+        JsonNode choices = root.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) {
+            return null;
+        }
+
+        JsonNode first = choices.get(0);
+        if (!"stop".equals(first.path("finish_reason").textValue())) {
+            return null;
+        }
+
+        JsonNode content = first.path("message").path("content");
+        if (!content.isTextual()) {
+            return null;
+        }
+
+        String text = content.textValue().strip();
+        boolean blank = text.codePoints().allMatch(unit ->
+                Character.isWhitespace(unit) || Character.isSpaceChar(unit) || unit == NEXT_LINE);
+        if (blank || text.length() > MAX_REPLY_UTF16) {
+            return null;
+        }
+        return text;
+    }
+
+    private AiReplyResult failure(String code) {
+        logger.warn("同步AI调用失败 code={}", code);
+        return AiReplyResult.failure(null, null, model, code);
+    }
+
+    private AiReplyResult failure(String code, RuntimeException problem) {
+        AiReplyResult result = failure(code);
+        String detail = problem.getClass().getSimpleName() + ": " + problem.getMessage();
+        if (apiKey != null && !apiKey.isBlank()) {
+            detail = detail.replace(apiKey, "[REDACTED]");
+        }
+        if (detail.length() > MAX_ERROR_DETAIL_UTF16) {
+            detail = detail.substring(0, MAX_ERROR_DETAIL_UTF16);
+        }
+        result.setErrorMessage(code + ": " + detail);
+        return result;
+    }
+
+    private static String classifyFailure(Throwable problem) {
+        for (Throwable current = problem; current != null; current = current.getCause()) {
+            if (current instanceof SocketTimeoutException || current instanceof ConnectionRequestTimeoutException) {
+                return PROVIDER_TIMEOUT;
+            }
+            if (current instanceof HttpMessageNotReadableException) {
+                return INVALID_MODEL_RESPONSE;
+            }
+        }
+        return PROVIDER_ERROR;
     }
 
     private List<Map<String, String>> buildPostMessages(String topicName, String moodType, String content) {
@@ -119,46 +183,6 @@ public class AiReplyService {
                 + "不要逐字引用原话，不要使用列表、表情符号或英文。";
     }
 
-    /**
-     * 用于记录到 ai_reply 表的 prompt 字段。汇总 system + user 消息。
-     */
-    private String buildPostPromptText(String topicName, String moodType, String content) {
-        return "[system]\n" + buildPostSystemPrompt(topicName, moodType)
-                + "\n\n[user]\n帖子内容：\n" + content;
-    }
-
-    private String doGenerateReply(String moodType, String content) {
-        String url = baseUrl + "/chat/completions";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(apiKey);
-
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("messages", buildMessages(moodType, content));
-
-        /*
-         * 建议先关闭 thinking，减少响应时间和成本。
-         * DeepSeek V4 Flash 支持 thinking 参数；当前情绪陪伴回复不需要复杂推理。
-         */
-        Map<String, Object> thinking = new HashMap<>();
-        thinking.put("type", "disabled");
-        requestBody.put("thinking", thinking);
-
-        requestBody.put("max_tokens", 300);
-
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-
-        ResponseEntity<Map> response = restTemplate.postForEntity(url, requestEntity, Map.class);
-
-        if (response.getBody() == null) {
-            return getDefaultReply();
-        }
-
-        return parseReply(response.getBody());
-    }
-
     private List<Map<String, String>> buildMessages(String moodType, String content) {
         List<Map<String, String>> messages = new ArrayList<>();
 
@@ -186,55 +210,4 @@ public class AiReplyService {
         return messages;
     }
 
-    private String buildPromptText(String moodType, String content) {
-        StringBuilder promptBuilder = new StringBuilder();
-
-        for (Map<String, String> message : buildMessages(moodType, content)) {
-            promptBuilder
-                    .append(message.get("role"))
-                    .append(": ")
-                    .append(message.get("content"))
-                    .append("\n");
-        }
-
-        return promptBuilder.toString().trim();
-    }
-
-    private String parseReply(Map responseBody) {
-        Object choicesObj = responseBody.get("choices");
-
-        if (!(choicesObj instanceof List<?> choices) || choices.isEmpty()) {
-            return getDefaultReply();
-        }
-
-        Object firstChoiceObj = choices.get(0);
-
-        if (!(firstChoiceObj instanceof Map<?, ?> firstChoice)) {
-            return getDefaultReply();
-        }
-
-        Object messageObj = firstChoice.get("message");
-
-        if (!(messageObj instanceof Map<?, ?> message)) {
-            return getDefaultReply();
-        }
-
-        Object contentObj = message.get("content");
-
-        if (contentObj == null) {
-            return getDefaultReply();
-        }
-
-        String reply = contentObj.toString().trim();
-
-        if (reply.isEmpty()) {
-            return getDefaultReply();
-        }
-
-        return reply;
-    }
-
-    private String getDefaultReply() {
-        return "谢谢你愿意记录下此刻的心情。无论现在感受如何，都可以先给自己一点时间慢慢整理，心屿会陪你一起慢慢来。";
-    }
 }

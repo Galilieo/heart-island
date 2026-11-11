@@ -1,11 +1,13 @@
 package com.xinyu.dto;
 
+/** 同步生成结果；errorCode用于分类，errorMessage可携带仅供后台查看的错误详情。 */
 public class AiReplyResult {
 
     private String replyContent;
     private String prompt;
     private String modelName;
     private Boolean success;
+    private String errorCode;
     private String errorMessage;
 
     public static AiReplyResult success(String replyContent, String prompt, String modelName) {
@@ -17,13 +19,14 @@ public class AiReplyResult {
         return result;
     }
 
-    public static AiReplyResult failure(String replyContent, String prompt, String modelName, String errorMessage) {
+    public static AiReplyResult failure(String replyContent, String prompt, String modelName, String errorCode) {
         AiReplyResult result = new AiReplyResult();
         result.setReplyContent(replyContent);
         result.setPrompt(prompt);
         result.setModelName(modelName);
         result.setSuccess(false);
-        result.setErrorMessage(errorMessage);
+        result.setErrorCode(errorCode);
+        result.setErrorMessage(errorCode);
         return result;
     }
 
@@ -61,6 +64,14 @@ public class AiReplyResult {
 
     public String getErrorMessage() {
         return errorMessage;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
     }
 
     public void setErrorMessage(String errorMessage) {
