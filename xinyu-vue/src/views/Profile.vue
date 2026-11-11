@@ -1,6 +1,6 @@
 <script setup>
 // 个人资料页：基本信息（昵称 / 性别 / 生日 / 签名 / 城市） + 修改密码。
-// 头部为一体式名片：身份区 + 数据条；下方用局部 tabs 分层「基本资料 / 账号安全」。
+// 头部为头像 + 昵称概况 + 四项数据条；下方用局部 tabs 分层「基本资料 / 账号安全」。
 // 用户名不可改，仅展示。所有逻辑走 userStore + userApi，tabs 只是展示层状态。
 import { ref, computed, onMounted } from 'vue'
 import AppShell from '../components/layout/AppShell.vue'
@@ -10,7 +10,6 @@ import BaseDateInput from '../components/ui/BaseDateInput.vue'
 import BaseTextarea from '../components/ui/BaseTextarea.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
-import Doodle from '../components/ui/Doodle.vue'
 import avatarUrl from '../assets/xiaoya/xinyu-avatar.svg'
 import { useUserStore } from '../stores/user'
 import { userApi } from '../api/user'
@@ -137,63 +136,38 @@ async function handleSavePassword() {
 </script>
 
 <template>
-  <AppShell width="narrow">
+  <AppShell>
     <div class="container profile">
-      <!-- 一体式名片：身份区 + 数据条 -->
-      <header class="profile__masthead">
-        <div class="profile__hero">
-          <div class="profile__id">
-            <img :src="avatarUrl" alt="" aria-hidden="true" width="64" height="64" class="profile__avatar" />
-            <div class="profile__id-text">
-              <p class="profile__kicker">个人资料</p>
-              <h1 class="profile__name">{{ userStore.loginUser?.nickname || '心屿用户' }}</h1>
-              <p class="profile__username">@{{ username }}</p>
-              <p v-if="heroMeta" class="profile__meta">{{ heroMeta }}</p>
-              <p v-if="heroBio" class="profile__bio">"{{ heroBio }}"</p>
-            </div>
-          </div>
-          <Doodle name="heart" :size="44" color="rgba(217,140,122,0.55)" class="profile__doodle" />
-        </div>
-
-        <div class="profile__stats" :class="{ 'is-loading': statsLoading }">
-          <div class="profile__stat">
-            <span class="profile__stat-icon">
-              <Doodle name="heart" :size="22" color="currentColor" :stroke-width="2.4" />
-            </span>
-            <div class="profile__stat-body">
-              <strong>{{ stats.moodCount }}</strong>
-              <span>心情记录</span>
-            </div>
-          </div>
-          <div class="profile__stat">
-            <span class="profile__stat-icon">
-              <Doodle name="wave" :size="22" color="currentColor" :stroke-width="2.4" />
-            </span>
-            <div class="profile__stat-body">
-              <strong>{{ stats.postCount }}</strong>
-              <span>我的帖子</span>
-            </div>
-          </div>
-          <div class="profile__stat">
-            <span class="profile__stat-icon">
-              <Doodle name="star" :size="22" color="currentColor" :stroke-width="2.4" />
-            </span>
-            <div class="profile__stat-body">
-              <strong>{{ stats.favoriteCount }}</strong>
-              <span>收藏</span>
-            </div>
-          </div>
-          <div class="profile__stat">
-            <span class="profile__stat-icon">
-              <Doodle name="sun" :size="22" color="currentColor" :stroke-width="2.4" />
-            </span>
-            <div class="profile__stat-body">
-              <strong>{{ stats.joinDays }}<small>天</small></strong>
-              <span>加入心屿</span>
-            </div>
-          </div>
+      <!-- 页头：头像 + 昵称 / 用户名 / 概况 / 签名，同其他页面的手账页头 -->
+      <header class="profile__head">
+        <img :src="avatarUrl" alt="" aria-hidden="true" width="64" height="64" class="profile__avatar" />
+        <div class="profile__head-text">
+          <h1 class="profile__name">{{ userStore.loginUser?.nickname || '心屿用户' }}</h1>
+          <p class="profile__username">@{{ username }}</p>
+          <p v-if="heroMeta" class="profile__meta">{{ heroMeta }}</p>
+          <p v-if="heroBio" class="profile__bio">「{{ heroBio }}」</p>
         </div>
       </header>
+
+      <!-- 数据条：一行四项，项间虚线竖线；手机 2×2 -->
+      <div class="profile__stats" :class="{ 'is-loading': statsLoading }">
+        <div class="profile__stat">
+          <strong>{{ stats.moodCount }}</strong>
+          <span>心情记录</span>
+        </div>
+        <div class="profile__stat">
+          <strong>{{ stats.postCount }}</strong>
+          <span>我的帖子</span>
+        </div>
+        <div class="profile__stat">
+          <strong>{{ stats.favoriteCount }}</strong>
+          <span>收藏</span>
+        </div>
+        <div class="profile__stat">
+          <strong>{{ stats.joinDays }}<small>天</small></strong>
+          <span>加入心屿</span>
+        </div>
+      </div>
 
       <!-- 设置区：局部 tabs 分层 -->
       <BaseCard padding="lg" class="profile__panel">
@@ -217,7 +191,7 @@ async function handleSavePassword() {
           aria-label="基本资料"
           class="profile__pane"
         >
-          <p class="profile__card-desc">昵称会展示在社区里，用户名不可修改。其它字段都可选填。</p>
+          <p class="profile__card-desc">昵称只在顶栏和个人页显示，社区里统一显示为「匿名岛民」。用户名不可修改，其它都可选填。</p>
 
           <div class="profile__form profile__form--grid">
             <BaseInput
@@ -307,42 +281,25 @@ async function handleSavePassword() {
 </template>
 
 <style scoped>
+/* 与其他页面同宽的单列（680px），页面容器自己控制宽度 */
 .profile {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-/* ── 一体式名片：身份区 + 数据条 ── */
-.profile__masthead {
-  width: 100%;
-  align-self: center;
-  border-radius: var(--radius-4);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  background: var(--bg-card);
-  box-shadow: 0 14px 34px rgba(87, 68, 43, 0.06);
-}
-
-.profile__hero {
-  position: relative;
-  padding: 30px 36px;
-  background: linear-gradient(135deg, var(--hero-from), var(--hero-to));
-  overflow: hidden;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-}
-
-.profile__id {
+/* ── 页头：头像 + 身份信息 ── */
+.profile__head {
   display: flex;
   align-items: center;
   gap: 18px;
   min-width: 0;
 }
 
-.profile__id-text {
+.profile__head-text {
   min-width: 0;
 }
 
@@ -355,17 +312,12 @@ async function handleSavePassword() {
   flex-shrink: 0;
 }
 
-.profile__kicker {
-  margin: 0;
-  color: var(--brand-deep);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 2px;
-}
-
 .profile__name {
-  margin: 4px 0 0;
-  font-size: var(--fs-2xl);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 .profile__username {
@@ -375,17 +327,15 @@ async function handleSavePassword() {
 }
 
 .profile__meta {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--ink-2);
   font-size: var(--fs-sm);
-  letter-spacing: 1px;
 }
 
 .profile__bio {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--ink-2);
   font-size: var(--fs-sm);
-  font-style: italic;
   line-height: 1.6;
   max-width: 460px;
   overflow: hidden;
@@ -395,48 +345,12 @@ async function handleSavePassword() {
   -webkit-box-orient: vertical;
 }
 
-.profile__doodle {
-  flex-shrink: 0;
-}
-
-/* 数据小条：名片下半段，与身份区同源一体 */
+/* ── 数据条：一行四项，项间虚线竖线；加载中整体变淡 ── */
 .profile__stats {
-  position: relative;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  padding: 10px 16px;
-  border-top: 1px solid var(--line);
+  padding: 4px 0;
   transition: opacity var(--t-fast) var(--ease-soft);
-}
-
-.profile__stats::before {
-  content: '';
-  position: absolute;
-  inset: 18px 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(
-      90deg,
-      transparent calc(25% - 0.5px),
-      var(--line) calc(25% - 0.5px),
-      var(--line) calc(25% + 0.5px),
-      transparent calc(25% + 0.5px)
-    ),
-    linear-gradient(
-      90deg,
-      transparent calc(50% - 0.5px),
-      var(--line) calc(50% - 0.5px),
-      var(--line) calc(50% + 0.5px),
-      transparent calc(50% + 0.5px)
-    ),
-    linear-gradient(
-      90deg,
-      transparent calc(75% - 0.5px),
-      var(--line) calc(75% - 0.5px),
-      var(--line) calc(75% + 0.5px),
-      transparent calc(75% + 0.5px)
-    );
 }
 
 .profile__stats.is-loading {
@@ -444,102 +358,78 @@ async function handleSavePassword() {
 }
 
 .profile__stat {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 72px;
-  padding: 8px 10px;
-}
-
-.profile__stat-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(135deg, var(--brand-soft), var(--accent-soft));
-  color: var(--brand-deep);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.profile__stat-body {
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  align-items: flex-start;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 8px;
+}
+
+.profile__stat + .profile__stat {
+  border-left: 1px dashed var(--line-strong);
 }
 
 .profile__stat strong {
-  font-family: var(--font-display);
-  font-size: 26px;
-  color: var(--brand-deep);
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
   display: inline-flex;
   align-items: baseline;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 400;
+  color: var(--ink-1);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .profile__stat strong small {
-  margin-left: 3px;
+  margin-left: 2px;
   color: var(--ink-3);
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: 400;
 }
 
-.profile__stat-body span {
-  color: var(--ink-2);
+.profile__stat span {
+  color: var(--ink-3);
   font-size: var(--fs-xs);
-  font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
 }
 
 /* ── 设置面板 + tabs ── */
-/* 显式宽度：抵消 narrow shell 插槽泄漏进来的 margin-inline:auto，
-   否则 flex 列布局下面板会收缩成 fit-content（桌面只剩 ~536px） */
 .profile__panel {
   width: 100%;
   min-width: 0;
 }
 
-.profile__panel :deep(.card__body) {
-  padding: 26px 36px 34px;
-}
-
+/* tabs 与首页 / 社区页的范围按钮同一套样式 */
 .profile__tabs {
   display: inline-flex;
   gap: 4px;
-  padding: 4px;
-  background: var(--bg-soft);
-  border-radius: var(--radius-pill);
 }
 
 .profile__tab {
-  min-height: 40px;
-  padding: 0 22px;
+  padding: 6px 14px;
   border: none;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--ink-2);
-  font-size: var(--fs-md);
-  font-weight: 700;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   cursor: pointer;
-  border-radius: var(--radius-pill);
   transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft),
-    box-shadow var(--t-fast) var(--ease-soft);
+    color var(--t-fast) var(--ease-soft);
+}
+
+.profile__tab:not(.is-active):hover {
+  background: var(--bg-soft);
+  color: var(--ink-1);
 }
 
 .profile__tab.is-active {
-  background: var(--bg-card);
+  background: var(--brand-soft);
   color: var(--brand-deep);
-  box-shadow: var(--shadow-sm);
+  font-weight: 700;
 }
 
 .profile__tab:focus-visible {
@@ -606,57 +496,48 @@ async function handleSavePassword() {
   justify-content: flex-start;
 }
 
+/* 手机：卡片收紧、tabs 补足触控高度、表单转单列 */
 @media (max-width: 768px) {
-  .profile__hero {
-    padding: 24px;
-  }
   .profile__panel :deep(.card__body) {
-    padding: 22px 20px 28px;
+    padding: 18px 16px;
   }
-  .profile__tabs {
-    display: flex;
-  }
+
   .profile__tab {
-    flex: 1;
     min-height: 44px;
-    padding: 0 12px;
+    padding: 0 16px;
   }
+
   .profile__form--grid {
     grid-template-columns: 1fr;
   }
+
   .profile__actions :deep(.btn) {
     width: 100%;
     min-height: 48px;
   }
 }
 
+/* ≤640px：数据条转 2×2，第一列去掉左线、第二行补上边线 */
 @media (max-width: 640px) {
+  .profile__name {
+    font-size: var(--fs-2xl);
+  }
+
   .profile__stats {
     grid-template-columns: repeat(2, 1fr);
-    padding: 10px 12px;
   }
-  .profile__stats::before {
-    inset: 16px 20px;
-    background-image:
-      linear-gradient(
-        90deg,
-        transparent calc(50% - 0.5px),
-        var(--line) calc(50% - 0.5px),
-        var(--line) calc(50% + 0.5px),
-        transparent calc(50% + 0.5px)
-      ),
-      linear-gradient(
-        180deg,
-        transparent calc(50% - 0.5px),
-        var(--line) calc(50% - 0.5px),
-        var(--line) calc(50% + 0.5px),
-        transparent calc(50% + 0.5px)
-      );
-  }
+
   .profile__stat {
-    min-height: 76px;
-    justify-content: flex-start;
-    padding: 10px 14px;
+    padding: 12px;
+  }
+
+  .profile__stat:nth-child(3) {
+    border-left: none;
+    border-top: 1px dashed var(--line-strong);
+  }
+
+  .profile__stat:nth-child(4) {
+    border-top: 1px dashed var(--line-strong);
   }
 }
 </style>
