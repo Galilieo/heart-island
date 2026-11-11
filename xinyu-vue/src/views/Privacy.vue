@@ -10,7 +10,7 @@ import BaseCard from '../components/ui/BaseCard.vue'
       <BaseCard padding="lg">
         <h1>心屿隐私政策</h1>
         <p class="privacy__date">更新日期：2026年11月11日</p>
-        <p>心屿由姜秋雨运营。如需咨询个人信息处理、申请访问、更正、删除或注销账号，
+        <p>心屿由个人开发者运营（以下简称“心屿运营者”）。如需咨询个人信息处理、申请访问、更正、删除或注销账号，
           请联系 <a href="mailto:jianggalilieo@gmail.com">jianggalilieo@gmail.com</a>。</p>
 
         <h2>我们处理哪些信息</h2>
