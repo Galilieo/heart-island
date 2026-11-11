@@ -1,7 +1,7 @@
 <script setup>
-// 登录/注册页共用的两栏布局。
-// 整页一张暖色画布：渐变 + 漂浮涂鸦铺满全屏，slogan 在左下，表单卡浮在右侧。
-// 窄屏自动堆叠成单列。
+// 登录／注册页共用的居中单栏布局。
+// 从上到下：吉祥物 → 标语（页面主标题）→ 副标题 → 表单卡 → 隐私说明。
+// 宽屏和窄屏用同一结构，只收紧尺寸，不再切换两栏／堆叠两套布局。
 import Doodle from '../ui/Doodle.vue'
 import logoUrl from '../../assets/xiaoya/xinyu-mascot.svg'
 import logoDarkUrl from '../../assets/xiaoya/xinyu-mascot-dark.svg'
@@ -10,40 +10,32 @@ import { useTheme } from '../../composables/useTheme'
 const { theme } = useTheme()
 
 defineProps({
-  kicker: String,
-  title: String,
+  // 页面主标题，用标题字体展示
+  slogan: { type: String, required: true },
   subtitle: String,
-  slogan: { type: String, default: '今天过得怎么样？' }
+  // 表单卡标题，说明当前是登录还是注册
+  title: { type: String, required: true }
 })
 </script>
 
 <template>
   <div class="auth">
+    <!-- 背景装饰只保留三处同色系涂鸦，避免和表单争夺注意力 -->
     <div class="auth__doodles" aria-hidden="true">
-      <Doodle name="cloud" :size="80" color="rgba(111,169,164,0.4)" class="d d-1" />
-      <Doodle name="sun"   :size="56" color="rgba(243,185,95,0.55)"  class="d d-2" />
-      <Doodle name="leaf"  :size="60" color="rgba(155,193,188,0.55)" class="d d-3" />
-      <Doodle name="wave"  :size="120" color="rgba(143,165,196,0.35)" class="d d-4" />
-      <Doodle name="star"  :size="44" color="rgba(217,140,122,0.5)" class="d d-5" />
-      <Doodle name="heart" :size="40" color="rgba(217,140,122,0.45)" class="d d-6" />
+      <Doodle name="cloud" :size="72" color="rgba(111,169,164,0.32)" class="d d-1" />
+      <Doodle name="leaf" :size="52" color="rgba(111,169,164,0.28)" class="d d-2" />
+      <Doodle name="wave" :size="110" color="rgba(111,169,164,0.24)" class="d d-3" />
     </div>
 
-    <aside class="auth__visual">
-      <blockquote class="auth__slogan">
-        “{{ slogan }}”
-      </blockquote>
-      <p class="auth__sign">— 心屿</p>
-    </aside>
-
-    <section class="auth__panel">
-      <div class="auth__card float-in">
-        <header class="auth__brand">
-          <img :src="theme === 'night' ? logoDarkUrl : logoUrl" alt="心屿" class="auth__logo" />
-        </header>
-
-        <p v-if="kicker" class="auth__kicker">{{ kicker }}</p>
-        <h1 class="auth__title">{{ title }}</h1>
+    <div class="auth__column float-in">
+      <header class="auth__intro">
+        <img :src="theme === 'night' ? logoDarkUrl : logoUrl" alt="心屿" class="auth__logo" />
+        <h1 class="auth__slogan">{{ slogan }}</h1>
         <p v-if="subtitle" class="auth__subtitle">{{ subtitle }}</p>
+      </header>
+
+      <section class="auth__card" :aria-label="title">
+        <h2 class="auth__title">{{ title }}</h2>
 
         <div class="auth__body">
           <slot />
@@ -52,24 +44,30 @@ defineProps({
         <div v-if="$slots.footer" class="auth__footer">
           <slot name="footer" />
         </div>
-      </div>
-    </section>
+      </section>
 
+      <div class="auth__legal">
+        <slot name="legal">
+          <RouterLink to="/privacy">隐私政策</RouterLink>
+        </slot>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* 统一画布：渐变铺满整页，左右没有分界线 */
+/* 整页暖色画布，内容列水平、垂直居中 */
 .auth {
   position: relative;
   min-height: inherit;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 22% 24%, rgba(111, 169, 164, 0.20), transparent 46%),
-    radial-gradient(circle at 82% 70%, rgba(217, 140, 122, 0.14), transparent 50%),
-    radial-gradient(circle at 60% 8%, rgba(243, 185, 95, 0.10), transparent 42%),
+    radial-gradient(circle at 18% 20%, rgba(111, 169, 164, 0.18), transparent 46%),
+    radial-gradient(circle at 84% 78%, rgba(217, 140, 122, 0.12), transparent 50%),
     linear-gradient(135deg, var(--bg-warm-from) 0%, var(--bg-warm-mid) 55%, var(--bg-warm-to) 100%);
 }
 
@@ -83,137 +81,119 @@ defineProps({
   position: absolute;
   animation: drift 10s ease-in-out infinite alternate;
 }
-/* 左侧一簇 + 右侧零星两点，让两边都有呼吸感 */
-.d-1 { top: 8%;  left: 6%; }
-.d-2 { top: 14%; left: 26%; animation-delay: 2.4s; }
-.d-3 { top: 52%; left: 4%;  animation-delay: 0.6s; }
-.d-4 { bottom: 12%; left: 14%; animation-delay: 1.8s; }
-.d-5 { top: 12%; right: 7%; animation-delay: 1.2s; }
-.d-6 { bottom: 24%; right: 10%; animation-delay: 0.3s; }
+.d-1 { top: 10%; left: 12%; }
+.d-2 { bottom: 16%; left: 18%; animation-delay: 1.2s; }
+.d-3 { top: 18%; right: 12%; animation-delay: 2.4s; }
 
 @keyframes drift {
   from { transform: translateY(0) rotate(-2deg); }
-  to   { transform: translateY(-12px) rotate(2deg); }
+  to   { transform: translateY(-10px) rotate(2deg); }
 }
 
-.auth__visual {
+.auth__column {
   position: relative;
   z-index: 1;
+  width: 100%;
+  max-width: 400px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 48px;
+  gap: 24px;
 }
 
-.auth__slogan {
-  margin: 0;
-  max-width: 340px;
-  color: var(--ink-1);
-  font-family: var(--font-display);
-  font-size: var(--fs-2xl);
-  line-height: 1.45;
-  font-weight: 700;
-}
-
-.auth__sign {
-  margin-top: 12px;
-  color: var(--ink-3);
-  font-size: var(--fs-sm);
-  letter-spacing: 1px;
-}
-
-.auth__panel {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 32px;
-}
-
-.auth__card {
-  width: 100%;
-  max-width: 380px;
-  padding: 36px 32px;
-  background: var(--bg-card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-3);
-  box-shadow: var(--shadow-lg);
-}
-
-.auth__brand {
-  width: 88px;
-  height: 88px;
-  margin: 0 auto 18px;
+.auth__intro {
+  text-align: center;
 }
 
 .auth__logo {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
   display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  object-fit: contain;
 }
 
-.auth__kicker {
-  margin: 0;
-  text-align: center;
-  color: var(--brand-deep);
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  letter-spacing: 2px;
-}
-
-.auth__title {
-  margin-top: 8px;
-  text-align: center;
+/* 霞鹜文楷只有常规字重，标语靠字号和字形区分层级 */
+.auth__slogan {
+  font-family: var(--font-display);
   font-size: var(--fs-3xl);
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 1px;
+  /* 标语换行时平衡两行长度，避免末尾一两个字单独成行 */
+  text-wrap: balance;
 }
 
 .auth__subtitle {
-  margin: 10px 0 0;
-  text-align: center;
+  margin-top: 10px;
   color: var(--ink-2);
   font-size: var(--fs-md);
   line-height: 1.7;
 }
 
+.auth__card {
+  padding: 28px 28px 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-md);
+}
+
+.auth__title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
 .auth__body {
-  margin-top: 28px;
+  margin-top: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .auth__footer {
-  margin-top: 18px;
+  margin-top: 14px;
   text-align: center;
 }
 
-/* 窄屏：单列堆叠，slogan 区压成一条横幅，表单卡收紧，
-   目标是 390×844 内注册页（3 输入框）完整落进首屏 */
+.auth__legal {
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+.auth__legal :deep(a) {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 窄屏：结构不变，收紧尺寸，目标是 390×844 内注册页完整落进首屏附近 */
 @media (max-width: 768px) {
-  .auth { grid-template-columns: 1fr; }
-  .auth__visual {
-    min-height: 148px;
-    padding: 20px 24px;
-  }
-  .auth__slogan { font-size: var(--fs-lg); max-width: 300px; }
-  .auth__sign { margin-top: 6px; }
-  /* 手机上涂鸦只留左上角两个，避免和表单抢注意力 */
-  .d-3, .d-4, .d-6 { display: none; }
-  .auth__panel {
-    padding: 20px 18px 64px;
+  .auth {
     align-items: flex-start;
+    padding: 28px 16px 40px;
   }
-  .auth__card { padding: 24px 22px; }
-  .auth__brand {
-    width: 44px;
-    height: 44px;
-    margin-bottom: 12px;
+  .auth__column { gap: 18px; }
+  .auth__logo {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 10px;
   }
-  .auth__title { margin-top: 6px; font-size: var(--fs-2xl); }
-  .auth__subtitle { margin-top: 6px; font-size: var(--fs-sm); }
-  .auth__body { margin-top: 20px; gap: 12px; }
-  .auth__footer { margin-top: 14px; }
+  /* 22px 下最长的注册标语（13 字）在 375px 宽度内可单行显示 */
+  .auth__slogan { font-size: var(--fs-xl); }
+  .auth__subtitle {
+    margin-top: 6px;
+    font-size: var(--fs-sm);
+  }
+  .auth__card { padding: 22px 20px 18px; }
+  .auth__body {
+    margin-top: 16px;
+    gap: 12px;
+  }
+  /* 窄屏空间不足，涂鸦会压到标语和卡片，直接隐藏 */
+  .auth__doodles { display: none; }
 }
 </style>

@@ -92,14 +92,15 @@ defineProps({
 .btn--primary {
   background: linear-gradient(135deg, var(--sea) 0%, var(--brand) 100%);
   color: #fff;
-  box-shadow: 0 10px 22px rgba(61, 111, 110, 0.30);
+  /* 阴影只用于托起按钮，不做发光效果，避免主按钮比页面其他元素更抢眼 */
+  box-shadow: 0 4px 12px rgba(61, 111, 110, 0.18);
 }
 .btn--primary:not(:disabled):hover {
   background: linear-gradient(135deg, var(--sea-deep), var(--sea));
-  box-shadow: 0 12px 28px rgba(42, 86, 85, 0.34);
+  box-shadow: 0 6px 16px rgba(42, 86, 85, 0.22);
 }
 .btn--primary:focus-visible {
-  box-shadow: 0 10px 22px rgba(61, 111, 110, 0.30), var(--shadow-focus);
+  box-shadow: 0 4px 12px rgba(61, 111, 110, 0.18), var(--shadow-focus);
 }
 
 /* soft */

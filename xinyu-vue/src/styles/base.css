@@ -24,6 +24,8 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 霞鹜文楷没有粗体字重，禁止浏览器合成伪粗体；自带粗体的系统字体不受影响。 */
+  font-synthesis-weight: none;
   transition: background-color var(--t-slow) var(--ease-soft),
     color var(--t-slow) var(--ease-soft);
 }

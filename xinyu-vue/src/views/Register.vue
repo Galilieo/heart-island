@@ -50,10 +50,9 @@ function goLogin() {
 
 <template>
   <AuthLayout
-    kicker="欢迎来到心屿"
-    title="创建账号"
-    subtitle="注册后就能记心情、发帖子，和大家聊聊。"
     slogan="开心的、烦心的，都可以写。"
+    subtitle="注册后就能记心情、发帖子，和大家聊聊。"
+    title="注册心屿"
   >
     <BaseInput
       v-model="username"
@@ -93,12 +92,14 @@ function goLogin() {
       @click="handleRegister"
     >注册</BaseButton>
 
-    <p>注册前请阅读 <RouterLink to="/privacy">隐私政策</RouterLink>，了解记录、AI回复和管理员排障访问的范围。</p>
-
     <template #footer>
       <BaseButton variant="link" @click="goLogin">
         已经有账号？回到登录 →
       </BaseButton>
+    </template>
+
+    <template #legal>
+      注册前请阅读<RouterLink to="/privacy">隐私政策</RouterLink>，了解记录、AI 回复和管理员排障访问的范围。
     </template>
   </AuthLayout>
 </template>

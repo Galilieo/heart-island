@@ -45,15 +45,13 @@ function goRegister() {
 
 <template>
   <AuthLayout
-    kicker="欢迎回来"
-    title="心屿"
-    subtitle="记记今天的心情，也看看大家的近况。"
     slogan="今天过得怎么样？"
+    subtitle="记记今天的心情，也看看大家的近况。"
+    title="登录心屿"
   >
     <BaseInput
       v-model="username"
       label="用户名"
-      placeholder="请输入用户名"
       size="lg"
       @enter="handleLogin"
     />
@@ -61,7 +59,6 @@ function goRegister() {
       v-model="password"
       type="password"
       label="密码"
-      placeholder="请输入密码"
       size="lg"
       @enter="handleLogin"
     />
@@ -72,8 +69,6 @@ function goRegister() {
       block
       @click="handleLogin"
     >登录</BaseButton>
-
-    <RouterLink to="/privacy">隐私政策</RouterLink>
 
     <template #footer>
       <BaseButton variant="link" @click="goRegister">

@@ -56,10 +56,11 @@
   --tired: #b3a89a;
   --tired-soft: #ebe5dc;
 
-  /* 字体 */
-  --font-sans: "MiSans", "Source Han Sans SC", "PingFang SC",
-    "Microsoft YaHei", system-ui, sans-serif;
-  --font-display: "Smiley Sans", "ZCOOL KuaiLe", "MiSans", var(--font-sans);
+  /* 字体：正文用系统黑体，避免为长文本加载整套中文字体；
+     标题与标语用 main.js 中引入的霞鹜文楷（仅 400 一个字重）。 */
+  --font-sans: "PingFang SC", "Source Han Sans SC", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-display: "LXGW WenKai Screen", var(--font-sans);
 
   /* 字号 */
   --fs-xs: 12px;

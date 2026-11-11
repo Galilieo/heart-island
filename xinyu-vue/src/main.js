@@ -5,6 +5,8 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { initTheme } from './composables/useTheme'
+// 霞鹜文楷屏幕阅读版（简体字形）：按 unicode-range 切片，浏览器只下载页面实际用到的字符分片。
+import 'lxgw-wenkai-screen-webfont/lxgwwenkaigbscreen.css'
 import './styles/index.css'
 
 initTheme()
