@@ -25,7 +25,7 @@
 - 社区共享RestTemplate初值connect=2000ms/read=15000ms；发布与同步编辑单独Axios timeout=20000ms，其他接口5000ms。实施时先以最多5次真实模型合成样例采样确认/调整初值，无自动重试；阶段等待限制不冒充整个请求总deadline。
 - 社区生成失败不写公开兜底：新帖community_post.ai_reply保持NULL；编辑先清除旧内容对应回复，失败不恢复。仅成功非空结果可公开展示，失败日志reply_content=NULL。
 - 仅AI_WORKER_ENABLED=true且旧worker已停止时启动恢复/扫描；关闭的实例不得调用recoverInterrupted或claimNext。
-- 只增量迁移，禁止执行破坏性初始化SQL；1a保留现存历史prompt，不在普通管理接口暴露；后续专项清理按保留期删除/匿名化其关联数据。
+- 只增量迁移，禁止执行破坏性初始化SQL；1a保留现存历史prompt，仅全站ADMIN后台允许查看和搜索；后续专项清理按保留期删除/匿名化其关联数据。
 - 本次迁移增加deleted_at DATETIME NULL DEFAULT NULL；首次软删除写数据库当前时间，普通更新/AI提交不写此列，重复删除不重置。历史status=0行保留NULL表示时间未知，不以update_time/迁移时间推算。
 - 软删除同一事务置status=0、content_version+1、deleted_at=本次删除时间、enabled=0、ai_reply=NULL，queued/running/failed置superseded，保留来源/job行；提交WHERE同时校验status=1与来源版本。重试、状态读取和unavailable分类前也校验status=1。
 - update/delete/complete必须在同一实际DB事务/连接中先SELECT ... FOR UPDATE锁日记，后用带id/user_id/status=1/content_version条件的UPDATE更新指定列，再操作job；事务结束释放锁，网络不在锁内。禁止无锁selectById→updateById整实体回写；update不得写status或deleted_at，必须SQL内version+1。retry只改job，不锁来源，使用带预期attempt_count的CAS并遵守同样准入限制。
@@ -118,15 +118,17 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 
 - [x] **3A补全DNS自动恢复（2026-11-09实现及验证）**：generateAsync共享查询并在剩余预算内续接；失败缓存默认10秒、到期按需重查；单请求取消隔离、关闭／过期不续发，卡住原生解析不增加物理查询。最多3逻辑请求／HTTP线程，队列上限3。Java17普通测试＋合成Python IT 180项全通过，独立review_dns_recovery固定9文件哈希审查通过，另有DNS退出恢复／HTTP取消断连复用探针。证据见progress，具体选择见执行稿11.7／11.8。成功IP TTL暂缓；新增异步段及代表性测试已带读，用户授权整理本地提交，未部署；不记为用户独立掌握。
 
-- [x] **3A内部客户端**：认证、严格snake_case／类型／关联校验、16KiB正文与8KiB状态行／响应头限制、错误分类、无重试／重定向、连接／读取／绝对总截止、可取消与关闭；真Java→Python共享13心情矩阵。当前实现／回归和客户端预审完成，旧主体及新增DNS异步段已带读；第一轮3A＋3C整体评审仍待3C。未以测试通过代替掌握。
-- [ ] **3C单次执行**：claim→来源预检→事务外generate→条件complete。优先测completeFailureIsMarkedFailedInNewTransactionAndCanRetry与lateFailureDoesNotOverwriteSupersededOrNewAttempt；真实DB证明日志失败回滚后新事务failed及可重试。complete异常后的独立fail与fail失败处理由用户手写，Codex不提前代写；DB持续故障不伪称收尾成功，不自动重调模型。complete／fail的5秒事务配置和实际锁／连接／网络边界在本批验证。
-- [ ] **第一轮独立评审3A＋3C**：固定SHA／逐文件哈希快照；3A可先预审，3C用户完成后补齐同轮结论。
-- [ ] **3D启动停止＋3E三并发**：配置校验→唯一worker且旧进程退出前提→恢复一次→成功后扫描；恢复失败不扫描、worker关闭零恢复／领取，重复事件不注册第二份调度。停止先关领取闸门再清理I/O、等待执行退出。每秒按空槽补领，Java默认3槽、Python单应用进程门禁3；无无限内存待办。至少两用户及屏障证明3条重叠、第4条数据库queued、空槽补领、超时不影响另两槽、槽位／门禁回收和删除／修改交错不回写旧结果。跨实例租约仍1b。
-- [ ] **第二轮独立评审3D＋3E**：恢复、停止竞争、资源释放与门禁一致性。
+- [x] **3A内部客户端**：认证、严格snake_case／类型／关联校验、16KiB正文与8KiB状态行／响应头限制、错误分类、无重试／重定向、连接／读取／绝对总截止、可取消与关闭；真Java→Python共享13心情矩阵。当前实现／回归和客户端预审完成，旧主体及新增DNS异步段已带读；第一轮3A＋3C整体评审已完成。未以测试通过代替掌握。
+- [x] **3C单次执行**：claim→来源预检→事务外generate→条件complete。优先测completeFailureIsMarkedFailedInNewTransactionAndCanRetry与lateFailureDoesNotOverwriteSupersededOrNewAttempt；真实DB证明日志失败回滚后新事务failed及可重试。complete异常后的独立fail与fail失败处理由用户手写，Codex不提前代写；DB持续故障不伪称收尾成功，不自动重调模型。complete／fail的5秒事务配置和实际锁／连接／网络边界在本批验证。
+- [x] **第一轮独立评审3A＋3C**：固定SHA／逐文件哈希快照；3A可先预审，3C用户完成后补齐同轮结论。
+- [x] **3D启动停止＋3E三并发**：配置校验→唯一worker且旧进程退出前提→恢复一次→成功后扫描；恢复失败不扫描、worker关闭零恢复／领取，重复事件不注册第二份调度。停止先关领取闸门再清理I/O、等待执行退出。每秒按空槽补领，Java默认3槽、Python单应用进程门禁3；无无限内存待办。至少两用户及屏障证明3条重叠、第4条数据库queued、空槽补领、超时不影响另两槽、槽位／门禁回收和删除／修改交错不回写旧结果。跨实例租约仍1b。
+- [x] **第二轮独立评审3D＋3E**：恢复、停止竞争、资源释放与门禁一致性。
 - [x] **3B冷却（实现／验证／独立预审及主体／代表性测试带读完成）**：每3次失败180秒起翻倍、封顶3600秒，累计attempt不重置；同步SQL／Java／Python去掉永久三次限制。用户手写cooldownSeconds与requeue冷却CAS，Codex脚手架／测试／评审。数据库计算retryAfterSeconds，异常NULL显式0；冷却retry经归属检查后429＋Retry-After，普通错误体无VO，前端GET回查。验证到期／NULL／第4与7次／双击／旧身份／删除与服务重建；跨job请求限频留1b。
-- [ ] **3F社区与隐私**：先最多5次授权真实模型合成采样校准2秒连接／15秒读等待初值，缺授权或环境就记待校准；真实慢HTTP验证帖子保留、AI失败NULL、编辑先清旧回复且不恢复、日志失败无兜底。旧解析器空／非法结果不得假成功，新日志不复制prompt或原始异常，后台AdminAiReplyVO及允许字段搜索，真实MVC权限与捕获日志隐私回归。
-- [ ] **第三轮独立评审3B＋3F**：冷却CAS／429、权限、社区与日志隐私。
-- [ ] 两端相关模块完整回归，真实MySQL与回环HTTP分别记录；Task4前不可部署，不自动提交／推送／部署。
+- [x] **3F社区与隐私主体**：同步阶段超时、失败NULL、编辑先清旧回复、新日志无prompt／失败正文、后台按用户2026-11-10修订恢复全站ADMIN的prompt／回复／错误详情查看与全文搜索；主体已带读至后台搜索；权限修订后Java299项全回归＋独立社区库9项通过，相关70项回归及独立评审通过；权限变更与代表性测试已交付快速补读，不等于独立掌握。Python上轮120项通过，本轮未改且未重跑。
+- [x] **3F有限真实模型校准（2026-11-11）**：5次顺序合成社区调用全部成功，耗时1489／1284／1199／1379／1285ms，中位1285ms、最大1489ms；保留2秒连接／15秒读等待，Task4发布／编辑20秒。当前样本不代表稳定P95或总deadline，正式模型质量测评另做。
+- [ ] **Task4联调前风险决策**：社区并行编辑的迟到旧回复仍可能回填；单独提交最小生成版本／条件回写方案供确认，不在3F默默增加字段。
+- [x] **第三轮独立评审3B＋3F**：固定11文件及delta复核通过；连接池等待超时误分类已RED→GREEN修复，评审未独立运行测试。
+- [x] 相关模块回归完成：Java299项＋独立社区库9项，含真实MySQL／JDBC／合成Python HTTP；Python上轮120项通过且本轮未改。有限真实模型校准已完成；用户已同意本批分批本地提交，Task4前不可部署，不推送。
 
 接口保持AiServiceClient.generate(MoodAiRequest, Duration remaining)→MoodAiResponse；worker.runOne最多领取一条，网络不包业务事务。3B已统一放宽两端为attempt≥1，累计次数不重置。配置AI_SERVICE_BASE_URL、AI_INTERNAL_TOKEN、AI_WORKER_ENABLED（默认false）、AI_WORKER_CONCURRENCY（默认3）；关闭实例不要求内部服务凭据。具体读取保护、时限与停止证据、每批带读和最终命令见v2同一文件，不另立执行口径。
 
@@ -144,7 +146,7 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 
 - [ ] 写 `tests/ai-job-polling.test.js`：延迟请求不重叠、stop 后迟到响应忽略、编辑后旧版本忽略、终态停、网络失败停且不调用 retry、观察 120 秒停而不改服务端状态；双击retry共用pending标记，不插新日记；删除后stop使迟到回包无法复活卡片，来源404停止轮询且不重试/不转为unavailable。
 - [ ] RED：在 `xinyu-vue` 运行 `node --test tests/ai-job-polling.test.js`。
-- [ ] 实现API/store/poller；给社区发布/编辑单独设置20秒等待并校对Axios实际请求选项，保留全局5秒；模拟超时检查“发布结果尚未确认，帖子可能已保存，请先刷新核对”，无自动重发、保留输入，正常成功/失败无回复的公开卡片展示正确。修改首页提示、卡片与详情状态及失败按钮；保留日记 CRUD / 趋势。后台按新 VO 展示，删除 prompt / 原始错误 UI。保存响应成功后刷新失败单独提示“已保存，列表刷新失败”。
+- [ ] 实现API/store/poller；给社区发布/编辑单独设置20秒等待并校对Axios实际请求选项，保留全局5秒；模拟超时检查“发布结果尚未确认，帖子可能已保存，请先刷新核对”，无自动重发、保留输入，正常成功/失败无回复的公开卡片展示正确。修改首页提示、卡片与详情状态及失败按钮；保留日记 CRUD / 趋势。后台保留全站ADMIN的prompt／回复／错误详情展示，按当前AdminAiReplyVO字段回归；不删除这些UI。保存响应成功后刷新失败单独提示“已保存，列表刷新失败”。
 - [ ] GREEN：`npm test` 与 `npm run build`；浏览器用合成输入实际检查普通完成、关闭 AI、失败 / 重试、修改 / 删除、刷新 / 切换 / 隐藏页面、管理列表，不能仅以 JS 单测代替页面验证。
 - [ ] 加 `tests/stub_provider.py`（仅测试用途）和 `AiReplyContractIT`；启动真实 Python 监听回环端口、以隔离 MySQL 的 Java 应用发 HTTP：保存先返回，GET 查询无生成副作用，随后终态与回复一致，SUPPORT 零供应商调用，空回复失败。stub 用 barrier 控制返回，避免依赖偶然快慢。
 - [ ] 显式运行跨服务测试：终端 A `uv run --directory xinyu-ai python -m tests.stub_provider`；终端 B 为应用配置测试资源和内部 token 后 `uv run --directory xinyu-ai uvicorn app.main:app --host 127.0.0.1 --port 18081`；终端 C 在 backend 运行 `sh ./mvnw '-Dtest=AiReplyContractIT' test`。测试 profile 的供应商 URL 固定本机，拒绝意外访问云端；使用仅本机测试的虚构 token / 资源；测试入口用 env 传配置，不把真实秘密写进命令历史。

@@ -1,6 +1,6 @@
 # 阶段 1a：单实例异步心情回应设计
 
-2026-11-09 · 契约 v1.0设计修订（用户批准Task3 v2开工；3A／worker／冷却已实现验证，3B主体及代表性测试已带读，3F／Task4未完成） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
+2026-11-11 · 契约 v1.0设计修订（Task3实现、隔离验收、独立评审及有限社区真实模型校准完成；Task4未完成，不发布） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
 
 ## 1. 目标与范围
 
@@ -12,11 +12,11 @@
 
 ## 2. 当前代码与兼容面
 
-设计前的历史问题基线：日记曾在保存／修改请求中同步调用AI，删除仅置status=0。Task2当前已改为日记与任务同事务保存，以及带版本、删除时间、旧任务失效的软删除；不重做已完成链路。尚待Task3修复的源码问题是社区旧解析器可能将默认文字当成功、RestTemplate未显式设超时、后台AI列表直接返回含prompt实体。前端现有统一等待5秒，Task4再适配新状态；未以此核验线上数据。
+设计前的历史问题基线：日记曾在保存／修改请求中同步调用AI，删除仅置status=0。Task2当前已改为日记与任务同事务保存，以及带版本、删除时间、旧任务失效的软删除；不重做已完成链路。当时的社区问题包括默认文字被当作成功、RestTemplate无显式超时，以及后台直接返回日志实体；Task3已修复生成与等待行为，后台改为独立VO并按用户2026-11-10修订保留全站ADMIN原文查询权限。前端现有统一等待5秒，Task4再适配新状态；未以此核验线上数据。
 
-保留 `/mood/add`、`/mood/update/{id}` 路径与 `Result` 包装。本方案把两者 `data: true` 改为保存结果 VO；这是已声明的响应变化，Vue API / store / 页面必须同批修改。已有列表、详情的日记字段保持，增加状态字段；`Long` 沿用当前 Jackson 转字符串的约定。社区回应保留同步入口，同时修复共享解析器假成功与RestTemplate超时。待实测校准的初值为connect=2000ms、read=15000ms，无自动重试；前端仅communityApi.createPost/updatePost的Axios timeout=20000ms，其他请求保持5000ms。编辑也会同步调用attachAiReply，因此使用相同等待策略。
+保留 `/mood/add`、`/mood/update/{id}` 路径与 `Result` 包装。本方案把两者 `data: true` 改为保存结果 VO；这是已声明的响应变化，Vue API / store / 页面必须同批修改。已有列表、详情的日记字段保持，增加状态字段；`Long` 沿用当前 Jackson 转字符串的约定。社区回应保留同步入口，同时修复共享解析器假成功与RestTemplate超时。本轮有限采样后保留connect=2000ms、read=15000ms，无自动重试；Task4将仅为communityApi.createPost/updatePost设置Axios timeout=20000ms，其他请求保持5000ms。编辑也会同步调用attachAiReply，因此使用相同等待策略。
 
-实施时先以当前社区prompt、max_tokens=200、实际供应商/模型做最多5次顺序合成样例采样，记录日期、模型/参数、每次耗时、失败类型、中位数与最大值，再确认/调整后端及前端等待值；少量样例不用于宣称稳定P95或通用SLA。采样记录放AI_WORKLOG，未采样不得把初值标为已验证。连接/读等待不是整条发布请求的总deadline；前端超时只说明未收到结果，提示“发布结果尚未确认，帖子可能已保存，请先刷新核对”，不自动重发、不声称保存失败，也不声称必定已保存。完整社区异步化不在1a。
+实施时先以当前社区prompt、max_tokens=200、实际供应商/模型做最多5次顺序合成样例采样，记录日期、模型/参数、每次耗时、失败类型、中位数与最大值，再确认/调整后端及前端等待值；少量样例不用于宣称稳定P95或通用SLA。采样记录放AI_WORKLOG，未采样不得把初值标为已验证。连接/读等待不是整条发布请求的总deadline；前端超时只说明未收到结果，提示“发布结果尚未确认，帖子可能已保存，请先刷新核对”，不自动重发、不声称保存失败，也不声称必定已保存。完整社区异步化不在1a。2026-11-11已按用户同意完成5次顺序真实社区合成采样：全部成功，中位1285ms、最大1489ms，保留上述等待值；不代表稳定P95或正式质量测评。
 
 社区失败展示决定：新帖生成失败时community_post.ai_reply保持NULL，attachAiReply不得把getDefaultReply等兜底文字写入；编辑先清除旧内容对应的回复，失败不恢复旧回复。仅成功且非空的生成结果才写入公开回复，失败日志的status=失败且reply_content=NULL。公开列表/详情沿用非空才显示AI卡片的规则；旧数据不在本次批量清洗。回归真实延迟HTTP，保留已插入帖子并记分类失败，不能只mock抛异常。Task3后端返回契约变化与Task4前端必须同批验收发布，Task3完成时不可单独部署。
 
@@ -53,7 +53,7 @@
 | last_error_code | VARCHAR(64)，只放错误分类，不存上游正文或日记原文 |
 | create_time / update_time / started_at / finished_at | DATETIME；运行 / 结束前相应字段可空 |
 
-唯一键 `(task_type, target_id, target_version)`，扫描索引 `(status, id)`，归属查询含 user_id。不在 job 复制日记正文、提示词或模型完整响应，结果仍在 mood_record.ai_reply。普通模型调用按现有 ai_reply 兼容记录落库，prompt 为空，errorMessage 只保存分类；SUPPORT 不插入一条“模型调用成功”记录，job 保留结果类型和 model_called=false。model_called=true 仅表示已发起供应商 HTTP 调用，不证明供应商实际执行或计费；失败无法确认时保留 NULL。
+唯一键 `(task_type, target_id, target_version)`，扫描索引 `(status, id)`，归属查询含 user_id。不在 job 复制日记正文、提示词或模型完整响应，结果仍在 mood_record.ai_reply。普通模型调用按现有 ai_reply 兼容记录落库，prompt 为空；心情worker的errorMessage沿用内部协议分类，社区同步失败可保存仅供ADMIN查看、已遮蔽配置密钥的错误详情；SUPPORT 不插入一条“模型调用成功”记录，job 保留结果类型和 model_called=false。model_called=true 仅表示已发起供应商 HTTP 调用，不证明供应商实际执行或计费；失败无法确认时保留 NULL。
 
 日记沿用软删除。首次删除在同一事务中将来源status置0、content_version加1、deleted_at写数据库当前时间、ai_reply_enabled置0、ai_reply显式置NULL，并将该来源queued/running/failed任务置superseded；只清理私密心情域，不改变社区对象。重复删除沿用现有失败/不存在结果，不再增加版本或重写deleted_at。来源和job行仍在，不能以“job已删除”作为拒绝回写依据。
 
@@ -99,7 +99,7 @@ Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕�
 
 先校验来源归属与status=1，再计算aiReplyState；来源status=0或不存在时拒绝读取任务/重试，不返回replyContent，不映射为unavailable，不创建新任务。aiReplyState包含任务状态，以及disabled / legacy / unavailable；没有 job 且历史非空回复为 legacy；没有 job 且 enabled=false 为 disabled，enabled=true 且无回复 / 无任务为 unavailable（历史或异常状态缺少任务，提示重新加载，不自动生成）。请求 content 必须非空，最大 500 个 UTF-16 code unit，与现有浏览器 maxlength 和 Java String.length 一致；心情类型单选，三端统一为13项：正向开心、满足、期待、感动、平静；负向焦虑、难过、生气、委屈、孤独、迷茫、疲惫；其他。前端用无标题间距分为5项与8项两组，其他并入末组；按钮暂用纯文字且等宽，不用重复图标或正向／负向标签，不生成情绪评分；接口继续传一个moodType字符串，历史六项兼容。情绪强度和多选留待后续单独设计，不在1a增加字段。客户端不能提交 version / jobId 决定服务端写入。
 
-管理端继续现有分页，返回 `AdminAiReplyVO`：id、userId、targetType、targetId、modelName、status、errorCode、createTime；不返回 prompt、replyContent 或上游 errorMessage。keyword 搜索仅查这些允许字段，不允许用隐藏全文做猜测式检索。当前无详情 API，不新增一个暴露原文的接口；既有数据库 prompt 保留，不经普通页面透出。
+管理端当前只有全站ADMIN角色（未设计社区版主）：有效ADMIN可跨用户、跨业务类型查询全部AI调用记录。现有分页返回 `AdminAiReplyVO`：id、userId、targetType、targetId、prompt、replyContent、modelName、status、errorMessage、createTime；keyword可搜索这些已存字段，包括提示词、回复正文和原始错误详情，使用绑定参数并保留分页。该接口经/admin/**服务端鉴权，未登录401、普通用户及禁用管理员403，不因查询参数改变角色。已有前端详情弹窗使用分页记录，不新增详情接口。新社区失败保留异常类型／消息与上游错误内容供管理员排查，配置API密钥在写入前遮蔽，详情上限8192个UTF-16单元；应用日志、普通用户接口及ai_job仍只使用安全分类。新日志仍不复制prompt，历史已存prompt可查看；此前未保存或Python协议未返回的错误原文不能补回。此条为用户2026-11-10明确修订，替代此前后台最小VO及隐藏正文搜索规则。
 
 ## 6. Python 内部契约
 
