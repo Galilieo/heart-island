@@ -87,7 +87,7 @@ const aiOpen = ref(false)
 
 .mood-card--joy     { border-left-color: var(--joy); }
 .mood-card--calm    { border-left-color: var(--calm); }
-.mood-card--warn    { border-left-color: var(--warn); }
+.mood-card--tension { border-left-color: var(--tension); }
 .mood-card--sad     { border-left-color: var(--sad); }
 .mood-card--tired   { border-left-color: var(--tired); }
 .mood-card--neutral { border-left-color: var(--line-strong); }

@@ -193,7 +193,7 @@ function barHeight(count) {
 
 .trend__col-bar--joy     { background: var(--joy); }
 .trend__col-bar--calm    { background: var(--calm); }
-.trend__col-bar--warn    { background: var(--warn); }
+.trend__col-bar--tension { background: var(--tension); }
 .trend__col-bar--sad     { background: var(--sad); }
 .trend__col-bar--tired   { background: var(--tired); }
 .trend__col-bar--neutral { background: var(--ink-3); }

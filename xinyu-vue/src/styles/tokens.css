@@ -1,7 +1,7 @@
 :root {
   /* 背景 */
-  --bg-base: #fdfaf3;
-  --bg-soft: #f6efe1;
+  --bg-base: #fcfaf4;
+  --bg-soft: #f3efe3;
   --bg-card: #ffffff;
   --bg-overlay: rgba(47, 42, 36, 0.32);
 
@@ -11,19 +11,21 @@
   --ink-3: #7d7668;
   --ink-inverse: #fdfaf3;
 
-  /* 线条 */
-  --line: #ece4d4;
-  --line-strong: #d8cdb6;
+  /* 线条。line-control 专用于输入框、下拉框等表单控件的常态边框，悬停时用 line-strong */
+  --line: #e8e3d4;
+  --line-strong: #d5cdb8;
+  --line-control: var(--line);
 
-  /* 品牌色（薄荷青） */
-  --brand: #6fa9a4;
-  --brand-deep: #4d8580;
-  --brand-soft: #e4f0ee;
-  --brand-soft-deep: #d6e8e5;
+  /* 品牌色（小芽色）：取自品牌素材包小芽身体边缘 #79ad97；
+     brand-deep 用作小字链接，加深到与白底对比度约 4.9（WCAG AA 要求 4.5） */
+  --brand: #79ad97;
+  --brand-deep: #437a6e;
+  --brand-soft: #e4f0e9;
+  --brand-soft-deep: #d3e7da;
 
-  /* 强调色（杏粉） */
-  --accent: #d98c7a;
-  --accent-soft: #f8e2da;
+  /* 强调色：取自小芽腮红 #f29a86，用于喜欢 / 收藏等情感反馈 */
+  --accent: #f29a86;
+  --accent-soft: #fde5de;
 
   /* 状态色 */
   --warn: #d4a24a;
@@ -37,24 +39,29 @@
   /* 场景色（心屿 · 潮汐之窗：深夜青天空 / 海面 / 地平线雾金） */
   --abyss: #1d3f45;
   --abyss-deep: #16323a;
-  --sea: #3d6f6e;
-  --sea-deep: #2a5655;
+  --sea: #3f7a6e;
+  --sea-deep: #2f6157;
   --sea-soft: #dceceb;
   --gold: #eec27f;
   --gold-soft: #f7e3bd;
   --ink-on-sea: #f6f1e4;
 
-  /* 心情色 */
-  --joy: #f3b95f;
-  --joy-soft: #fdecca;
-  --calm: #9bc1bc;
-  --calm-soft: #e1efee;
-  --sad: #8fa5c4;
-  --sad-soft: #e1e8f1;
+  /* 心情色（柔和一套）：OKLCH 等明度、等彩度，只改色相，并避开品牌灰绿与腮红色相。
+     愉快 85° 蜂蜜黄 / 紧绷 55° 杏橙 / 平和 215° 晴空蓝 / 低落 268° 长春花蓝紫 / 疲惫 318° 暮色藕紫。
+     *-ink 与对应 *-soft 的对比度：日间 ≥ 5.8，深夜 ≥ 7.4。
+     紧绷（焦虑、生气）使用独立的 --tension，状态提示色 --warn 不再承担心情含义。 */
+  --joy: #e4cb95;
+  --joy-soft: #f7eeda;
+  --tension: #e4b290;
+  --tension-soft: #feeadd;
+  --calm: #84cbdc;
+  --calm-soft: #daf4fa;
+  --sad: #a9bdef;
+  --sad-soft: #e6eeff;
   --angry: #d48a7a;
   --angry-soft: #f5dcd5;
-  --tired: #b3a89a;
-  --tired-soft: #ebe5dc;
+  --tired: #d2afdd;
+  --tired-soft: #f7e9fb;
 
   /* 字体：正文用系统黑体，避免为长文本加载整套中文字体；
      标题与标语用 main.js 中引入的霞鹜文楷（仅 400 一个字重）。 */
@@ -94,7 +101,7 @@
   --shadow-md: 0 12px 28px rgba(120, 98, 60, 0.10);
   --shadow-lg: 0 22px 50px rgba(120, 98, 60, 0.14);
   --shadow-inset: inset 0 0 0 1px var(--line);
-  --shadow-focus: 0 0 0 3px rgba(111, 169, 164, 0.22);
+  --shadow-focus: 0 0 0 3px rgba(121, 173, 151, 0.24);
   --shadow-error: 0 0 0 3px rgba(198, 106, 106, 0.16);
 
   /* 动效 */
@@ -111,24 +118,25 @@
   --z-toast: 2000;
 
   /* 柔底上的文字色（与各 *-soft 配套，深夜模式下会反转） */
-  --joy-ink: #a06b1e;
-  --calm-ink: #3f6f6a;
-  --sad-ink: #45597a;
+  --joy-ink: #6e5724;
+  --tension-ink: #7b4f30;
+  --calm-ink: #186575;
+  --sad-ink: #495985;
   --angry-ink: #8b4a3d;
-  --tired-ink: #6e6557;
+  --tired-ink: #6c4d76;
   --warn-ink: #946200;
   --danger-ink: #a83a3a;
   --success-ink: #2f6a45;
-  --accent-ink: #a45a4a;
+  --accent-ink: #a84f3c;
 
   /* 场景补充 */
-  --accent-line: #f1cdc2;
-  --bg-header: rgba(253, 250, 243, 0.85);
-  --bg-warm-from: #f6efe1;
-  --bg-warm-mid: #fdfaf3;
+  --accent-line: #f6c4b8;
+  --bg-header: rgba(252, 250, 244, 0.85);
+  --bg-warm-from: #f3efe3;
+  --bg-warm-mid: #fcfaf4;
   --bg-warm-to: #f3ead8;
 
-  /* hero 问候横幅渐变（浅色：薄荷青 → 杏粉） */
+  /* hero 问候横幅渐变（浅色：品牌柔底 → 腮红柔底） */
   --hero-from: var(--brand-soft);
   --hero-to: var(--accent-soft);
 
@@ -151,16 +159,20 @@
   --ink-inverse: #08161b;
 
   --line: #1e3339;
-  --line-strong: #2a454c;
+  /* 表单控件边框原用 --line，在卡片底色 #122a30 上几乎看不出；
+     line-control 单独提亮一档，line-strong（悬停）再亮一档以保留悬停反馈 */
+  --line-strong: #44646c;
+  --line-control: #33505a;
 
-  --brand: #679b95;
-  --brand-deep: #8bb2ac;
-  --brand-soft: #1a3339;
-  --brand-soft-deep: #203c42;
+  /* 小芽色深夜版：背景沿用深夜海面色，品牌色偏向小芽灰绿 */
+  --brand: #6fa08c;
+  --brand-deep: #93bfab;
+  --brand-soft: #1a3330;
+  --brand-soft-deep: #213d38;
 
-  --accent: #c08a7a;
-  --accent-soft: #332722;
-  --accent-line: #42332d;
+  --accent: #d08f80;
+  --accent-soft: #35251f;
+  --accent-line: #46322b;
 
   --warn: #bb9752;
   --warn-soft: #2e2618;
@@ -170,26 +182,35 @@
   --success: #659475;
   --success-soft: #1e2d23;
 
-  --sea: #3a6563;
-  --sea-deep: #84aca6;
+  --sea: #3a6658;
+  --sea-deep: #8ab8a4;
   --sea-soft: #1a2e33;
   --gold-soft: #332a19;
 
-  --joy-soft: #2c2416;
-  --calm-soft: #1a2b29;
-  --sad-soft: #202933;
-  --angry-soft: #2e221f;
-  --tired-soft: #252119;
+  /* 心情色深夜版：主色压暗、柔底提亮到能看出标签轮廓（与卡片对比约 1.2） */
+  --joy: #c1ab7f;
+  --tension: #bf9478;
+  --calm: #6ea9b8;
+  --sad: #8d9ec8;
+  --tired: #b092b9;
 
-  --joy-ink: #cfa265;
-  --calm-ink: #85aba5;
-  --sad-ink: #8899b2;
+  --joy-soft: #3e3420;
+  --tension-soft: #443124;
+  --calm-soft: #1f3a41;
+  --sad-soft: #2e3548;
+  --angry-soft: #2e221f;
+  --tired-soft: #3d3041;
+
+  --joy-ink: #ddc89e;
+  --tension-ink: #eac1a6;
+  --calm-ink: #9ed5e3;
+  --sad-ink: #bacaf3;
   --angry-ink: #bd8a7a;
-  --tired-ink: #a1978a;
+  --tired-ink: #dbbfe4;
   --warn-ink: #bb9c5c;
   --danger-ink: #c08282;
   --success-ink: #77a086;
-  --accent-ink: #c08a7a;
+  --accent-ink: #dd9d8c;
 
   --bg-header: rgba(8, 22, 27, 0.85);
   --bg-warm-from: #0f2228;
@@ -205,6 +226,6 @@
   --shadow-sm: 0 2px 6px rgba(2, 6, 8, 0.42);
   --shadow-md: 0 12px 28px rgba(2, 6, 8, 0.5);
   --shadow-lg: 0 22px 50px rgba(2, 6, 8, 0.56);
-  --shadow-focus: 0 0 0 3px rgba(103, 155, 149, 0.28);
+  --shadow-focus: 0 0 0 3px rgba(111, 160, 140, 0.28);
   --shadow-error: 0 0 0 3px rgba(181, 112, 112, 0.22);
 }

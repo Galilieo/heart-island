@@ -56,7 +56,7 @@ defineEmits(['update:modelValue', 'enter'])
   gap: 8px;
   padding: 0 14px;
   background: var(--bg-card);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
   transition: border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);

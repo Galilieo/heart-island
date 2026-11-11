@@ -54,7 +54,7 @@ defineEmits(['update:modelValue'])
   display: block;
   padding: 10px 14px;
   background: var(--bg-card);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
   transition: border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);

@@ -153,11 +153,11 @@ export const MASCOT_LINES = {
   其他: '说不清是什么心情也没关系，写写看。'
 }
 
-// 心情分组 → 页面配色变量。“warn”使用警示色，“neutral”使用品牌色。
+// 心情分组 → 页面配色变量。“tension”使用紧绷心情色，“neutral”使用品牌色。
 const TONE_VARS = {
   joy: { color: 'var(--joy)', soft: 'var(--joy-soft)', ink: 'var(--joy-ink)' },
   calm: { color: 'var(--calm)', soft: 'var(--calm-soft)', ink: 'var(--calm-ink)' },
-  warn: { color: 'var(--warn)', soft: 'var(--warn-soft)', ink: 'var(--warn-ink)' },
+  tension: { color: 'var(--tension)', soft: 'var(--tension-soft)', ink: 'var(--tension-ink)' },
   sad: { color: 'var(--sad)', soft: 'var(--sad-soft)', ink: 'var(--sad-ink)' },
   tired: { color: 'var(--tired)', soft: 'var(--tired-soft)', ink: 'var(--tired-ink)' },
   neutral: { color: 'var(--brand)', soft: 'var(--brand-soft)', ink: 'var(--brand-deep)' }

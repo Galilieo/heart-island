@@ -207,7 +207,7 @@ onBeforeUnmount(() => {
   width: 100%;
   padding: 0 14px;
   background: var(--bg-card);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
   color: var(--ink-1);
   font: inherit;

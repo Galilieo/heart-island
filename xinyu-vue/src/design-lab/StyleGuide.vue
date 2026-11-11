@@ -37,7 +37,7 @@ const COLOR_GROUPS = [
     colors: [
       { token: '--joy', label: '愉快' },
       { token: '--calm', label: '平和' },
-      { token: '--warn', label: '紧绷' },
+      { token: '--tension', label: '紧绷' },
       { token: '--sad', label: '低落' },
       { token: '--tired', label: '疲惫' }
     ]

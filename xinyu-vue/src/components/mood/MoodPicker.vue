@@ -54,7 +54,7 @@ defineEmits(['update:modelValue'])
 .mood-chip.is-active { border-color: currentColor; font-weight: 700; }
 .mood-chip--joy.is-active { background: var(--joy-soft); color: var(--joy-ink); }
 .mood-chip--calm.is-active { background: var(--calm-soft); color: var(--calm-ink); }
-.mood-chip--warn.is-active { background: var(--warn-soft); color: var(--warn-ink); }
+.mood-chip--tension.is-active { background: var(--tension-soft); color: var(--tension-ink); }
 .mood-chip--sad.is-active { background: var(--sad-soft); color: var(--sad-ink); }
 .mood-chip--tired.is-active { background: var(--tired-soft); color: var(--tired-ink); }
 .mood-chip--neutral.is-active { background: var(--brand-soft); color: var(--brand-deep); }

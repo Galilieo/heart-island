@@ -76,13 +76,43 @@ export const LOGO_OPTIONS = [
   }
 ]
 
-// 日间配色覆盖项；深夜主题沿用现有深夜 tokens，定稿后再单独配深夜版。
+// 配色覆盖项。tokens.css 已改为小芽色，因此“薄荷青”需写明原色值才能继续对比。
 export const PALETTE_OPTIONS = [
   {
     id: 'mint',
-    name: '薄荷青',
-    vars: {},
-    trait: '现有配色，和小芽身体同色系，清爽；深夜版已经做好，迁移成本最低；但青色在工具类产品里很常见。'
+    name: '薄荷青（原）',
+    vars: {
+      '--brand': '#6fa9a4',
+      '--brand-deep': '#4d8580',
+      '--brand-soft': '#e4f0ee',
+      '--brand-soft-deep': '#d6e8e5',
+      '--sea': '#3d6f6e',
+      '--sea-deep': '#2a5655',
+      '--accent': '#d98c7a',
+      '--accent-soft': '#f8e2da',
+      '--accent-ink': '#a45a4a',
+      '--accent-line': '#f1cdc2',
+      '--bg-base': '#fdfaf3',
+      '--bg-soft': '#f6efe1',
+      '--line': '#ece4d4',
+      '--line-strong': '#d8cdb6',
+      '--shadow-focus': '0 0 0 3px rgba(111, 169, 164, 0.22)'
+    },
+    nightVars: {
+      '--brand': '#679b95',
+      '--brand-deep': '#8bb2ac',
+      '--brand-soft': '#1a3339',
+      '--brand-soft-deep': '#203c42',
+      '--sea': '#3a6563',
+      '--sea-deep': '#84aca6',
+      '--accent': '#c08a7a',
+      '--accent-soft': '#332722',
+      '--accent-ink': '#c08a7a',
+      '--accent-line': '#42332d',
+      '--line-strong': '#2a454c',
+      '--shadow-focus': '0 0 0 3px rgba(103, 155, 149, 0.28)'
+    },
+    trait: '此前的配色，和小芽身体同色系，清爽；但青色在工具类产品里很常见。'
   },
   {
     // 品牌色取自小芽身体（#79ad97 / #5a978d），强调色取自小芽脸颊（#f29a86）
@@ -90,7 +120,7 @@ export const PALETTE_OPTIONS = [
     name: '小芽色',
     vars: {
       '--brand': '#79ad97',
-      '--brand-deep': '#4b8679',
+      '--brand-deep': '#437a6e',
       '--brand-soft': '#e4f0e9',
       '--brand-soft-deep': '#d3e7da',
       '--sea': '#3f7a6e',
@@ -183,10 +213,23 @@ export const PALETTE_OPTIONS = [
 // 文字色与柔底的对比度：日间 ≥ 5.8，深夜 ≥ 7.4（WCAG AA 要求 4.5）。
 export const MOOD_PALETTE_OPTIONS = [
   {
+    // tokens.css 已改为柔和一套，此处写明原色值（原紧绷色即当时借用的 --warn）以便继续对比
     id: 'current',
-    name: '现有心情色',
-    vars: {},
-    nightVars: {},
+    name: '原心情色',
+    vars: {
+      '--joy': '#f3b95f', '--joy-soft': '#fdecca', '--joy-ink': '#a06b1e',
+      '--tension': '#d4a24a', '--tension-soft': '#fbecc8', '--tension-ink': '#946200',
+      '--calm': '#9bc1bc', '--calm-soft': '#e1efee', '--calm-ink': '#3f6f6a',
+      '--sad': '#8fa5c4', '--sad-soft': '#e1e8f1', '--sad-ink': '#45597a',
+      '--tired': '#b3a89a', '--tired-soft': '#ebe5dc', '--tired-ink': '#6e6557'
+    },
+    nightVars: {
+      '--joy': '#f3b95f', '--joy-soft': '#2c2416', '--joy-ink': '#cfa265',
+      '--tension': '#bb9752', '--tension-soft': '#2e2618', '--tension-ink': '#bb9c5c',
+      '--calm': '#9bc1bc', '--calm-soft': '#1a2b29', '--calm-ink': '#85aba5',
+      '--sad': '#8fa5c4', '--sad-soft': '#202933', '--sad-ink': '#8899b2',
+      '--tired': '#b3a89a', '--tired-soft': '#252119', '--tired-ink': '#a1978a'
+    },
     trait: '愉快和紧绷都是黄棕色容易混；平和与品牌同为青绿；疲惫偏灰像“不可用”；五色明度不一致。'
   },
   {
@@ -194,14 +237,14 @@ export const MOOD_PALETTE_OPTIONS = [
     name: '柔和一套',
     vars: {
       '--joy': '#e4cb95', '--joy-soft': '#f7eeda', '--joy-ink': '#6e5724',
-      '--warn': '#e4b290', '--warn-soft': '#feeadd', '--warn-ink': '#7b4f30',
+      '--tension': '#e4b290', '--tension-soft': '#feeadd', '--tension-ink': '#7b4f30',
       '--calm': '#84cbdc', '--calm-soft': '#daf4fa', '--calm-ink': '#186575',
       '--sad': '#a9bdef', '--sad-soft': '#e6eeff', '--sad-ink': '#495985',
       '--tired': '#d2afdd', '--tired-soft': '#f7e9fb', '--tired-ink': '#6c4d76'
     },
     nightVars: {
       '--joy': '#c1ab7f', '--joy-soft': '#3e3420', '--joy-ink': '#ddc89e',
-      '--warn': '#bf9478', '--warn-soft': '#443124', '--warn-ink': '#eac1a6',
+      '--tension': '#bf9478', '--tension-soft': '#443124', '--tension-ink': '#eac1a6',
       '--calm': '#6ea9b8', '--calm-soft': '#1f3a41', '--calm-ink': '#9ed5e3',
       '--sad': '#8d9ec8', '--sad-soft': '#2e3548', '--sad-ink': '#bacaf3',
       '--tired': '#b092b9', '--tired-soft': '#3d3041', '--tired-ink': '#dbbfe4'

@@ -16,9 +16,11 @@ export const MOOD_GROUPS = [
 // 筛选和统计沿用扁平列表；与选择器从同一份分组生成，避免选项遗漏。
 export const MOOD_OPTIONS = MOOD_GROUPS.flatMap(group => group.options)
 
+// 心情 → 配色分组，对应 tokens.css 中的 --joy / --tension / --calm / --sad / --tired。
+// 焦虑、生气归入“紧绷”（tension），不再借用状态提示色 warn。
 const TONE_MAP = {
   开心: 'joy', 满足: 'joy', 期待: 'joy', 感动: 'calm', 平静: 'calm',
-  焦虑: 'warn', 难过: 'sad', 生气: 'warn', 委屈: 'sad', 孤独: 'sad',
+  焦虑: 'tension', 难过: 'sad', 生气: 'tension', 委屈: 'sad', 孤独: 'sad',
   迷茫: 'tired', 疲惫: 'tired', 其他: 'neutral'
 }
 

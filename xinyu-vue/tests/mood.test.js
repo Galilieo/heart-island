@@ -16,8 +16,13 @@ test('选择器的两组覆盖全部选项且没有重复，其他并入末组',
   assert.deepEqual(mood.MOOD_GROUPS.map(group => group.options.length), [5, 8])
   assert.deepEqual(mood.MOOD_GROUPS.flatMap(group => group.options.map(item => item.value)), expected)
   for (const item of MOOD_OPTIONS) {
-    assert.ok(['joy', 'calm', 'warn', 'sad', 'tired', 'neutral'].includes(moodTone(item.value)))
+    assert.ok(['joy', 'tension', 'calm', 'sad', 'tired', 'neutral'].includes(moodTone(item.value)))
   }
+})
+
+test('焦虑与生气使用独立的紧绷色，不借用状态提示色 warn', () => {
+  assert.equal(moodTone('焦虑'), 'tension')
+  assert.equal(moodTone('生气'), 'tension')
 })
 
 test('历史未知类型保留文本展示时可安全使用中性色', () => {

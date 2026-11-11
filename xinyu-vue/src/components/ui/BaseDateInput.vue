@@ -538,7 +538,7 @@ async function updatePickerPlacement() {
   gap: 6px;
   padding: 0 8px 0 12px;
   background: var(--bg-card);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
   transition: border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
