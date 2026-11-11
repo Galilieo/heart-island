@@ -1,5 +1,5 @@
 <script setup>
-// 心情列表筛选栏：心情类型 + 起止日期。
+// 心情列表筛选栏：常驻的时间范围切换 + 可折叠的「更多筛选」（心情与起止日期）。
 // 自身不发请求，只通过 v-model + @apply/@reset 把意图给父级。
 import { computed, nextTick, ref } from 'vue'
 import BaseSelect from '../ui/BaseSelect.vue'
@@ -30,8 +30,16 @@ const hasFilter = computed(
   () => props.moodType || props.startDate || props.endDate
 )
 
-// ≤768px 时筛选区默认收起为一条摘要行，展开后才显示控件（页面内局部状态）
-const open = ref(false)
+// 常驻范围按钮：全部沿用现有 reset 语义，其余按天数换算起止日期
+const RANGE_OPTIONS = [
+  { value: 'all', label: '全部' },
+  { value: 'today', label: '今天', days: 1 },
+  { value: 'week', label: '近 7 天', days: 7 },
+  { value: 'month', label: '近 30 天', days: 30 }
+]
+
+// 「更多筛选」默认收起；进入页面时已有心情或日期筛选则展开
+const moreOpen = ref(Boolean(props.moodType || props.startDate || props.endDate))
 
 const startDateInputRef = ref(null)
 const endDateInputRef = ref(null)
@@ -49,12 +57,35 @@ function formatDate(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-async function applyRecent(days) {
+// 最近 days 天（含今天）的起始日期；选中态比对与按钮筛选共用同一算法
+function recentStartDate(days) {
   const end = new Date()
   const start = new Date()
   start.setDate(end.getDate() - days + 1)
-  emit('update:startDate', formatDate(start))
-  emit('update:endDate', formatDate(end))
+  return formatDate(start)
+}
+
+// 当前高亮的范围由起止日期反推；手填日期不匹配任何预设时不高亮
+const activeRange = computed(() => {
+  const hasNoDateRange = !props.startDate && !props.endDate
+  if (hasNoDateRange) return 'all'
+
+  const today = formatDate(new Date())
+  if (props.endDate !== today) return ''
+  if (props.startDate === today) return 'today'
+  if (props.startDate === recentStartDate(7)) return 'week'
+  if (props.startDate === recentStartDate(30)) return 'month'
+  return ''
+})
+
+// 折叠区里还有预设范围以外的筛选（心情或自定义日期）时，在按钮上点一个小圆点提示
+const hasExtraFilter = computed(
+  () => Boolean(props.moodType) || activeRange.value === ''
+)
+
+async function applyRecent(days) {
+  emit('update:startDate', recentStartDate(days))
+  emit('update:endDate', formatDate(new Date()))
   await nextTick()
   emit('apply')
 }
@@ -66,81 +97,166 @@ async function applyToday() {
   await nextTick()
   emit('apply')
 }
+
+async function selectRange(range) {
+  if (range.value === 'all') {
+    emit('reset')
+    return
+  }
+
+  if (range.value === 'today') {
+    await applyToday()
+    return
+  }
+
+  await applyRecent(range.days)
+}
 </script>
 
 <template>
   <div class="filter-bar">
+    <div class="filter-bar__ranges" role="group" aria-label="记录时间范围">
+      <button
+        v-for="range in RANGE_OPTIONS"
+        :key="range.value"
+        type="button"
+        class="filter-bar__range"
+        :class="{ 'is-on': activeRange === range.value }"
+        @click="selectRange(range)"
+      >{{ range.label }}</button>
+    </div>
+
     <button
       type="button"
-      class="filter-bar__toggle"
-      :aria-expanded="open"
-      @click="open = !open"
+      class="filter-bar__more"
+      aria-controls="mood-filter-more"
+      :aria-expanded="moreOpen"
+      @click="moreOpen = !moreOpen"
     >
-      <span>筛选记录</span>
-      <span v-if="hasFilter" class="filter-bar__toggle-dot" aria-hidden="true" />
-      <span class="filter-bar__toggle-caret" aria-hidden="true">{{ open ? '收起 ▴' : '展开 ▾' }}</span>
+      <span>更多筛选</span>
+      <span v-if="hasExtraFilter" class="filter-bar__dot" aria-hidden="true" />
+      <span class="filter-bar__caret" aria-hidden="true">{{ moreOpen ? '收起 ▴' : '展开 ▾' }}</span>
     </button>
 
-    <div class="filter-bar__body" :class="{ 'is-open': open }">
-    <div class="filter-bar__field filter-bar__field--mood">
-      <BaseSelect
-        :model-value="moodType"
-        :options="moodSelectOptions"
-        placeholder="全部心情"
-        size="sm"
-        @update:model-value="(v) => emit('update:moodType', v)"
-      />
-    </div>
+    <div v-show="moreOpen" id="mood-filter-more" class="filter-bar__body">
+      <div class="filter-bar__field filter-bar__field--mood">
+        <BaseSelect
+          :model-value="moodType"
+          :options="moodSelectOptions"
+          placeholder="全部心情"
+          size="sm"
+          @update:model-value="(v) => emit('update:moodType', v)"
+        />
+      </div>
 
-    <div class="filter-bar__dates">
-      <BaseDateInput
-        ref="startDateInputRef"
-        :model-value="startDate"
-        class="filter-bar__date"
-        placeholder="开始日期"
-        size="sm"
-        @open="handleDatePickerOpen('start')"
-        @update:model-value="(v) => emit('update:startDate', v)"
-      />
-      <span class="filter-bar__sep">至</span>
-      <BaseDateInput
-        ref="endDateInputRef"
-        :model-value="endDate"
-        class="filter-bar__date"
-        placeholder="结束日期"
-        picker-align="end"
-        size="sm"
-        @open="handleDatePickerOpen('end')"
-        @update:model-value="(v) => emit('update:endDate', v)"
-      />
-    </div>
+      <div class="filter-bar__dates">
+        <BaseDateInput
+          ref="startDateInputRef"
+          :model-value="startDate"
+          class="filter-bar__date"
+          placeholder="开始日期"
+          size="sm"
+          @open="handleDatePickerOpen('start')"
+          @update:model-value="(v) => emit('update:startDate', v)"
+        />
+        <span class="filter-bar__sep">至</span>
+        <BaseDateInput
+          ref="endDateInputRef"
+          :model-value="endDate"
+          class="filter-bar__date"
+          placeholder="结束日期"
+          picker-align="end"
+          size="sm"
+          @open="handleDatePickerOpen('end')"
+          @update:model-value="(v) => emit('update:endDate', v)"
+        />
+      </div>
 
-    <div class="filter-bar__quick">
-      <button type="button" class="motion-press" @click="applyToday">今天</button>
-      <button type="button" class="motion-press" @click="applyRecent(7)">近7天</button>
-      <button type="button" class="motion-press" @click="applyRecent(30)">近30天</button>
-    </div>
-
-    <div class="filter-bar__actions">
-      <BaseButton variant="primary" size="sm" @click="emit('apply')">筛选</BaseButton>
-      <BaseButton
-        variant="plain"
-        size="sm"
-        :disabled="!hasFilter"
-        @click="emit('reset')"
-      >重置</BaseButton>
-    </div>
+      <div class="filter-bar__actions">
+        <BaseButton variant="primary" size="sm" @click="emit('apply')">筛选</BaseButton>
+        <BaseButton
+          variant="plain"
+          size="sm"
+          :disabled="!hasFilter"
+          @click="emit('reset')"
+        >重置</BaseButton>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.filter-bar__toggle {
-  display: none;
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* ── 常驻范围切换：样式同 design-lab 的 .j-range ── */
+.filter-bar__ranges {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-bar__range {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-soft),
+    color var(--t-fast) var(--ease-soft);
+}
+
+.filter-bar__range:not(.is-on):hover {
+  background: var(--bg-soft);
+  color: var(--ink-1);
+}
+
+.filter-bar__range.is-on {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 700;
+}
+
+.filter-bar__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.filter-bar__more:hover {
+  border-color: var(--line-strong);
+  color: var(--ink-1);
+}
+
+/* 折叠区内另有心情 / 自定义日期筛选时的提示点 */
+.filter-bar__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.filter-bar__caret {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
 }
 
 .filter-bar__body {
   display: flex;
+  flex: 1 1 100%;
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
@@ -176,38 +292,6 @@ async function applyToday() {
   font-size: var(--fs-sm);
 }
 
-.filter-bar__quick {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 6px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.62);
-}
-
-.filter-bar__quick button {
-  height: 28px;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  white-space: nowrap;
-  transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft),
-    transform var(--t-fast) var(--ease-soft);
-}
-
-.filter-bar__quick button:hover {
-  background: var(--brand-soft);
-  color: var(--brand-deep);
-}
-
 .filter-bar__actions {
   flex: 0 0 auto;
   display: flex;
@@ -218,80 +302,22 @@ async function applyToday() {
 @media (max-width: 1024px) {
   .filter-bar__field--mood { flex: 0 0 170px; }
   .filter-bar__dates { flex: 1 1 calc(100% - 182px); }
-  .filter-bar__quick {
-    order: 3;
-  }
-  .filter-bar__actions {
-    order: 4;
-    justify-content: flex-end;
-  }
 }
 
 @media (max-width: 768px) {
-  .filter-bar__toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    width: 100%;
-    min-height: 44px;
-    padding: 0 16px;
-    border: 1px dashed var(--line-strong);
-    border-radius: var(--radius-3);
-    background: var(--bg-soft);
-    color: var(--ink-2);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .filter-bar__toggle-dot {
-    width: 7px;
-    height: 7px;
-    margin-left: auto;
-    border-radius: 50%;
-    background: var(--accent);
-  }
-
-  .filter-bar__toggle-caret {
-    margin-left: auto;
-    color: var(--ink-3);
-    font-size: var(--fs-xs);
-  }
-
-  .filter-bar__toggle-dot + .filter-bar__toggle-caret {
-    margin-left: 10px;
-  }
-
-  .filter-bar__body {
-    display: none;
-  }
-
-  .filter-bar__body.is-open {
-    display: flex;
-    margin-top: 8px;
-  }
-
-  .filter-bar__body { align-items: stretch; }
   .filter-bar__field--mood,
-  .filter-bar__dates,
-  .filter-bar__quick,
-  .filter-bar__actions {
+  .filter-bar__dates {
     flex: 1 1 100%;
   }
+
   .filter-bar__dates {
     align-items: stretch;
   }
+
   .filter-bar__date {
     min-width: 0;
   }
-  .filter-bar__quick {
-    justify-content: space-between;
-    border-radius: var(--radius-2);
-  }
-  .filter-bar__quick button {
-    flex: 1;
-  }
+
   .filter-bar__actions {
     margin-left: 0;
     justify-content: flex-end;

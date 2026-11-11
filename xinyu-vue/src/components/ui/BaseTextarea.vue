@@ -1,5 +1,6 @@
 <script setup>
 // 多行输入框。带 maxlength 时右下角会自动显示字数计数。
+// variant 只影响外观：default 为通用输入框；paper 为手账横线纸，仅供首页书写卡使用。
 defineProps({
   modelValue: { type: String, default: '' },
   placeholder: String,
@@ -8,14 +9,19 @@ defineProps({
   error: String,
   disabled: Boolean,
   rows: { type: [Number, String], default: 4 },
-  maxlength: [Number, String]
+  maxlength: [Number, String],
+  variant: {
+    type: String,
+    default: 'default',
+    validator: (value) => ['default', 'paper'].includes(value)
+  }
 })
 
 defineEmits(['update:modelValue'])
 </script>
 
 <template>
-  <label class="field" :class="{ 'is-error': !!error, 'is-disabled': disabled }">
+  <label class="field" :class="{ 'field--paper': variant === 'paper', 'is-error': !!error, 'is-disabled': disabled }">
     <span v-if="label" class="field__label">{{ label }}</span>
     <span class="field__control">
       <textarea
@@ -121,5 +127,38 @@ defineEmits(['update:modelValue'])
 .field__count {
   font-size: var(--fs-xs);
   color: var(--ink-3);
+}
+
+/* ── paper：手账横线纸。去掉外框，只留底边线；背景横线与 32px 行高对齐，
+      文字写在横线上，光标聚焦时底边线变品牌色 ── */
+.field--paper .field__control {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.field--paper .field__control:focus-within {
+  border-color: var(--brand);
+  box-shadow: none;
+}
+
+.field--paper textarea {
+  padding: 4px 4px 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    var(--line) 31px,
+    var(--line) 32px
+  );
+  font-size: var(--fs-base);
+  line-height: 32px;
+}
+
+/* 保存中禁用时保留横线纸外观，不换成默认输入框的灰底 */
+.field--paper.is-disabled .field__control {
+  background: transparent;
 }
 </style>

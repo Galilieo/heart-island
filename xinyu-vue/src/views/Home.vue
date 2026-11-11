@@ -1,19 +1,18 @@
 <script setup>
 // 心情主页。整页只做"组装 + 事件绑定"：
+//   - 顶部：日期 + 问候 + 上次心情提示
 //   - 左栏：MoodForm（写心情）
-//   - 右栏：MoodTrendPanel（7 天趋势）+ MoodFilterBar + MoodCard 列表 + 分页
+//   - 右栏：MoodTrendPanel（侧栏卡片，后续再放月历）
+//   - 时间线：MoodFilterBar + MoodCard 列表 + 分页
 //   - 中心：MoodDetailDialog（查看/编辑详情弹窗）
 // 所有数据/请求逻辑都在 moodStore，本文件不直接调 api 或读 localStorage。
 import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
-import BaseTag from '../components/ui/BaseTag.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
-import Doodle from '../components/ui/Doodle.vue'
 import MoodForm from '../components/mood/MoodForm.vue'
 import MoodCard from '../components/mood/MoodCard.vue'
 import MoodFilterBar from '../components/mood/MoodFilterBar.vue'
@@ -51,9 +50,17 @@ const greeting = computed(() => {
   return `晚上好，${name}`
 })
 
+// 顶部日期行，如「11月11日 · 周三」；星期按本地时区取，和列表时间一致
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+const dateLabel = computed(() => {
+  const today = new Date()
+  return `${today.getMonth() + 1}月${today.getDate()}日 · ${WEEKDAYS[today.getDay()]}`
+})
+
 const todaySubtitle = computed(() => {
   const last = trend.value?.lastMoodType
-  if (last) return `上一次你写下的是「${last}」，今天感觉怎么样？`
+  if (last) return `上一次你写下的是「${last}」。`
   return '今天过得怎么样？想说的都可以记下来。'
 })
 
@@ -181,23 +188,14 @@ onMounted(() => {
 
 <template>
   <AppShell>
-    <div class="container home">
-      <header class="home__hero">
-        <div class="home__hero-text">
-          <p class="home__kicker">心屿 · 心情日记</p>
-          <h1 class="home__greet">
-            {{ greeting }}<span class="home__greet-dot">·</span>
-          </h1>
+    <div class="container">
+      <div class="home__layout">
+        <header class="home__hello">
+          <p class="home__date">{{ dateLabel }}</p>
+          <h1 class="home__greeting">{{ greeting }}</h1>
           <p class="home__sub">{{ todaySubtitle }}</p>
-        </div>
-        <div class="home__hero-doodles" aria-hidden="true">
-          <Doodle name="cloud" :size="64" color="rgba(111,169,164,0.4)" class="hd-1" />
-          <Doodle name="star"  :size="36" color="rgba(217,140,122,0.5)" class="hd-2" />
-          <Doodle name="leaf"  :size="44" color="rgba(155,193,188,0.55)" class="hd-3" />
-        </div>
-      </header>
+        </header>
 
-      <div class="home__main">
         <section class="home__compose">
           <MoodForm
             v-model:mood-type="moodType"
@@ -208,67 +206,70 @@ onMounted(() => {
           />
         </section>
 
-        <MoodTrendPanel :trend="trend" class="home__tide" />
+        <!-- 侧栏卡容器：4.3 起依次放「这一周」与月历 -->
+        <aside class="home__rail">
+          <section class="rail-card">
+            <MoodTrendPanel :trend="trend" />
+          </section>
+        </aside>
 
-        <BaseCard padding="md" class="home__list">
-            <header class="home__list-head">
-              <div>
-                <p class="home__list-kicker">记录册</p>
-                <h2 class="home__list-title">最近的心情</h2>
-              </div>
-              <BaseTag v-if="total" tone="brand" variant="soft" size="md">
-                共 {{ total }} 条
-              </BaseTag>
-              <BaseButton variant="link" size="sm" :loading="listLoading" @click="handleRefresh">刷新</BaseButton>
-            </header>
-
-            <MoodFilterBar
-              v-model:mood-type="filters.moodType"
-              v-model:start-date="filters.startDate"
-              v-model:end-date="filters.endDate"
-              @apply="handleApplyFilter"
-              @reset="handleResetFilter"
-            />
-
-            <TransitionGroup name="motion-list" tag="div" class="home__list-body motion-list">
-              <template v-if="listLoading && !list.length">
-                <SkeletonCard v-for="i in 3" :key="`mood-skeleton-${i}`" rows="3" />
-              </template>
-
-              <template v-else-if="list.length">
-                <MoodCard
-                  v-for="m in list"
-                  :key="m.id"
-                  :mood="m"
-                  :now="now"
-                  :retrying="moodStore.pendingIds.has(String(m.id))"
-                  :detail-loading="detailLoadingId === m.id"
-                  :deleting="deletingId === m.id"
-                  @detail="openDetail"
-                  @delete="handleDelete"
-                  @retry="handleRetry"
-                  @refresh="handleRefresh"
-                />
-              </template>
-
-              <EmptyState
-                v-else-if="!listLoading"
-                key="mood-empty"
-                expression="default"
-                title="还没有心情记录"
-                hint="写下心情并保存后，就能在这里回看。"
-              />
-            </TransitionGroup>
-
-            <div v-if="pages > 1" class="home__pgn">
-              <BasePagination
-                :page-num="pagination.pageNum"
-                :pages="pages"
-                :total="total"
-                @change="handlePageChange"
-              />
+        <section class="home__timeline">
+          <header class="home__timeline-head">
+            <div class="home__timeline-heading">
+              <h2 class="home__timeline-title">最近的记录</h2>
+              <span v-if="total" class="home__timeline-count">共 {{ total }} 条</span>
             </div>
-          </BaseCard>
+            <BaseButton variant="link" size="sm" :loading="listLoading" @click="handleRefresh">刷新</BaseButton>
+          </header>
+
+          <MoodFilterBar
+            v-model:mood-type="filters.moodType"
+            v-model:start-date="filters.startDate"
+            v-model:end-date="filters.endDate"
+            class="home__filter"
+            @apply="handleApplyFilter"
+            @reset="handleResetFilter"
+          />
+
+          <TransitionGroup name="motion-list" tag="div" class="home__list motion-list">
+            <template v-if="listLoading && !list.length">
+              <SkeletonCard v-for="i in 3" :key="`mood-skeleton-${i}`" rows="3" />
+            </template>
+
+            <template v-else-if="list.length">
+              <MoodCard
+                v-for="m in list"
+                :key="m.id"
+                :mood="m"
+                :now="now"
+                :retrying="moodStore.pendingIds.has(String(m.id))"
+                :detail-loading="detailLoadingId === m.id"
+                :deleting="deletingId === m.id"
+                @detail="openDetail"
+                @delete="handleDelete"
+                @retry="handleRetry"
+                @refresh="handleRefresh"
+              />
+            </template>
+
+            <EmptyState
+              v-else-if="!listLoading"
+              key="mood-empty"
+              expression="default"
+              title="还没有心情记录"
+              hint="写下心情并保存后，就能在这里回看。"
+            />
+          </TransitionGroup>
+
+          <div v-if="pages > 1" class="home__pgn">
+            <BasePagination
+              :page-num="pagination.pageNum"
+              :pages="pages"
+              :total="total"
+              @change="handlePageChange"
+            />
+          </div>
+        </section>
       </div>
 
       <MoodDetailDialog
@@ -287,167 +288,131 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.home {
+/* ── 版式：宽屏「主栏 + 侧栏」，窄屏按 hello → compose → rail → timeline 单列 ── */
+.home__layout {
+  display: grid;
+  /* 列宽来源：主栏 680 + 侧栏 300 + 间距 40 ≈ 1020，再留两侧留白后取 1100。
+     侧栏从 compose 行开始跨两行，首卡与书写卡顶边对齐（design-lab 同款视觉）。 */
+  grid-template-columns: minmax(0, 680px) 300px;
+  grid-template-areas:
+    "hello hello"
+    "compose rail"
+    "timeline rail";
+  justify-content: center;
+  column-gap: 40px;
+  row-gap: 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.home__hello { grid-area: hello; }
+.home__compose { grid-area: compose; min-width: 0; }
+.home__timeline { grid-area: timeline; min-width: 0; }
+
+/* 侧栏不做 sticky：卡片总高度可能超过一屏，贴顶会让底部卡片卡在视口外。
+   网格把侧栏放在 compose 行起，首卡自然与书写卡顶边对齐，无需额外 padding 偏移。 */
+.home__rail {
+  grid-area: rail;
+  align-self: start;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
-/* ── 首屏问候：暖奶油渐变 + 漂浮涂鸦 ── */
-.home__hero {
-  position: relative;
-  padding: 28px 32px;
-  background: linear-gradient(135deg, var(--hero-from), var(--hero-to));
-  border-radius: var(--radius-4);
-  overflow: hidden;
+.rail-card {
+  padding: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-sm);
 }
 
-.home__hero-text {
-  position: relative;
-  z-index: 1;
-}
-
-.home__kicker {
-  margin: 0;
+/* ── 问候块 ── */
+.home__date {
   color: var(--brand-deep);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 2px;
+  font-size: var(--fs-sm);
 }
 
-.home__greet {
-  margin: 8px 0 0;
-  font-size: var(--fs-3xl);
-}
-
-.home__greet-dot {
-  margin-left: 4px;
-  color: var(--accent);
+.home__greeting {
+  margin-top: 4px;
   font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 .home__sub {
-  margin: 10px 0 0;
+  margin-top: 4px;
   color: var(--ink-2);
-  font-size: var(--fs-md);
-  line-height: 1.7;
-  max-width: 540px;
 }
 
-.home__hero-doodles {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 280px;
-  height: 100%;
-  pointer-events: none;
+/* ── 时间线 ── */
+.home__timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.hd-1 { position: absolute; top: 10%; right: 60%; }
-.hd-2 { position: absolute; top: 40%; right: 26%; }
-.hd-3 { position: absolute; top: 18%; right: 10%; transform: rotate(15deg); }
-
-/* ── 桌面：书写区(固定列) + 潮汐 + 记录册 ── */
-.home__main {
-  display: grid;
-  grid-template-columns: 400px minmax(0, 1fr);
-  gap: 22px;
-  align-items: start;
-}
-
-.home__compose {
-  grid-column: 1;
-  grid-row: 1 / 3;
+.home__timeline-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   min-width: 0;
-  /* 拉满行高，sticky 的表单才有滚动行程（否则 align-items:start 把它压成内容高，浮不动） */
-  align-self: stretch;
 }
 
-.home__tide {
-  grid-column: 2;
+.home__timeline-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 400;
+}
+
+.home__timeline-count {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+.home__filter {
+  margin-top: 8px;
 }
 
 .home__list {
-  grid-column: 2;
-  min-width: 0;
-}
-
-.home__list-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.home__list-kicker {
-  margin: 0;
-  color: var(--brand-deep);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 2px;
-}
-
-.home__list-title {
-  margin: 4px 0 0;
-  font-size: var(--fs-2xl);
-}
-
-.home__list-body {
-  margin-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  margin-top: 8px;
 }
 
 .home__pgn {
-  margin-top: 20px;
+  margin-top: 16px;
   display: flex;
   justify-content: center;
 }
 
-/* ── ≤1024px：单列堆叠（书写 → 潮汐 → 记录册）。
-      不要半吊子双栏——潮汐卡很短，右栏会空出一大片 ── */
-@media (max-width: 1024px) {
-  .home__main {
-    grid-template-columns: 1fr;
-  }
-
-  .home__compose,
-  .home__tide,
-  .home__list {
-    grid-column: 1;
-    grid-row: auto;
-  }
-
-  .home__hero-doodles { display: none; }
-}
-
-/* ── ≤768px：延续单列，只收字号与间距 ── */
-@media (max-width: 768px) {
-  .home { gap: 18px; }
-
-  .home__hero { padding: 24px; }
-  .home__greet { font-size: var(--fs-2xl); }
-  .home__sub { font-size: var(--fs-sm); }
-
-  .home__list-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+/* ── <1100px：网格放不下两栏，改为单列并把侧栏卡插到书写卡与时间线之间 ── */
+@media (max-width: 1099px) {
+  .home__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "hello"
+      "compose"
+      "rail"
+      "timeline";
+    max-width: 720px;
   }
 }
 
-/* ── 小手机（≤480px）：才退回单列纵向流 ── */
+@media (max-width: 640px) {
+  .home__greeting {
+    font-size: var(--fs-2xl);
+  }
+}
+
 @media (max-width: 480px) {
-  .home__hero { padding: 20px; }
-
-  .home__main { grid-template-columns: 1fr; }
-
-  .home__compose,
-  .home__tide,
-  .home__list {
-    grid-column: 1;
-    grid-row: auto;
+  .home__layout {
+    row-gap: 16px;
+    padding-bottom: 24px;
   }
 }
 </style>

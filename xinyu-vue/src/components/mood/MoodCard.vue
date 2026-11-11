@@ -1,15 +1,15 @@
 <script setup>
-// 心情记录卡片。展示心情类型、时间、内容（3 行截断）和 AI 回复（2 行截断）。
-// 点查看详情触发 @detail，点删除触发 @delete，loading 状态由父级传入。
-import { ref } from 'vue'
+// 心情时间线条目：左侧日期（日 / 星期 / 时分），右侧心情标签、正文（3 行截断）、
+// AI 回复（页边手写批注）或生成状态，以及查看详情 / 删除操作。
+// ≤480px 时批注默认收起为一行开关（aiOpen 为纯展示层局部状态）。
+import { computed, ref } from 'vue'
 import MoodAiStatus from './MoodAiStatus.vue'
-import BaseCard from '../ui/BaseCard.vue'
-import BaseTag from '../ui/BaseTag.vue'
+import MoodTag from './MoodTag.vue'
+import XiaoyaNote from '../ui/XiaoyaNote.vue'
 import BaseButton from '../ui/BaseButton.vue'
-import { moodTone, moodExpression, formatTime } from '../../utils/mood'
-import Xiaoya from '../ui/Xiaoya.vue'
+import { formatTime, isSupportReply } from '../../utils/mood'
 
-defineProps({
+const props = defineProps({
   mood: { type: Object, required: true },
   detailLoading: Boolean,
   deleting: Boolean,
@@ -19,197 +19,179 @@ defineProps({
 
 defineEmits(['detail', 'delete', 'retry', 'refresh'])
 
-// ≤480px 时心屿回复默认收起为一行开关，点开在卡内展开。
-// 纯展示层局部状态；桌面端始终完整显示。
 const aiOpen = ref(false)
+
+const supportReply = computed(() => isSupportReply(props.mood))
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+// createTime 用 new Date 按本地时区解析，与 formatTime 的时区处理保持一致；
+// 解析失败（非法或缺字段）时退回 formatTime 原文展示。
+const parsedTime = computed(() => {
+  const raw = props.mood.createTime
+  if (!raw) return null
+
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+})
+
+function pad(value) {
+  return String(value).padStart(2, '0')
+}
+
+const dayLabel = computed(() => {
+  if (!parsedTime.value) return formatTime(props.mood.createTime)
+  return String(parsedTime.value.getDate())
+})
+
+const weekdayLabel = computed(
+  () => parsedTime.value ? WEEKDAYS[parsedTime.value.getDay()] : ''
+)
+
+const timeLabel = computed(() => {
+  if (!parsedTime.value) return ''
+  return `${pad(parsedTime.value.getHours())}:${pad(parsedTime.value.getMinutes())}`
+})
 </script>
 
 <template>
-  <BaseCard
-    padding="md"
-    hoverable
-    class="mood-card motion-pop-in"
-    :class="`mood-card--${moodTone(mood.moodType)}`"
-  >
-    <div class="mood-card__top">
-      <BaseTag :tone="moodTone(mood.moodType)" variant="soft" size="md">
-        <Xiaoya :expression="moodExpression(mood.moodType)" :size="28" />
-        {{ mood.moodType }}
-      </BaseTag>
-      <span class="mood-card__time">{{ formatTime(mood.createTime) }}</span>
+  <article class="mood-entry">
+    <div class="mood-entry__date">
+      <span class="mood-entry__day">{{ dayLabel }}</span>
+      <span>{{ weekdayLabel }}</span>
+      <span>{{ timeLabel }}</span>
     </div>
 
-    <p class="mood-card__content clamp-3">{{ mood.content }}</p>
+    <div class="mood-entry__body">
+      <MoodTag :mood-type="mood.moodType" :hide-mascot="supportReply" />
 
-    <div v-if="mood.aiReply" class="mood-card__ai" :class="{ 'is-open': aiOpen }">
-      <button
-        type="button"
-        class="mood-card__ai-toggle"
-        :aria-expanded="aiOpen"
-        @click="aiOpen = !aiOpen"
-      >
-        <span class="dot" aria-hidden="true" /> AI 回复
-        <span class="mood-card__ai-caret" aria-hidden="true">
-          {{ aiOpen ? '收起 ▴' : '展开 ▾' }}
-        </span>
-      </button>
-      <p class="mood-card__ai-text clamp-2">
-        {{ mood.aiReply || '暂无 AI 回复' }}
-      </p>
+      <p class="mood-entry__content clamp-3">{{ mood.content }}</p>
+
+      <template v-if="mood.aiReply">
+        <div class="mood-entry__reply" :class="{ 'is-open': aiOpen }">
+          <button
+            type="button"
+            class="mood-entry__reply-toggle"
+            :aria-expanded="aiOpen"
+            @click="aiOpen = !aiOpen"
+          >
+            {{ supportReply ? '心屿的回复' : '小芽的回复' }}
+            <span class="mood-entry__caret" aria-hidden="true">{{ aiOpen ? '收起 ▴' : '展开 ▾' }}</span>
+          </button>
+          <XiaoyaNote class="mood-entry__note" :text="mood.aiReply" :support="supportReply" :clamp="3" />
+        </div>
+      </template>
+
+      <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || deleting"
+        @retry="id => $emit('retry', id)" @refresh="$emit('refresh')" />
+
+      <div class="mood-entry__actions">
+        <BaseButton
+          variant="link"
+          size="sm"
+          :loading="detailLoading"
+          :disabled="deleting"
+          @click="$emit('detail', mood.id)"
+        >查看详情</BaseButton>
+        <BaseButton
+          variant="link"
+          size="sm"
+          :loading="deleting"
+          @click="$emit('delete', mood.id)"
+        >删除</BaseButton>
+      </div>
     </div>
-
-    <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || deleting"
-      @retry="id => $emit('retry', id)" @refresh="$emit('refresh')" />
-
-    <div class="mood-card__actions">
-      <BaseButton
-        variant="soft"
-        size="sm"
-        :loading="detailLoading"
-        :disabled="deleting"
-        @click="$emit('detail', mood.id)"
-      >查看详情</BaseButton>
-      <BaseButton
-        variant="link"
-        size="sm"
-        :loading="deleting"
-        @click="$emit('delete', mood.id)"
-      >删除</BaseButton>
-    </div>
-  </BaseCard>
+  </article>
 </template>
 
 <style scoped>
-/* 左侧心情色水线：让每条记录在手账流里一眼可辨 */
-.mood-card {
-  border-left-width: 3px;
+.mood-entry {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 16px;
+  padding: 18px 0;
+  border-top: 1px dashed var(--line-strong);
 }
 
-.mood-card--joy     { border-left-color: var(--joy); }
-.mood-card--calm    { border-left-color: var(--calm); }
-.mood-card--tension { border-left-color: var(--tension); }
-.mood-card--sad     { border-left-color: var(--sad); }
-.mood-card--tired   { border-left-color: var(--tired); }
-.mood-card--neutral { border-left-color: var(--line-strong); }
-
-.mood-card__top {
+.mood-entry__date {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-}
-
-.mood-card__time {
   color: var(--ink-3);
   font-size: var(--fs-xs);
-  white-space: nowrap;
+  text-align: center;
 }
 
-.mood-card__content {
-  margin: 14px 0;
+.mood-entry__day {
   color: var(--ink-1);
-  line-height: 1.75;
-  font-size: var(--fs-md);
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 400;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
-.mood-card__ai {
-  position: relative;
-  margin-top: 4px;
-  padding: 12px 14px 12px 18px;
-  background: linear-gradient(135deg, var(--accent-soft), var(--bg-soft));
-  border-radius: var(--radius-2);
-  overflow: hidden;
+.mood-entry__body {
+  min-width: 0;
 }
 
-.mood-card__ai::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10%;
-  bottom: 10%;
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
+.mood-entry__content {
+  margin: 8px 0;
+  color: var(--ink-1);
+  font-size: var(--fs-base);
+  line-height: 1.8;
 }
 
-.mood-card__ai-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-bottom: 4px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--accent-ink);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.mood-card__ai-caret {
+/* 桌面端不显示折叠开关，AI 回复直接以页边批注展示 */
+.mood-entry__reply-toggle {
   display: none;
-  margin-left: auto;
-  color: var(--accent);
-  font-weight: 600;
-  letter-spacing: 0;
 }
 
-.dot {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-}
-
-.mood-card__ai-text {
-  margin: 0;
-  color: var(--ink-2);
-  line-height: 1.7;
-  font-size: var(--fs-sm);
-}
-
-.mood-card__actions {
-  margin-top: 14px;
+.mood-entry__actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 4px;
+  margin-top: 8px;
 }
 
-/* ── 小手机（≤480px）：紧凑记录卡，回复默认折叠 ── */
+@media (max-width: 640px) {
+  .mood-entry {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+/* ≤480px：批注默认收起，点开关后在条目内展开 */
 @media (max-width: 480px) {
-  .mood-card__content {
-    margin: 10px 0;
-    -webkit-line-clamp: 2;
-  }
-
-  .mood-card__ai {
-    padding: 10px 12px 10px 16px;
-  }
-
-  .mood-card__ai-toggle {
+  .mood-entry__reply-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
     min-height: 32px;
-    margin-bottom: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--brand-deep);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
   }
 
-  .mood-card__ai-caret {
-    display: inline;
+  .mood-entry__caret {
+    color: var(--ink-3);
+    font-weight: 600;
   }
 
-  .mood-card__ai-text {
+  .mood-entry__reply .mood-entry__note {
     display: none;
   }
 
-  .mood-card__ai.is-open .mood-card__ai-text {
-    display: -webkit-box;
-    margin-top: 6px;
-  }
-
-  .mood-card__actions {
-    margin-top: 10px;
+  .mood-entry__reply.is-open .mood-entry__note {
+    display: block;
   }
 }
 </style>
