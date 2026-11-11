@@ -123,10 +123,11 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 - [x] **第一轮独立评审3A＋3C**：固定SHA／逐文件哈希快照；3A可先预审，3C用户完成后补齐同轮结论。
 - [x] **3D启动停止＋3E三并发**：配置校验→唯一worker且旧进程退出前提→恢复一次→成功后扫描；恢复失败不扫描、worker关闭零恢复／领取，重复事件不注册第二份调度。停止先关领取闸门再清理I/O、等待执行退出。每秒按空槽补领，Java默认3槽、Python单应用进程门禁3；无无限内存待办。至少两用户及屏障证明3条重叠、第4条数据库queued、空槽补领、超时不影响另两槽、槽位／门禁回收和删除／修改交错不回写旧结果。跨实例租约仍1b。
 - [x] **第二轮独立评审3D＋3E**：恢复、停止竞争、资源释放与门禁一致性。
+- [x] **Task3外部复核领取补丁（2026-11-11用户授权落地）**：领取事务以FOR UPDATE SKIP LOCKED选择未锁定任务并保留原CAS，不改表／扫描策略。正式回归先RED复现仅1领取成功，改后定向4项及全后端298项通过（含49真实MySQL、5 JDBC故障、17合成Python HTTP）；另3项失败收尾通过；社区完成后最终同次301项通过，结果见progress。固定6文件独立评审无阻断项，评审未重跑测试。首轮3条running／第4条queued及锁定队头跳过已验；非严格FIFO，目标库兼容性／复制模式上线前核验。未提交／部署，新增SQL待快速带读。
 - [x] **3B冷却（实现／验证／独立预审及主体／代表性测试带读完成）**：每3次失败180秒起翻倍、封顶3600秒，累计attempt不重置；同步SQL／Java／Python去掉永久三次限制。用户手写cooldownSeconds与requeue冷却CAS，Codex脚手架／测试／评审。数据库计算retryAfterSeconds，异常NULL显式0；冷却retry经归属检查后429＋Retry-After，普通错误体无VO，前端GET回查。验证到期／NULL／第4与7次／双击／旧身份／删除与服务重建；跨job请求限频留1b。
 - [x] **3F社区与隐私主体**：同步阶段超时、失败NULL、编辑先清旧回复、新日志无prompt／失败正文、后台按用户2026-11-10修订恢复全站ADMIN的prompt／回复／错误详情查看与全文搜索；主体已带读至后台搜索；权限修订后Java299项全回归＋独立社区库9项通过，相关70项回归及独立评审通过；权限变更与代表性测试已交付快速补读，不等于独立掌握。Python上轮120项通过，本轮未改且未重跑。
 - [x] **3F有限真实模型校准（2026-11-11）**：5次顺序合成社区调用全部成功，耗时1489／1284／1199／1379／1285ms，中位1285ms、最大1489ms；保留2秒连接／15秒读等待，Task4发布／编辑20秒。当前样本不代表稳定P95或总deadline，正式模型质量测评另做。
-- [ ] **Task4联调前风险决策**：社区并行编辑的迟到旧回复仍可能回填；单独提交最小生成版本／条件回写方案供确认，不在3F默默增加字段。
+- [x] **Task4联调前风险决策**：用户2026-11-11确认社区生成标识方案，已实施并完成25项隔离MySQL回归；条件回写覆盖编辑／关闭／ABA／删除／隐藏，互动计数改为指定列更新以免恢复旧快照。具体方案与评审结果见下方，新增段待快速带读。
 - [x] **第三轮独立评审3B＋3F**：固定11文件及delta复核通过；连接池等待超时误分类已RED→GREEN修复，评审未独立运行测试。
 - [x] 相关模块回归完成：Java299项＋独立社区库9项，含真实MySQL／JDBC／合成Python HTTP；Python上轮120项通过且本轮未改。有限真实模型校准已完成；用户已同意本批分批本地提交，Task4前不可部署，不推送。
 
@@ -134,33 +135,54 @@ Java 主路径前缀 `xinyu-backend/src/main/java/com/xinyu/`，测试前缀 `xi
 
 ## Task 4：页面轮询与跨服务闭环验收
 
+### 社区旧生成回写保护：已确认方案（2026-11-11）
+
+目标：社区仍同步生成，但只有当前这次保存所发起的生成能够回写，覆盖改正文／心情／话题、同正文关闭AI及A→B→A。
+
+- 表结构：community_post增加ai_generation_id VARCHAR(36) NULL，无新增索引；每次需要AI的新建／编辑生成独立UUID，关闭AI写NULL。标识与正文、心情、话题及清除旧回复通过同一条INSERT／UPDATE保存，网络调用在其后。相比递增数字版本，生成标识无需额外读回版本或新增领取事务；作用同样是区分生成代次。
+- 回写：在id／user_id／status=1之外核对本次ai_generation_id；0行代表生成已失效，丢弃回复。删除／管理员隐藏时同时清空标识，防止隐藏后恢复又接受旧请求。生成标识仅服务端使用，不接受前端赋值、不加入公开JSON。
+- 影响文件：CommunityPost实体、CommunityPostService、CommunityPostMapper、CommunityReplyService、独立迁移SQL、全新建库sql/xinyu.sql、CommunityAiPersistenceIT及其合成schema。点赞／评论增删只更新对应计数，避免整实体回写旧正文／回复／生成标识。前端请求／返回接口保持不变，不新增任务表、后台执行器或付费调用。
+- 历史与回退：旧行标识默认NULL，已有回复保留；发版前旧进程须退出，避免旧代码绕过条件写入。回退需停用或回退本次生成路径；不能直接退回无保护的旧写入逻辑并称仍有保护，新增可空列可暂留。
+- 验证：真实隔离MySQL＋受控合成供应商，安排旧响应迟到，覆盖正文／心情／话题变更、关闭AI、ABA、删除／隐藏后恢复、当前生成正常成功及历史回复保留；检查旧回复不能覆盖新回复。完成相关回归与固定范围独立评审后带读。
+
+该方案已按用户确认落地，包含新增可空列及业务条件回写；迁移仅在隔离测试库执行。社区全面异步化及并发3仍按后续计划设计。最终后端301项＋独立社区库25项全部通过，共326个不同Java用例；固定9文件独立评审无阻断项，未独立重跑。临时MySQL已关闭；已按用户授权分批本地提交，未推送／部署。
+
+### 前端接入与发布验收
+
+2026-11-11：用户明确转入Task4，当前前端主体与本地合成供应商完整链路已实现并验证；源码尚待集中带读。正式模型效果测评、生产环境／迁移／部署仍单独待办。
+
+- [x] 隐私页面与入口已实现：用户确认运营者姜秋雨、联系邮箱jianggalilieo@gmail.com；登录／注册／全站页脚均可访问/privacy，说明管理员排障访问、AI外发、账号关联与删除保留边界。页面只交付告知，不作为整体合规认证；保留管理员访问审计暂缓、成功DNS TTL在容器化／动态地址部署前补齐的待办。
+
 - [ ] 完整1a发布前完成正式模型效果小基线，按总方案14.1节准备固定样例／评分规则／版本和对照证据；当前工程测试与两次真实链路调用不替代该项。具体付费批次与预算另行确认，不自动增加调用；不挤占当前3C主线。
 
-- [ ] 接入RETRY-001的前端交互：重试POST在途、queued／running、冷却期均防止连续提交；使用后端retryAfterSeconds显示等待，到期只恢复手动入口，不自动生成；刷新／多页面不能绕过后端规则。
+- [x] 接入RETRY-001的前端交互：重试POST在途、queued／running、冷却期均防止连续提交；使用后端retryAfterSeconds显示等待，到期只恢复手动入口，不自动生成；刷新／多页面不能绕过后端规则。
 
 **Interfaces**
 
-- `moodApi.aiJob(id)` / `retryAiJob(id)`分别封装两个任务接口；store消费MoodSaveVO，区分业务保存与后续列表刷新失败。社区createPost/updatePost单次请求timeout=20000ms（待采样校准），不修改Axios全局5000ms。超时不自动重发，提示结果未确认并引导刷新核对；已收到保存成功但刷新失败时单独提示刷新失败。
+- `moodApi.aiJob(id)` / `retryAiJob(id)`分别封装两个任务接口；store消费MoodSaveVO，区分业务保存与后续列表刷新失败。社区createPost/updatePost单次请求timeout=20000ms（5次有限采样已完成，非稳定P95），不修改Axios全局5000ms。超时不自动重发，提示结果未确认并引导刷新核对；已收到保存成功但刷新失败时单独提示刷新失败。
 - `createAiJobPoller({ fetchJob, onUpdate, intervalMs=2000, maxObserveMs=120000, scheduler }) -> { start({ jobId, recordId, contentVersion }), stop() }`；纯 JS 可注入时钟 / 调度器，完成后才安排下一次请求。
 - `onUpdate` 仅在 ID / version / 本地代次均匹配时应用；组件负责可见性、路由 / 登录生命周期及最多 6 个任务的聚合调度。
 
-- [ ] 写 `tests/ai-job-polling.test.js`：延迟请求不重叠、stop 后迟到响应忽略、编辑后旧版本忽略、终态停、网络失败停且不调用 retry、观察 120 秒停而不改服务端状态；双击retry共用pending标记，不插新日记；删除后stop使迟到回包无法复活卡片，来源404停止轮询且不重试/不转为unavailable。
-- [ ] RED：在 `xinyu-vue` 运行 `node --test tests/ai-job-polling.test.js`。
-- [ ] 实现API/store/poller；给社区发布/编辑单独设置20秒等待并校对Axios实际请求选项，保留全局5秒；模拟超时检查“发布结果尚未确认，帖子可能已保存，请先刷新核对”，无自动重发、保留输入，正常成功/失败无回复的公开卡片展示正确。修改首页提示、卡片与详情状态及失败按钮；保留日记 CRUD / 趋势。后台保留全站ADMIN的prompt／回复／错误详情展示，按当前AdminAiReplyVO字段回归；不删除这些UI。保存响应成功后刷新失败单独提示“已保存，列表刷新失败”。
-- [ ] GREEN：`npm test` 与 `npm run build`；浏览器用合成输入实际检查普通完成、关闭 AI、失败 / 重试、修改 / 删除、刷新 / 切换 / 隐藏页面、管理列表，不能仅以 JS 单测代替页面验证。
-- [ ] 加 `tests/stub_provider.py`（仅测试用途）和 `AiReplyContractIT`；启动真实 Python 监听回环端口、以隔离 MySQL 的 Java 应用发 HTTP：保存先返回，GET 查询无生成副作用，随后终态与回复一致，SUPPORT 零供应商调用，空回复失败。stub 用 barrier 控制返回，避免依赖偶然快慢。
-- [ ] 显式运行跨服务测试：终端 A `uv run --directory xinyu-ai python -m tests.stub_provider`；终端 B 为应用配置测试资源和内部 token 后 `uv run --directory xinyu-ai uvicorn app.main:app --host 127.0.0.1 --port 18081`；终端 C 在 backend 运行 `sh ./mvnw '-Dtest=AiReplyContractIT' test`。测试 profile 的供应商 URL 固定本机，拒绝意外访问云端；使用仅本机测试的虚构 token / 资源；测试入口用 env 传配置，不把真实秘密写进命令历史。
-- [ ] 回环测试增加`deleteDuringGenerationDiscardsLateReply`：保存入队、等待供应商stub已接收、软删除、释放返回、回查隔离DB，断言旧结果/新日志均未写入，任务查询/重试不可用，不能靠页面隐藏冒充后端安全。
-- [ ] 回环测试额外验证 Python 不可用 / 资源配置无效仍能保存，慢速上游到时释放 worker 后下一任务可执行；重启时旧 running 失败可见且不自动再付费。记录默认 40 / 50 秒配置与缩短测试时限的区别。
-- [ ] 最终回归：隔离库与测试配置下 `sh ./mvnw test`、显式两项 `*IT`、Vue test / build、Python tests；现有 contextLoads 如缺环境须先准备测试 profile，不能忽略失败后宣称全绿。两仓库 `git diff --check`，更新功能文档的已验 / 未验和启动回退说明。
+- [x] 写 `tests/ai-job-polling.test.js`：延迟请求不重叠、stop 后迟到响应忽略、编辑后旧版本忽略、终态停、网络失败停且不调用 retry、观察 120 秒停而不改服务端状态；双击retry共用pending标记，不插新日记；删除后stop使迟到回包无法复活卡片，来源404停止轮询且不重试/不转为unavailable。
+- [x] RED：在 `xinyu-vue` 运行 `node --test tests/ai-job-polling.test.js`。
+- [x] 实现API/store/poller；给社区发布/编辑单独设置20秒等待并校对Axios实际请求选项，保留全局5秒；模拟超时检查“发布结果尚未确认，帖子可能已保存，请先刷新核对”，无自动重发、保留输入，正常成功/失败无回复的公开卡片展示正确。修改首页提示、卡片与详情状态及失败按钮；保留日记 CRUD / 趋势。后台保留全站ADMIN的prompt／回复／错误详情展示，按当前AdminAiReplyVO字段回归；不删除这些UI。保存响应成功后刷新失败单独提示“已保存，列表刷新失败”。
+- [x] GREEN：`npm test` 与 `npm run build`；浏览器用合成输入实际检查普通完成、关闭 AI、失败 / 重试、修改 / 删除、刷新 / 切换 / 隐藏页面、管理列表，不能仅以 JS 单测代替页面验证。
+- [x] 复用既有tests/stub_provider.py并新增tests/full_stack_server.py（仅测试用途）和AiReplyContractIT；启动真实 Python 监听回环端口、以隔离 MySQL 的 Java 应用发 HTTP：保存先返回，GET 查询无生成副作用，随后终态与回复一致，SUPPORT 零供应商调用，空回复失败。stub 用 barrier 控制返回，避免依赖偶然快慢。
+- [x] 显式跨服务测试：AiReplyContractIT自动启动真实Spring与tests.full_stack_server（Python内部应用及真实HttpProvider，供应商HTTP仅合成响应）。先建显式本机空xinyu_test_库并配置AI_TEST_JDBC_URL／AI_TEST_DB_USER／AI_TEST_DB_PASSWORD，再在backend以Java17执行 `sh ./mvnw -o -Dtest=AiReplyContractIT test`。测试只提取完整schema中的建表语句并执行01迁移，固定所有依赖为回环地址、清空Python子进程环境，不读取.env或付费供应商。
+- [x] 回环测试增加`deleteDuringGenerationDiscardsLateReply`：保存入队、等待供应商stub已接收、软删除、释放返回、回查隔离DB，断言旧结果/新日志均未写入，任务查询/重试不可用，不能靠页面隐藏冒充后端安全。
+- [x] 回环验证Python不可用仍能保存，Python2秒测试预算超时后真实Runtime执行槽归零且后续任务成功；Java仍用生产50秒预算。真实Spring关闭后人为构造遗留running，再次启动恢复为execution_interrupted且不新增供应商调用。旧“资源配置无效”要求随资源门禁移除而废止。
+- [ ] 真实进程kill／重启整链故障演练另做；当前应用重启案例不冒称已执行kill或供应商计费验证。
+- [x] 最终回归：隔离库与测试配置下 `sh ./mvnw test`、显式相关 `*IT`、Vue test / build、Python tests；现有 contextLoads 如缺环境须先准备测试 profile，不能忽略失败后宣称全绿。两仓库 `git diff --check`，更新功能文档的已验 / 未验和启动回退说明。
 
 交付物：本地预设供应商的实际 Java→Python→数据库→Vue 闭环。真实模型、资源可用性与生产环境仍分别待验；付费 / 上线操作继续按用户授权范围执行。
+
+验证证据：Vue27项＋build、Python120项、Java普通及既有IT301项、独立社区库25项、新完整HTTP契约7项，共333个不同Java用例（分3次运行）。前端独立评审3项P2与集成测试2项证据缺口均修复并复审；末次微调复核见progress。浏览器使用实际Vue＋本机Java／Python／临时MySQL，检查普通完成、关闭、失败手动重试与第3次冷却、删除、社区成功／失败无卡片、全站ADMIN搜索及详情、隐私页和320／375px布局。隐藏／登出／最多6项由真实Vue生命周期＋替身GET自动测试验证，不能扩大为所有浏览器网络故障场景已手工验证。性能／效果测评仍未执行；已分批本地提交，未推送／部署。
 
 ## 计划自查与交接
 
 - 覆盖映射：spec数据/状态/修改与软删除事务/retry CAS→任务2；内部服务/风险→任务1；执行/失败/认证与删除后API拒绝→任务3；UI/迟到回包/删除中生成回环→任务4。定期硬清理单列后续专项，不以1a测试冒充完成。
 - 参数与签名：全篇复用同一状态、UTF-16 限制、DTO 关联字段、40 / 50 秒和 2 / 5 / 120 秒口径；公共 API 的响应变化明确同步修改前端。
-- 源码与实测边界：文件路径按当前包结构拟定；所有 RED / GREEN 和 IT 命令都是将来执行，不表示本轮已通过。
+- 源码与实测边界：任务勾选与接续记录表示当前交付状态，规划示例本身不作执行证据；各轮测试及未验证范围以对应实际日志和固定评审快照为准。
 - 代码开工前请用户确认 1a 的范围与接口变更；按根 AGENTS.md 要求确认后实施。本计划不触发提交、推送或部署。
 
 

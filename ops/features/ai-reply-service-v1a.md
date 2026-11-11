@@ -1,6 +1,6 @@
 # 阶段 1a：单实例异步心情回应设计
 
-2026-11-11 · 契约 v1.0设计修订（Task3实现、隔离验收、独立评审及有限社区真实模型校准完成；Task4未完成，不发布） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
+2026-11-11 · 契约 v1.0设计修订（Task3实现、隔离验收、独立评审及有限社区真实模型校准完成；Task4本地实现／合成链路验收完成，待带读与正式效果测评，不发布） · 对应[总方案 v0.3](xinyu-upgrade-master-plan.md)阶段 1a，已获用户授权实施。本文确定接口与验收；[实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)拆执行任务，实际进度见[接续状态](xinyu-next-session.md)。
 
 ## 1. 目标与范围
 
@@ -22,11 +22,15 @@
 
 后续社区异步化（2026-11-09用户要求记录）：社区AI回复后续也采用先保存、后台异步生成，社区执行并发初值3、可配置。该方向已记入总方案第12节，具体执行池／Python门禁及全局额度设计待核验；不改变本1a社区同步范围，不插入Task3／Task4，尚未实现。
 
+社区同步生成代次保护（2026-11-11用户确认）：community_post增加可空ai_generation_id VARCHAR(36)，新建／编辑需要AI时由服务端生成UUID，关闭AI写NULL。标识与内容、心情、话题及清旧回复同条保存，网络调用在其后；成功回写须同时匹配id／user_id／status=1／本次标识，0行则丢弃，不把过期回复覆盖到当前帖子。删除或管理员隐藏同时清空标识，恢复可见性不恢复旧生成资格。每次保存更换标识，覆盖相同内容、话题变更和A→B→A，不靠正文相等推断生成身份；仅服务端使用，不加入公开JSON。点赞／取消点赞／评论增删仅更新对应计数，不能整实体回写旧内容或标识。生成日志仍记录实际模型结果，不表示已发布；不改成后台异步任务。迁移不清除历史回复；部署先停止旧版本及在途生成，避免旧代码绕过条件。
+
 ## 3. 增量数据设计
 
 迁移文件：`sql/migrations/20261107_01_ai_reply_job.sql`。仅增量，不运行 `sql/xinyu.sql` 初始化脚本，不在本轮执行迁移。
 
 模型名长度修正单独使用 `sql/migrations/20261107_02_ai_reply_model_name.sql`：将既有 `ai_reply.model_name` 从 VARCHAR(100) 放宽为 VARCHAR(128)，对齐内部契约及任务元数据。该脚本可独立执行，不依赖任务表迁移；新库初始化定义同步为128。用户已同意本地修正与隔离验证，云端执行须另行明确授权，执行前核对实际表定义与备份；不自动缩列回退。
+
+社区生成标识使用独立迁移 `sql/migrations/20261111_01_community_ai_generation.sql`，只新增可空列，无新增索引、无历史回复清洗。全新建库定义同步；已有库只执行增量脚本，核对列尚不存在并先备份。当前仅在新建隔离测试库执行，不自动迁移业务库；回退可保留该可空列，但退回无条件写入的旧代码将失去保护。
 
 `mood_record` 新增：
 
@@ -71,7 +75,7 @@ worker：读取 queued → CAS queued→running / attempt+1 → 校验当前来�
 
 无变化保存：update锁住本人有效日记后，逐项精确比较moodType、content和enabled；三项均相同则返回当前状态及原jobId，不写来源、不递增版本、不清回复、不失效任务、不创建任务，也不修改update_time。failed仍需独立retry；unavailable不因无变化保存自动补生成。任一项实际变化仍按原更新事务处理。
 
-修改来源的update/delete及提交结果的complete统一先锁日记，再操作job；只修改job的retry见下文CAS例外。update、delete、complete必须在事务生效的连接上先执行SELECT ... FOR UPDATE（按id/user_id锁来源），重新检查status/版本后，再执行只更新指定列的条件UPDATE；锁持有至事务提交或回滚。删除UPDATE的WHERE包含id、user_id、status=1和锁定行的content_version，SET中content_version=content_version+1并写deleted_at；complete使用同样归属/status/版本约束并检查enabled，且不改deleted_at。update只改mood_type/content/ai_reply_enabled/ai_reply及正常修改时间，SQL中content_version+1，WHERE带id/user_id/status=1/预期版本；不写status或deleted_at。随后在同一事务内失效旧未完成job，按开关和容量创建新版本job，失败整体回滚。不能沿用旧update()/delete()无锁selectById后updateById整实体回写；Java进程锁不能替代数据库行锁。claim只执行job的短CAS，不持锁等模型。外部网络调用始终在事务外；每次领取一条，Task3扫描按空闲并发槽位补充，扫描间隔初值1秒；总执行并发受配置上限限制，不建立无限内存任务队列。
+修改来源的update/delete及提交结果的complete统一先锁日记，再操作job；只修改job的retry见下文CAS例外。update、delete、complete必须在事务生效的连接上先执行SELECT ... FOR UPDATE（按id/user_id锁来源），重新检查status/版本后，再执行只更新指定列的条件UPDATE；锁持有至事务提交或回滚。删除UPDATE的WHERE包含id、user_id、status=1和锁定行的content_version，SET中content_version=content_version+1并写deleted_at；complete使用同样归属/status/版本约束并检查enabled，且不改deleted_at。update只改mood_type/content/ai_reply_enabled/ai_reply及正常修改时间，SQL中content_version+1，WHERE带id/user_id/status=1/预期版本；不写status或deleted_at。随后在同一事务内失效旧未完成job，按开关和容量创建新版本job，失败整体回滚。不能沿用旧update()/delete()无锁selectById后updateById整实体回写；Java进程锁不能替代数据库行锁。claim在短事务内以FOR UPDATE SKIP LOCKED选择并锁定最早未锁定的queued日记任务，再执行原CAS；其他领取者跳过已锁任务，没有可领任务则返回空。不保证严格FIFO，行锁仅持有到领取事务提交，不持锁等模型。目标数据库须支持该语法，部署前核验版本与复制模式。外部网络调用始终在事务外；每次领取一条，Task3扫描按空闲并发槽位补充，扫描间隔初值1秒；总执行并发受配置上限限制，不建立无限内存任务队列。
 
 提交还须匹配user_id、target_id、target_version、attempt_count、request_id；最终日记UPDATE的WHERE同时带status=1与content_version=预期版本，enabled=true也必须成立。来源软删除、缺失或版本不匹配时丢弃结果，只把仍属本次执行的未完成job标为superseded；不得写ai_reply日志或succeeded。不要假设软删除会移除job。若删除发生在生成前校验之后，外部调用仍可能执行；删除保证结果不可提交，不承诺供应商停止计算/计费。回复、兼容日志和succeeded在同一事务中；提交失败不显示完成。先提交后删除时，删除清空当前回复并撤销可见性；先删除后提交时，status与版本两道条件均阻止回写。
 
@@ -178,3 +182,11 @@ AiJobVO的3B目标字段只增加retryAfterSeconds，不增加retryAvailableAt�
 验收：纯函数覆盖0／1／2／3／4／6／9／12／15／18／30，真实DB用调整finished_at验证到期边界、NULL、并发retry只入队一次、第4／7次正常领取并提交、旧attempt不能覆盖新attempt、冷却中删除来源返回404、服务重建后资格一致；MVC验证429与Retry-After。两处用户手写：cooldownSeconds和冷却CAS；Codex提供脚手架、RED测试及评审，不提前代写。
 
 参考仍为BullMQ固定提交b18b6ddd3d4e6fe2d8a14d09fb733aea159a5de4的同job重新入队与独立尝试计数思路，不照搬其Redis后端，也不以此证明冷却数值或产品效果。具体调用链及取舍见既有执行记录。
+
+## 11. Task4前端实施与本地验证（2026-11-11）
+
+保存消费MoodSaveVO，排队／生成／成功／失败／关闭／历史／不可用状态在卡片与详情显示；重试仅用户主动触发，POST在途共用pending，冷却到期只恢复入口，失败（含429）后GET回查。单任务GET结束后再延迟2秒，最多观察120秒；页面固定6个复用槽位，隐藏／卸载／登录变化取消请求并隔离迟到结果，不改变后端任务状态。来源／job／版本／本地会话匹配后才应用；查询失败停止观察并提供刷新，不伪造failed。无变化编辑使用aiReplyEnabled还原意愿，不从是否已有正文推断开关。
+
+保存确认与列表／趋势刷新分离；后续刷新失败仍提示已保存，保留保存VO。社区保存独立20秒等待，网络无响应提示结果未确认／先刷新核对，不自动重发、保留输入；其他API仍默认5秒。隐私页由登录／注册／页脚公开访问，使用用户确认的运营者和邮箱，说明管理员排障范围；访问审计仍暂缓。
+
+前端27项＋build、Python120项、Java301项／社区25项／完整HTTP契约7项分批通过；独立评审与浏览器证据见接续及progress。跨服务测试使用真实Spring／鉴权／事务／worker、真实Python HttpProvider、合成供应商HTTP及新隔离MySQL；Python测试预算2秒、Java仍50秒。启动恢复测试为构造遗留running后实际重启应用，未执行真实kill或验证供应商计费。完整1a发布前的正式模型效果测评、生产迁移／环境验收仍未做，不能将软件验收称为已发布或真实质量达标。
