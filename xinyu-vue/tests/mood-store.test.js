@@ -30,6 +30,21 @@ function deferred() {
   return { promise, resolve }
 }
 
+const pad = (value) => String(value).padStart(2, '0')
+const localDay = (year, month, day) => `${year}-${pad(month)}-${pad(day)}`
+
+// 月历查询按本地时区生成当月首末日期；测试用同一规则构造期望值。
+function localMonthRange(year, month) {
+  const lastDay = new Date(year, month, 0).getDate()
+  const monthKey = `${year}-${pad(month)}`
+  return { startDate: `${monthKey}-01`, endDate: `${monthKey}-${pad(lastDay)}` }
+}
+
+function currentYearMonth() {
+  const now = new Date()
+  return { year: now.getFullYear(), month: now.getMonth() + 1 }
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
   globalThis.localStorage = { getItem: () => 'fixture-token', removeItem() {} }
@@ -166,4 +181,51 @@ test('旧retry的回查失败不能给后来编辑的新任务设置错误标记
   waiting.resolve()
   await retry
   assert.equal(store.list[0].observationIssue, null)
+})
+
+test('月历查询按当月首末日期取第一页 200 条并聚合每天最后一条心情', async () => {
+  const { year, month } = currentYearMonth()
+  const range = localMonthRange(year, month)
+  const firstDay = localDay(year, month, 1)
+  let params
+  request.defaults.adapter = async config => {
+    if (config.url !== '/mood/list') {
+      assert.fail(`非预期请求 ${config.url}`)
+    }
+    params = config.params
+    return success(config, { records: [
+      { id: '21', moodType: '平静', createTime: `${firstDay}T10:00:00` },
+      { id: '22', moodType: '开心', createTime: `${firstDay}T20:00:00` }
+    ] })
+  }
+  const store = useMoodStore()
+  const result = await store.fetchMonth(year, month)
+  assert.equal(result.ok, true)
+  assert.equal(params.startDate, range.startDate)
+  assert.equal(params.endDate, range.endDate)
+  assert.equal(params.pageNum, 1)
+  assert.equal(params.pageSize, 200)
+  assert.equal(store.month.days[firstDay], '开心')
+})
+
+test('月历旧回包不能覆盖后发的新查询', async () => {
+  const old = deferred()
+  const { year, month } = currentYearMonth()
+  const firstDay = localDay(year, month, 1)
+  let calls = 0
+  request.defaults.adapter = async config => {
+    const call = ++calls
+    if (call === 1) {
+      await old.promise
+    }
+    const moodType = call === 1 ? '平静' : '开心'
+    return success(config, { records: [{ id: String(call), moodType, createTime: `${firstDay}T09:00:00` }] })
+  }
+  const store = useMoodStore()
+  const first = store.fetchMonth(year, month)
+  const second = store.fetchMonth(year, month)
+  await second
+  old.resolve()
+  await first
+  assert.equal(store.month.days[firstDay], '开心')
 })

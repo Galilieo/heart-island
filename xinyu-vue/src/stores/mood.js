@@ -3,6 +3,29 @@ import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
 import { moodApi } from '../api'
 import { refreshAfterSave } from '../utils/saved-result.js'
+import { groupLatestMoodByDay } from '../utils/mood'
+
+// 月历一次取完当月记录后在前端聚合。后端 /mood/list 没有每页上限
+// （MoodRecordController 只校验 pageSize ≥ 1），这里取 200 条；
+// 单月记录超过 200 条时月历会不完整，后续改按月统计接口补齐。
+const MONTH_PAGE_SIZE = 200
+
+function currentMonth() {
+  const now = new Date()
+  return { year: now.getFullYear(), month: now.getMonth() + 1, days: {} }
+}
+
+// 本地时区的当月首末日期，作为 /mood/list 的日期范围参数；
+// 后端按 [startDate 00:00:00, endDate 23:59:59] 过滤。
+function monthDateRange(year, month) {
+  const pad = (value) => String(value).padStart(2, '0')
+  const monthKey = `${year}-${pad(month)}`
+  const lastDay = new Date(year, month, 0).getDate()
+  return {
+    startDate: `${monthKey}-01`,
+    endDate: `${monthKey}-${pad(lastDay)}`
+  }
+}
 
 export const useMoodStore = defineStore('mood', () => {
   const list = ref([])
@@ -14,6 +37,7 @@ export const useMoodStore = defineStore('mood', () => {
   const filters = reactive({ moodType: '', startDate: '', endDate: '' })
   const pagination = reactive({ pageNum: 1, pageSize: 5 })
   const trend = ref({ total: 0, mainMoodType: '', lastMoodType: '', lastRecordTime: '', moodCounts: [] })
+  const month = ref(currentMonth())
   const retries = new Map()
 
   // 查询代次阻止旧筛选／详情回包覆盖新页面；修订号还隔离查询期间发生的保存和任务更新。
@@ -23,6 +47,7 @@ export const useMoodStore = defineStore('mood', () => {
   let listRequest = 0
   let detailRequest = 0
   let trendRequest = 0
+  let monthRequest = 0
   const same = (a, b) => String(a) === String(b)
 
   function visibleRecords() {
@@ -82,6 +107,37 @@ export const useMoodStore = defineStore('mood', () => {
     return res
   }
 
+  // 月历查询与列表查询共用 /mood/list，按月历请求代次与账号会话隔离：
+  // 旧回包不能覆盖后发的查询结果，切换账号后上一账号的响应直接丢弃。
+  async function fetchMonth(year, monthValue) {
+    const requestId = ++monthRequest
+    const startedSession = session
+    const range = monthDateRange(year, monthValue)
+
+    let res
+    try {
+      res = await moodApi.list({ ...range, pageNum: 1, pageSize: MONTH_PAGE_SIZE })
+    } catch (error) {
+      // 月历只做侧栏展示，失败静默返回，不能抛出未捕获异常影响保存流程。
+      return { ok: false, message: error.userMessage || '本月记录暂未取到' }
+    }
+
+    const current = requestId === monthRequest && startedSession === session
+    if (!res.ok || !res.data || !current) {
+      return res
+    }
+
+    const records = res.data.records || res.data.list || []
+    month.value = { year, month: monthValue, days: groupLatestMoodByDay(records) }
+    return res
+  }
+
+  // 保存成功后单独、静默刷新月历：不放进 refreshAfterSave，
+  // 月历失败不得影响保存结果，也不触发“列表刷新失败”提示。
+  function refreshMonthSilently() {
+    fetchMonth(month.value.year, month.value.month)
+  }
+
   function beginMutation(id) {
     revision++
     if (id != null) {
@@ -114,6 +170,7 @@ export const useMoodStore = defineStore('mood', () => {
     }
     pagination.pageNum = 1
     const refreshFailed = await refreshAfterSave(fetchList, fetchTrend)
+    refreshMonthSilently()
     return { ...res, refreshFailed }
   }
 
@@ -126,6 +183,7 @@ export const useMoodStore = defineStore('mood', () => {
       }
       applySaved(payload, res.data)
       const refreshFailed = await refreshAfterSave(fetchList, fetchTrend)
+      refreshMonthSilently()
       return { ...res, refreshFailed }
     } finally {
       if (startedSession === session) {
@@ -147,6 +205,7 @@ export const useMoodStore = defineStore('mood', () => {
         selected.value = null
       }
       const refreshFailed = await refreshAfterSave(fetchList, fetchTrend)
+      refreshMonthSilently()
       return { ...res, refreshFailed }
     } finally {
       if (startedSession === session) {
@@ -289,12 +348,15 @@ export const useMoodStore = defineStore('mood', () => {
     total.value = 0
     pages.value = 0
     trend.value = { total: 0, mainMoodType: '', lastMoodType: '', lastRecordTime: '', moodCounts: [] }
+    // 月历请求代次一并失效，避免切换账号后旧账号的回包写入新账号的月历。
+    monthRequest++
+    month.value = currentMonth()
     pendingIds.clear()
     retries.clear()
     resetFilters()
   }
 
-  return { list, total, pages, selected, filters, pagination, trend, pendingIds, observationEpoch,
-    fetchList, fetchTrend, add, update, remove, openDetail, closeDetail, fetchJob, applyJob,
+  return { list, total, pages, selected, filters, pagination, trend, month, pendingIds, observationEpoch,
+    fetchList, fetchTrend, fetchMonth, add, update, remove, openDetail, closeDetail, fetchJob, applyJob,
     markObservation, retry, refreshObservation, setFilter, setPage, resetFilters, reset }
 })

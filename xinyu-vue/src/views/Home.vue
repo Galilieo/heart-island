@@ -2,7 +2,7 @@
 // 心情主页。整页只做"组装 + 事件绑定"：
 //   - 顶部：日期 + 问候 + 上次心情提示
 //   - 左栏：MoodForm（写心情）
-//   - 右栏：MoodTrendPanel（侧栏卡片，后续再放月历）
+//   - 右栏：「这一周」MoodTrendPanel + 本月 MoodMonthCalendar
 //   - 时间线：MoodFilterBar + MoodCard 列表 + 分页
 //   - 中心：MoodDetailDialog（查看/编辑详情弹窗）
 // 所有数据/请求逻辑都在 moodStore，本文件不直接调 api 或读 localStorage。
@@ -17,6 +17,7 @@ import MoodForm from '../components/mood/MoodForm.vue'
 import MoodCard from '../components/mood/MoodCard.vue'
 import MoodFilterBar from '../components/mood/MoodFilterBar.vue'
 import MoodTrendPanel from '../components/mood/MoodTrendPanel.vue'
+import MoodMonthCalendar from '../components/mood/MoodMonthCalendar.vue'
 import MoodDetailDialog from '../components/mood/MoodDetailDialog.vue'
 import { useMoodStore } from '../stores/mood'
 import { useUserStore } from '../stores/user'
@@ -31,7 +32,7 @@ const { now } = useMoodPolling(moodStore, userStore)
 const toast = useToast()
 const { confirm } = useConfirm()
 
-const { list, total, pages, selected, filters, pagination, trend } =
+const { list, total, pages, selected, filters, pagination, trend, month } =
   storeToRefs(moodStore)
 
 const moodType = ref('')
@@ -56,6 +57,13 @@ const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '�
 const dateLabel = computed(() => {
   const today = new Date()
   return `${today.getMonth() + 1}月${today.getDate()}日 · ${WEEKDAYS[today.getDay()]}`
+})
+
+// 月历「今天」用本地日期字符串；now 由轮询每秒递增，跨过午夜后会自动换到新日期。
+const todayKey = computed(() => {
+  const date = new Date(now.value || Date.now())
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 })
 
 const todaySubtitle = computed(() => {
@@ -183,6 +191,8 @@ async function handleDelete(id) {
 onMounted(() => {
   doFetchList()
   doFetchTrend()
+  // 月历只影响侧栏展示，失败由 store 静默处理，不阻塞列表与趋势加载。
+  moodStore.fetchMonth(month.value.year, month.value.month)
 })
 </script>
 
@@ -206,10 +216,18 @@ onMounted(() => {
           />
         </section>
 
-        <!-- 侧栏卡容器：4.3 起依次放「这一周」与月历 -->
+        <!-- 侧栏卡容器：依次放「这一周」与本月月历；窄屏时整体插到书写卡与时间线之间 -->
         <aside class="home__rail">
           <section class="rail-card">
             <MoodTrendPanel :trend="trend" />
+          </section>
+          <section class="rail-card">
+            <MoodMonthCalendar
+              :year="month.year"
+              :month="month.month"
+              :days="month.days"
+              :today="todayKey"
+            />
           </section>
         </aside>
 
@@ -400,6 +418,15 @@ onMounted(() => {
       "rail"
       "timeline";
     max-width: 720px;
+  }
+}
+
+/* 平板宽度下两张侧栏卡并排，避免月历在整栏宽度里格子被拉得过大 */
+@media (min-width: 641px) and (max-width: 1099px) {
+  .home__rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
   }
 }
 

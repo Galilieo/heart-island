@@ -51,3 +51,19 @@ test('仅危机流程回复 resultKind 为 SUPPORT 时隐藏小芽', () => {
   assert.equal(mood.isSupportReply(null), false)
   assert.equal(mood.isSupportReply(undefined), false)
 })
+
+test('月历聚合每天最晚一条记录，非法时间跳过且空数组返回空对象', () => {
+  const records = [
+    { createTime: '2026-11-11 20:00:00', moodType: '平静' },
+    { createTime: '2026-11-11 08:00:00', moodType: '开心' },
+    { createTime: '2026-11-10 23:30:00', moodType: '疲惫' },
+    { createTime: '不是时间', moodType: '其他' },
+    { createTime: null, moodType: '其他' }
+  ]
+
+  assert.deepEqual(mood.groupLatestMoodByDay(records), {
+    '2026-11-10': '疲惫',
+    '2026-11-11': '平静'
+  })
+  assert.deepEqual(mood.groupLatestMoodByDay([]), {})
+})

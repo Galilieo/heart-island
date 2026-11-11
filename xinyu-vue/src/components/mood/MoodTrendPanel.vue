@@ -1,10 +1,9 @@
 <script setup>
-// 7 天情绪潮汐。头部是大数字总量，中部按心情维度做竖向「潮汐刻度」
-// （胶囊柱高按当前最大计数等比缩放），底部一行手账式摘要：主旋律 / 最近一次。
-import { computed, ref } from 'vue'
-import BaseCard from '../ui/BaseCard.vue'
-import BaseTag from '../ui/BaseTag.vue'
-import { moodTone, formatTime, MOOD_OPTIONS } from '../../utils/mood'
+// 侧栏「这一周」摘要：主旋律表情 + 按次数比例的配色长条 + 图例。
+// 外层卡片容器（背景、边框、内边距）由首页侧栏提供，本组件只负责卡内内容。
+import { computed } from 'vue'
+import Xiaoya from '../ui/Xiaoya.vue'
+import { moodExpression, moodTone } from '../../utils/mood'
 
 const props = defineProps({
   trend: {
@@ -13,269 +12,161 @@ const props = defineProps({
   }
 })
 
-// ≤480px 时潮汐刻度默认收起为摘要（总量 + 主旋律行），展开后才看柱图。
-// 纯展示层局部状态，不影响任何数据语义。
-const tideOpen = ref(false)
-
-const maxCount = computed(() => {
-  const counts = props.trend?.moodCounts || []
-  return Math.max(1, ...counts.map((c) => c.count || 0))
-})
-
-// 把 moodCounts 按 MOOD_OPTIONS 顺序排
-const orderedCounts = computed(() => {
-  const map = new Map((props.trend?.moodCounts || []).map((c) => [c.moodType, c.count]))
-  return MOOD_OPTIONS.map((opt) => ({
-    moodType: opt.value,
-    count: map.get(opt.value) || 0
-  }))
-})
-
 const hasData = computed(() => (props.trend?.total || 0) > 0)
 
-function barHeight(count) {
-  if (!count) return '4px'
-  return `${Math.max(10, (count / maxCount.value) * 100)}%`
+const total = computed(() => props.trend?.total || 0)
+
+// 只统计出现过的心情，按次数从多到少；长条宽度按各类占总次数的比例计算。
+const segments = computed(() => {
+  const counts = props.trend?.moodCounts || []
+  return counts
+    .filter(item => (item.count || 0) > 0)
+    .sort((left, right) => right.count - left.count)
+})
+
+// 主旋律以接口返回的 mainMoodType 为准，缺失时退回次数最多的一项。
+const topMoodType = computed(() => props.trend?.mainMoodType || segments.value[0]?.moodType || '')
+
+function segmentWidth(count) {
+  if (!total.value) {
+    return '0%'
+  }
+  return `${(count / total.value) * 100}%`
 }
+
+// 长条是视觉表达，汇总信息通过 aria-label 提供给读屏；图例文字本身可读。
+const barLabel = computed(() => {
+  const parts = segments.value.map(item => `${item.moodType} ${item.count} 次`)
+  return `最近 7 天共 ${total.value} 次记录：${parts.join('，')}`
+})
 </script>
 
 <template>
-  <BaseCard padding="md" tone="cream" class="trend">
-    <header class="trend__head">
-      <div>
-        <p class="trend__kicker">最近 7 天</p>
-        <h3 class="trend__title">最近的心情统计</h3>
-      </div>
-      <div v-if="hasData" class="trend__total">
-        <strong>{{ trend.total }}</strong>
-        <span>次记录</span>
-      </div>
-    </header>
+  <section class="week">
+    <h3 class="week__title">这一周</h3>
 
     <template v-if="hasData">
-      <button
-        type="button"
-        class="trend__toggle"
-        :aria-expanded="tideOpen"
-        @click="tideOpen = !tideOpen"
-      >
-        <span>各类心情的记录次数</span>
-        <span class="trend__toggle-caret" aria-hidden="true">
-          {{ tideOpen ? '收起 ▴' : '展开 ▾' }}
-        </span>
-      </button>
-
-      <div
-        class="trend__tide"
-        :class="{ 'is-open': tideOpen }"
-        role="img"
-        :aria-label="`最近 7 天共 ${trend.total} 次记录：` + orderedCounts.map((r) => `${r.moodType} ${r.count} 次`).join('，')"
-      >
-        <div v-for="row in orderedCounts" :key="row.moodType" class="trend__col">
-          <span class="trend__col-count">{{ row.count }}</span>
-          <span class="trend__col-track">
-            <span
-              class="trend__col-bar"
-              :class="[`trend__col-bar--${moodTone(row.moodType)}`, { 'is-zero': !row.count }]"
-              :style="{ height: barHeight(row.count) }"
-            />
-          </span>
-          <span class="trend__col-label">{{ row.moodType }}</span>
-        </div>
+      <div class="week__summary">
+        <Xiaoya :expression="moodExpression(topMoodType)" :size="44" />
+        <p class="week__text">
+          共 <b>{{ total }}</b> 次，「{{ topMoodType }}」最多
+        </p>
       </div>
 
-      <p class="trend__meta">
-        <template v-if="trend.mainMoodType">
-          <span class="trend__meta-label">记得最多</span>
-          <BaseTag :tone="moodTone(trend.mainMoodType)" variant="soft" size="md">
-            {{ trend.mainMoodType }}
-          </BaseTag>
-        </template>
-        <template v-if="trend.lastMoodType">
-          <span class="trend__meta-label">最近一次</span>
-          <BaseTag :tone="moodTone(trend.lastMoodType)" variant="outline" size="md">
-            {{ trend.lastMoodType }}
-          </BaseTag>
-          <span v-if="trend.lastRecordTime" class="trend__meta-time">
-            {{ formatTime(trend.lastRecordTime) }}
-          </span>
-        </template>
-      </p>
+      <div class="week__bar" role="img" :aria-label="barLabel">
+        <span
+          v-for="item in segments"
+          :key="item.moodType"
+          class="week__bar-segment"
+          :class="`tone--${moodTone(item.moodType)}`"
+          :style="{ width: segmentWidth(item.count) }"
+        />
+      </div>
+
+      <ul class="week__legend">
+        <li
+          v-for="item in segments"
+          :key="item.moodType"
+          class="week__legend-item"
+          :class="`tone--${moodTone(item.moodType)}`"
+        >
+          <span class="week__legend-dot" aria-hidden="true" />
+          <span>{{ item.moodType }}</span>
+          <span class="week__legend-count">{{ item.count }}</span>
+        </li>
+      </ul>
     </template>
 
-    <p v-else class="trend__empty">
+    <p v-else class="week__empty">
       最近 7 天还没有记录。记下心情后，可以在这里查看统计。
     </p>
-  </BaseCard>
+  </section>
 </template>
 
 <style scoped>
-.trend__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.trend__kicker {
+.week__title {
   margin: 0;
-  color: var(--sea-deep);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 2px;
-}
-
-.trend__title {
-  margin: 4px 0 0;
-  font-size: var(--fs-xl);
-}
-
-.trend__total {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  color: var(--ink-3);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-}
-
-.trend__total strong {
   font-family: var(--font-display);
-  font-size: 34px;
-  line-height: 1;
-  color: var(--sea-deep);
+  font-size: var(--fs-lg);
+  font-weight: 400;
 }
 
-/* ── 潮汐刻度折叠开关：仅 ≤480px 出现 ── */
-.trend__toggle {
-  display: none;
-}
-
-/* ── 潮汐刻度：竖向胶囊柱 ── */
-.trend__tide {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 16px 6px;
-}
-
-.trend__col {
+.week__summary {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  gap: 12px;
+  margin-top: 12px;
 }
 
-.trend__col-count {
-  font-size: var(--fs-xs);
+.week__text {
+  margin: 0;
   color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
 }
 
-.trend__col-track {
-  height: 72px;
-  width: 16px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-card);
-  box-shadow: inset 0 0 0 1px var(--line);
+.week__text b {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 400;
+  color: var(--brand-deep);
+}
+
+.week__bar {
   display: flex;
-  align-items: flex-end;
+  height: 10px;
+  margin-top: 12px;
   overflow: hidden;
-}
-
-.trend__col-bar {
-  width: 100%;
   border-radius: var(--radius-pill);
-  transition: height var(--t-slow) var(--ease-soft);
+  background: var(--bg-soft);
 }
 
-.trend__col-bar--joy     { background: var(--joy); }
-.trend__col-bar--calm    { background: var(--calm); }
-.trend__col-bar--tension { background: var(--tension); }
-.trend__col-bar--sad     { background: var(--sad); }
-.trend__col-bar--tired   { background: var(--tired); }
-.trend__col-bar--neutral { background: var(--ink-3); }
-.trend__col-bar.is-zero  { opacity: 0.25; }
-
-.trend__col-label {
-  font-size: var(--fs-xs);
-  color: var(--ink-2);
-  line-height: 1;
+.week__bar-segment {
+  height: 100%;
+  background: var(--tone);
 }
 
-/* ── 手账式摘要行 ── */
-.trend__meta {
-  margin: 16px 0 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line-strong);
+.week__legend {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-}
-
-.trend__meta-label {
-  color: var(--ink-3);
+  gap: 6px 12px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
   font-size: var(--fs-xs);
-  letter-spacing: 1px;
 }
 
-.trend__meta-label:not(:first-child) {
-  margin-left: 10px;
+.week__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
-.trend__meta-time {
+.week__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.week__legend-count {
   color: var(--ink-3);
-  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
-.trend__empty {
-  margin: 18px 0 0;
-  padding: 18px;
-  text-align: center;
+.week__empty {
+  margin: 12px 0 0;
   color: var(--ink-3);
   font-size: var(--fs-sm);
-  background: var(--bg-card);
-  border-radius: var(--radius-2);
-  border: 1px dashed var(--line-strong);
+  line-height: 1.7;
 }
 
-@media (max-width: 480px) {
-  .trend__toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    min-height: 40px;
-    margin-top: 14px;
-    padding: 0 12px;
-    border: 1px dashed var(--line-strong);
-    border-radius: var(--radius-2);
-    background: var(--bg-card);
-    color: var(--ink-2);
-    font-size: var(--fs-xs);
-    font-weight: 700;
-    letter-spacing: 1px;
-    cursor: pointer;
-  }
-
-  .trend__toggle-caret {
-    color: var(--ink-3);
-    font-weight: 600;
-  }
-
-  .trend__tide {
-    display: none;
-  }
-
-  .trend__tide.is-open {
-    display: grid;
-    gap: 14px 4px;
-  }
-
-  .trend__col-track { width: 14px; height: 64px; }
-  .trend__col-label { font-size: 11px; }
-}
+/* 心情分组 → tokens.css 的配色变量；长条与图例色点统一读 var(--tone)。 */
+.tone--joy { --tone: var(--joy); }
+.tone--calm { --tone: var(--calm); }
+.tone--tension { --tone: var(--tension); }
+.tone--sad { --tone: var(--sad); }
+.tone--tired { --tone: var(--tired); }
+.tone--neutral { --tone: var(--brand); }
 </style>

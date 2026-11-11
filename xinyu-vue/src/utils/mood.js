@@ -74,3 +74,34 @@ export const MOOD_DEFAULT_HINT = '选一个最接近的，写几句就好。'
 export function isSupportReply(record) {
   return record?.resultKind === 'SUPPORT'
 }
+
+// 本地时区日期键（YYYY-MM-DD）；无法解析的时间返回空串，与 formatTime 使用同一解析方式。
+function localDayKey(time) {
+  if (!time) return ''
+  const d = new Date(time)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// 月历着色用：按本地日期聚合记录，每天取 createTime 最晚一条的心情。
+// 输入为心情记录数组，输出 { 'yyyy-mm-dd': moodType }；时间无法解析的记录与空数组都跳过。
+export function groupLatestMoodByDay(records) {
+  const latestTimeByDay = {}
+  const moodByDay = {}
+  if (!Array.isArray(records)) return moodByDay
+
+  for (const record of records) {
+    const day = localDayKey(record?.createTime)
+    if (!day) continue
+
+    const createTime = new Date(record.createTime).getTime()
+    const latestTime = latestTimeByDay[day]
+    if (latestTime !== undefined && latestTime >= createTime) continue
+
+    latestTimeByDay[day] = createTime
+    moodByDay[day] = record.moodType
+  }
+
+  return moodByDay
+}
