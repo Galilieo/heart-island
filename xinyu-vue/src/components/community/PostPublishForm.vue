@@ -87,7 +87,7 @@ defineExpose({ resetAfterSuccess })
     />
 
     <div class="publish__foot">
-      <BaseSwitch v-model="needAiReply" label="需要 AI 回复" :disabled="submitting" />
+      <BaseSwitch v-model="needAiReply" label="让小芽回复（AI 生成）" :disabled="submitting" />
       <BaseButton
         variant="primary"
         :loading="submitting"

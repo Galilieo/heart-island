@@ -89,7 +89,7 @@ function close() {
         placeholder="重新写一下你想说的"
       />
       <div class="ped__options">
-        <BaseSwitch v-model="needAiReply" label="需要 AI 回复" :disabled="saving" />
+        <BaseSwitch v-model="needAiReply" label="让小芽回复（AI 生成）" :disabled="saving" />
       </div>
     </div>
 

@@ -1,19 +1,17 @@
 <script setup>
-// 社区帖子列表页。
-//   - 顶部 hero + 话题胶囊筛选（TopicFilter）
-//   - 发帖走弹窗（BaseDialog + PostPublishForm），点「+ 发布」打开
-//   - 帖子卡列表 + 全部/我的切换
-// 点卡片跳详情页；点赞/收藏在卡片上原地完成（走 communityStore 的乐观更新）。
+// 社区帖子列表页，与首页同一套手账版式：
+//   - 页头：标题 + 说明，右侧主按钮「写一篇」打开发帖弹窗
+//   - 侧栏（≥1100px）：话题卡 + 社区约定卡；窄屏排在页头之后、列表之前
+//   - 列表：当前话题名 + 最新/最热、全部/我的范围按钮 + 帖子卡
+// 点卡片跳详情页；抱抱/收藏在卡片上原地完成（走 communityStore 的乐观更新）。
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
 import BaseDialog from '../components/ui/BaseDialog.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
-import Doodle from '../components/ui/Doodle.vue'
 import TopicFilter from '../components/community/TopicFilter.vue'
 import PostCard from '../components/community/PostCard.vue'
 import PostPublishForm from '../components/community/PostPublishForm.vue'
@@ -99,117 +97,105 @@ onMounted(async () => {
 
 <template>
   <AppShell>
-    <div class="container post-page">
-      <header class="post-page__hero">
-        <div>
-          <p class="post-page__kicker">匿名社区</p>
-          <h1 class="post-page__title">大家最近怎么样</h1>
-          <p class="post-page__sub">
-            聊聊日常、说说烦恼，也听听别人的故事。
-          </p>
-        </div>
-        <div class="post-page__hero-doodles" aria-hidden="true">
-          <Doodle name="leaf"  :size="48" color="rgba(155,193,188,0.6)"  class="pd-1" />
-          <Doodle name="cloud" :size="60" color="rgba(111,169,164,0.45)" class="pd-2" />
-          <Doodle name="star"  :size="32" color="rgba(217,140,122,0.55)" class="pd-3" />
-        </div>
-      </header>
+    <div class="container">
+      <div class="post-layout">
+        <header class="post-head">
+          <div class="post-head__lead">
+            <h1 class="post-head__title">大家最近怎么样</h1>
+            <p class="post-head__sub">帖子都以「匿名岛民」展示，聊聊近况，也请尊重不同的感受。</p>
+          </div>
+          <BaseButton variant="primary" class="post-head__cta" @click="showPublish = true">
+            写一篇
+          </BaseButton>
+        </header>
 
-      <div class="post-page__body">
-        <aside class="post-page__rail">
-          <BaseCard padding="md" class="post-page__filter">
-            <header class="post-page__filter-head">
-              <div>
-                <p class="post-page__kicker post-page__kicker--inline">话题</p>
-                <h3 class="post-page__filter-title">想聊什么？</h3>
-              </div>
-              <BaseButton
-                variant="primary"
-                size="sm"
-                @click="showPublish = true"
-              >
-                + 发布
-              </BaseButton>
-            </header>
+        <!-- 侧栏卡：话题 + 社区约定；窄屏时整体插到页头与列表之间，不做 sticky -->
+        <aside class="post-rail">
+          <section class="rail-card">
+            <h3 class="rail-card__title">话题</h3>
             <TopicFilter
+              vertical
               :topics="topics"
               :selected-topic-id="filters.topicId"
               @select="selectTopic"
             />
-          </BaseCard>
+          </section>
+          <section class="rail-card">
+            <h3 class="rail-card__title">社区约定</h3>
+            <ul class="post-rules">
+              <li>所有人都以「匿名岛民」出现，不打听、不公开他人身份。</li>
+              <li>可以不同意，但请好好说话。</li>
+              <li>如果你或别人正处于危险中，请立即联系身边的人或当地急救。</li>
+            </ul>
+          </section>
         </aside>
 
-        <section class="post-page__content">
-      <BaseCard padding="md">
-        <header class="post-page__list-head">
-          <div>
-            <p class="post-page__kicker">帖子</p>
-            <h2 class="post-page__list-title">{{ selectedTopicName }}</h2>
-          </div>
-          <div class="post-page__controls">
-            <div class="post-page__scope">
-              <button
-                type="button"
-                class="scope-chip motion-press"
-                :class="{ 'is-active': filters.sort === 'latest' }"
-                @click="setSort('latest')"
-              >最新</button>
-              <button
-                type="button"
-                class="scope-chip motion-press"
-                :class="{ 'is-active': filters.sort === 'hot' }"
-                @click="setSort('hot')"
-              >最热</button>
-            </div>
-            <div class="post-page__scope">
-              <button
-                type="button"
-                class="scope-chip motion-press"
-                :class="{ 'is-active': !filters.mine }"
-                @click="setScope(false)"
-              >全部</button>
-              <button
-                type="button"
-                class="scope-chip motion-press"
-                :class="{ 'is-active': filters.mine }"
-                @click="setScope(true)"
-              >我的</button>
+        <section class="post-listing">
+          <div class="post-toolbar">
+            <h2 class="post-toolbar__topic">{{ selectedTopicName }}</h2>
+            <div class="post-toolbar__groups">
+              <div class="post-range" role="group" aria-label="排序方式">
+                <button
+                  type="button"
+                  class="post-range__btn"
+                  :class="{ 'is-on': filters.sort === 'latest' }"
+                  @click="setSort('latest')"
+                >最新</button>
+                <button
+                  type="button"
+                  class="post-range__btn"
+                  :class="{ 'is-on': filters.sort === 'hot' }"
+                  @click="setSort('hot')"
+                >最热</button>
+              </div>
+              <div class="post-range" role="group" aria-label="帖子范围">
+                <button
+                  type="button"
+                  class="post-range__btn"
+                  :class="{ 'is-on': !filters.mine }"
+                  @click="setScope(false)"
+                >全部</button>
+                <button
+                  type="button"
+                  class="post-range__btn"
+                  :class="{ 'is-on': filters.mine }"
+                  @click="setScope(true)"
+                >我的</button>
+              </div>
             </div>
           </div>
-        </header>
 
-        <TransitionGroup name="motion-list" tag="div" class="post-page__list motion-list">
-          <template v-if="postsLoading && !posts.length">
-            <SkeletonCard v-for="i in 3" :key="`post-skeleton-${i}`" avatar rows="3" />
-          </template>
+          <TransitionGroup name="motion-list" tag="div" class="post-list motion-list">
+            <template v-if="postsLoading && !posts.length">
+              <SkeletonCard v-for="i in 3" :key="`post-skeleton-${i}`" rows="3" />
+            </template>
 
-          <template v-else-if="posts.length">
-            <PostCard
-              v-for="p in posts"
-              :key="p.id"
-              :post="p"
-              :topics="topics"
-              :login-user-id="userStore.loginUser?.id"
-              variant="card"
-              @open="openDetail"
-              @toggle-like="handleLike"
-              @toggle-favorite="handleFavorite"
-            />
-          </template>
+            <template v-else-if="posts.length">
+              <PostCard
+                v-for="p in posts"
+                :key="p.id"
+                :post="p"
+                :topics="topics"
+                :login-user-id="userStore.loginUser?.id"
+                variant="card"
+                @open="openDetail"
+                @toggle-like="handleLike"
+                @toggle-favorite="handleFavorite"
+              />
+            </template>
 
-          <EmptyState
-            v-else-if="!postsLoading"
-            key="post-empty"
-            expression="default"
-            title="这里还没有帖子"
-            hint="换个话题试试，或者点上面的「发布」写下你想说的。"
-          >
-            <BaseButton variant="soft" size="sm" @click="showPublish = true">
-              我来写第一条
-            </BaseButton>
-          </EmptyState>
-        </TransitionGroup>
-      </BaseCard>
+            <EmptyState
+              v-else-if="!postsLoading"
+              key="post-empty"
+              expression="default"
+              title="这里还没有帖子"
+              hint="换个话题看看，或者写下第一篇。"
+            >
+              <BaseButton variant="soft" size="sm" @click="showPublish = true">
+                写一篇
+              </BaseButton>
+            </EmptyState>
+          </TransitionGroup>
         </section>
       </div>
 
@@ -232,227 +218,193 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.post-page {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-/* ── 杂志式双栏：左栏话题/发布（吸附），右栏信息流 ── */
-.post-page__body {
+/* ── 版式：与首页相同的「主栏 + 侧栏」网格，侧栏不吸附、不限高 ── */
+.post-layout {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
+  /* 列宽来源同首页：主栏 680 + 侧栏 300 + 间距 40 ≈ 1020，再留两侧留白后取 1100 */
+  grid-template-columns: minmax(0, 680px) 300px;
+  grid-template-areas:
+    "head rail"
+    "list rail";
+  justify-content: center;
+  column-gap: 40px;
+  row-gap: 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-bottom: 40px;
 }
 
-.post-page__rail {
-  position: sticky;
-  top: 88px;
+.post-head { grid-area: head; min-width: 0; }
+
+.post-listing { grid-area: list; min-width: 0; }
+
+.post-rail {
+  grid-area: rail;
+  align-self: start;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  min-width: 0;
-  /* 关键：rail 吸附后内容若高于视口，发布表单下半截会永远滚不到。
-     限高 + 内部滚动，保证表单任何部分都够得着。 */
-  max-height: calc(100dvh - 104px);
-  overflow-y: auto;
-  scrollbar-width: thin;
+  gap: 16px;
 }
 
-/* 桌面 rail：话题竖向整行，更像稳定的导航栏 */
-.post-page__rail :deep(.topics) {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-}
-
-.post-page__rail :deep(.topic-chip) {
-  width: 100%;
-  justify-content: flex-start;
-  height: 40px;
-  padding: 0 16px;
-}
-
-.post-page__content {
-  min-width: 0;
-}
-
-.post-page__hero {
-  position: relative;
-  padding: 28px 32px;
-  background: linear-gradient(135deg, var(--brand-soft), var(--bg-soft));
-  border-radius: var(--radius-4);
-  overflow: hidden;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-}
-
-.post-page__kicker {
-  margin: 0;
-  color: var(--brand-deep);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 2px;
-}
-
-.post-page__kicker--inline { margin-bottom: 2px; }
-
-.post-page__title {
-  margin: 8px 0 0;
-  font-size: var(--fs-3xl);
-}
-
-.post-page__sub {
-  margin: 10px 0 0;
-  color: var(--ink-2);
-  font-size: var(--fs-md);
-  line-height: 1.7;
-  max-width: 460px;
-}
-
-.post-page__hero-doodles {
-  position: relative;
-  width: 220px;
-  height: 100px;
-}
-
-.pd-1 { position: absolute; top: 10%;  left: 8%; }
-.pd-2 { position: absolute; top: 36%;  left: 38%; }
-.pd-3 { position: absolute; bottom: 10%; right: 12%; }
-
-.post-page__filter-head,
-.post-page__list-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.post-page__filter-title {
-  margin: 4px 0 0;
-  font-size: var(--fs-lg);
-}
-
-.post-page__list-title {
-  margin: 4px 0 0;
-  font-size: var(--fs-xl);
-}
-
-.post-page__controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.post-page__scope {
-  display: flex;
-  gap: 6px;
-  background: var(--bg-soft);
-  padding: 4px;
-  border-radius: var(--radius-pill);
-}
-
-.scope-chip {
-  height: 28px;
-  padding: 0 14px;
-  border: none;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: var(--radius-pill);
-  transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft),
-    box-shadow var(--t-fast) var(--ease-soft),
-    transform var(--t-fast) var(--ease-soft);
-}
-
-.scope-chip.is-active {
+.rail-card {
+  padding: 18px;
   background: var(--bg-card);
-  color: var(--brand-deep);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-3);
   box-shadow: var(--shadow-sm);
 }
 
-.scope-chip:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
+.rail-card__title {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 400;
 }
 
-.post-page__list {
+.post-rules {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* ── 页头：标题 + 说明，右侧「写一篇」 ── */
+.post-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.post-head__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.post-head__sub {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
+/* ── 列表工具条：当前话题名 + 排序 / 范围按钮 ── */
+.post-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--line-strong);
+}
+
+.post-toolbar__topic {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 400;
+}
+
+.post-toolbar__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.post-range {
+  display: flex;
+  gap: 4px;
+}
+
+/* 范围按钮样式同首页 MoodFilterBar：无边框、选中品牌柔底 */
+.post-range__btn {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-soft),
+    color var(--t-fast) var(--ease-soft);
+}
+
+.post-range__btn:not(.is-on):hover {
+  background: var(--bg-soft);
+  color: var(--ink-1);
+}
+
+.post-range__btn.is-on {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 700;
+}
+
+.post-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  margin-top: 16px;
 }
 
-@media (max-width: 1024px) {
-  .post-page__body {
-    grid-template-columns: 1fr;
-  }
-  .post-page__rail {
-    position: static;
-    /* 堆叠布局不需要限高内滚 */
-    max-height: none;
-    overflow: visible;
-  }
-
-  /* 回到横向换行：rail 不再是侧栏，话题全部可见可点 */
-  .post-page__rail :deep(.topics) {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-  .post-page__rail :deep(.topic-chip) {
-    width: auto;
-    height: 34px;
-    padding: 0 14px;
+/* ── <1100px：放不下两栏，单列，侧栏插到页头与列表之间 ── */
+@media (max-width: 1099px) {
+  .post-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "rail"
+      "list";
+    max-width: 720px;
   }
 }
 
+/* 平板宽度下两张侧栏卡并排（同首页做法） */
+@media (min-width: 641px) and (max-width: 1099px) {
+  .post-rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+/* 触控目标补足到 44px（话题胶囊在 TopicFilter 内处理） */
 @media (max-width: 768px) {
-  .post-page__hero-doodles { display: none; }
-  .post-page__hero {
-    padding: 24px;
-  }
-  .post-page__title { font-size: var(--fs-2xl); }
-
-  /* 手机：话题区收紧内边距；chips 自动换行、全部可见（见 TopicFilter） */
-  .post-page__filter :deep(.card__body) {
-    padding: 14px 16px;
-  }
-  .post-page__filter-head {
-    margin-bottom: 10px;
-  }
-  .post-page__filter-title {
-    font-size: var(--fs-md);
-  }
-  .post-page__rail :deep(.topic-chip) {
-    height: 44px;
-  }
-  .scope-chip {
+  .post-range__btn {
     min-height: 44px;
-    padding: 0 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .post-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .post-head__title {
+    font-size: var(--fs-2xl);
+  }
+
+  .post-head__cta {
+    width: 100%;
   }
 }
 
 @media (max-width: 480px) {
-  .post-page__hero { padding: 20px; }
-  .post-page__list-head {
+  .post-layout {
+    row-gap: 16px;
+    padding-bottom: 24px;
+  }
+
+  .post-toolbar {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
-  }
-  .post-page__controls {
-    justify-content: flex-start;
-  }
-  /* 手机保持头部单行：标题 + 发布按钮同行，不再纵向堆叠 */
-  .post-page__filter-head {
-    flex-direction: row;
-    align-items: center;
   }
 }
 </style>
