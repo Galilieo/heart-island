@@ -20,9 +20,13 @@ import com.xinyu.vo.AdminPostVO;
 import com.xinyu.entity.Topic;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.dto.AiReplyResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 
 @Service
 public class CommunityPostService {
+    private static final Logger logger = LoggerFactory.getLogger(CommunityPostService.class);
 
     @Autowired
     private CommunityPostMapper communityPostMapper;
@@ -253,19 +257,23 @@ public class CommunityPostService {
         post.setTopicId(dto.getTopicId());
         post.setMoodType(dto.getMoodType().trim());
         post.setContent(dto.getContent().trim());
+        post.setAiReply(null);
 
-        int rows = communityPostMapper.updateById(post);
+        // 编辑与清旧回复是同一条UPDATE，必须在事务外的网络请求之前落库。
+        // 只更新编辑字段，不回写读取时的点赞数、状态等快照；NULL不能交给updateById忽略。
+        UpdateWrapper<CommunityPost> edit = new UpdateWrapper<>();
+        edit.eq("id", post.getId()).eq("user_id", userId).eq("status", 1);
+        edit.set("topic_id", post.getTopicId());
+        edit.set("mood_type", post.getMoodType());
+        edit.set("content", post.getContent());
+        edit.set("ai_reply", null);
+        int rows = communityPostMapper.update(null, edit);
         if (rows <= 0) {
             return false;
         }
 
         if (Boolean.FALSE.equals(dto.getNeedAiReply())) {
-            // 用户选择不要 AI 回复：清掉已有回复，不重新生成、不写日志
-            UpdateWrapper<CommunityPost> clearReply = new UpdateWrapper<>();
-            clearReply.eq("id", post.getId());
-            clearReply.set("ai_reply", null);
-            communityPostMapper.update(null, clearReply);
-            post.setAiReply(null);
+            // 旧回复已经清除；不生成，也不写调用日志。
             return true;
         }
 
@@ -400,9 +408,8 @@ public class CommunityPostService {
     }
 
     /**
-     * 为指定帖子生成 AI 回复并回写到 post.aiReply，
-     * 同时通过 AiReplyLogService 写一行日志。
-     * 失败时使用兜底文案，不抛异常，不阻断主流程。
+     * 已保存帖子在请求线程中同步生成，网络期间不持有数据库事务。
+     * 只发布成功正文；失败保持NULL。回复回写／日志失败不改变已保存帖子的结果。
      */
     private void attachAiReply(CommunityPost post) {
         String topicName = null;
@@ -414,13 +421,23 @@ public class CommunityPostService {
         AiReplyResult result = aiReplyService.generateReplyForPost(
                 topicName, post.getMoodType(), post.getContent());
 
-        post.setAiReply(result.getReplyContent());
+        if (Boolean.TRUE.equals(result.getSuccess())) {
+            UpdateWrapper<CommunityPost> reply = new UpdateWrapper<>();
+            reply.eq("id", post.getId()).eq("user_id", post.getUserId()).eq("status", 1);
+            reply.set("ai_reply", result.getReplyContent());
+            try {
+                if (communityPostMapper.update(null, reply) > 0) {
+                    post.setAiReply(result.getReplyContent());
+                }
+            } catch (DataAccessException problem) {
+                logger.warn("社区AI回复回写失败 postId={} code=internal_error", post.getId());
+            }
+        }
 
-        UpdateWrapper<CommunityPost> updateWrapper = new UpdateWrapper<>();
-        updateWrapper.eq("id", post.getId());
-        updateWrapper.set("ai_reply", result.getReplyContent());
-        communityPostMapper.update(null, updateWrapper);
-
-        aiReplyLogService.savePostReply(post.getUserId(), post.getId(), result);
+        try {
+            aiReplyLogService.savePostReply(post.getUserId(), post.getId(), result);
+        } catch (DataAccessException problem) {
+            logger.warn("社区AI调用日志写入失败 postId={} code=internal_error", post.getId());
+        }
     }
 }
