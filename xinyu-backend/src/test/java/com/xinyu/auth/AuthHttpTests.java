@@ -6,6 +6,8 @@ import com.xinyu.config.AuthWebConfig;
 import com.xinyu.config.CorsConfig;
 import com.xinyu.config.JacksonConfig;
 import com.xinyu.vo.AiJobVO;
+import com.xinyu.vo.AdminAiReplyVO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import com.xinyu.entity.User;
@@ -24,8 +26,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Date;
+import java.util.List;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -40,6 +44,7 @@ class AuthHttpTests {
     @Autowired JwtUtil jwtUtil;
     @Autowired AiJobService jobs;
     @Autowired MoodRecordService moods;
+    @Autowired AiReplyLogService aiLogs;
     @MockitoBean UserService userService;
 
     private String memberToken;
@@ -115,6 +120,45 @@ class AuthHttpTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
         mvc.perform(get("/admin/user/page").header("token", adminToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void globalAdminAiPageKeepsPaginationAndReturnsStoredDiagnosticFields() throws Exception {
+        var page = new Page<AdminAiReplyVO>(2, 1, 3);
+        page.setRecords(List.of(new AdminAiReplyVO(
+                901L, 11L, "POST", 12L, "合成提示词", "合成回复", "synthetic-model",
+                0, "原始合成报错详情", null)));
+        when(aiLogs.pageAdminAiReplies(11L, "POST", 0, "synthetic-model", 2L, 1L)).thenReturn(page);
+
+        mvc.perform(get("/admin/ai-replies/page").header("token", adminToken)
+                        .param("userId", "11").param("targetType", "POST").param("status", "0")
+                        .param("keyword", "synthetic-model").param("pageNum", "2").param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(3))
+                .andExpect(jsonPath("$.data.current").value(2))
+                .andExpect(jsonPath("$.data.records[0].id").value("901"))
+                .andExpect(jsonPath("$.data.records[0].prompt").value("合成提示词"))
+                .andExpect(jsonPath("$.data.records[0].replyContent").value("合成回复"))
+                .andExpect(jsonPath("$.data.records[0].errorMessage").value("原始合成报错详情"));
+    }
+
+    @Test
+    void memberCannotGainDiagnosticAccessThroughAdminQueryParameters() throws Exception {
+        mvc.perform(get("/admin/ai-replies/page").header("token", memberToken)
+                        .param("userId", "22").param("role", "ADMIN").param("keyword", "%"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(403))
+                .andExpect(jsonPath("$.data").doesNotExist());
+        verifyNoInteractions(aiLogs);
+    }
+
+    @Test
+    void disabledAdminCannotReadDiagnosticFields() throws Exception {
+        when(userService.getById(22L)).thenReturn(user(22L, "ADMIN", 0));
+        mvc.perform(get("/admin/ai-replies/page").header("token", adminToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.data").doesNotExist());
+        verifyNoInteractions(aiLogs);
     }
 
     @Test

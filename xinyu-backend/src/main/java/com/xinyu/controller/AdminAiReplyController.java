@@ -3,7 +3,7 @@ package com.xinyu.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.common.Result;
-import com.xinyu.entity.AiReply;
+import com.xinyu.vo.AdminAiReplyVO;
 import com.xinyu.service.AiReplyLogService;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
@@ -28,7 +28,7 @@ public class AdminAiReplyController {
     private JwtUtil jwtUtil;
 
     @GetMapping("/page")
-    public Result<Page<AiReply>> page(@RequestHeader(value = "token", required = false) String token,
+    public Result<Page<AdminAiReplyVO>> page(@RequestHeader(value = "token", required = false) String token,
                                       @RequestParam(required = false) Long userId,
                                       @RequestParam(required = false) String targetType,
                                       @RequestParam(required = false) Integer status,
@@ -41,7 +41,7 @@ public class AdminAiReplyController {
             return Result.error("权限不足");
         }
 
-        Page<AiReply> page = aiReplyLogService.pageAdminAiReplies(
+        Page<AdminAiReplyVO> page = aiReplyLogService.pageAdminAiReplies(
                 userId,
                 targetType,
                 status,
