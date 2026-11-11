@@ -13,7 +13,7 @@ import BaseButton from '../components/ui/BaseButton.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import PostCard from '../components/community/PostCard.vue'
-import PostAiReply from '../components/community/PostAiReply.vue'
+import XiaoyaNote from '../components/ui/XiaoyaNote.vue'
 import PostReplyForm from '../components/community/PostReplyForm.vue'
 import PostReplyList from '../components/community/PostReplyList.vue'
 import PostEditDialog from '../components/community/PostEditDialog.vue'
@@ -180,7 +180,11 @@ onMounted(async () => {
           @delete="handleDeletePost"
         />
 
-        <PostAiReply v-if="currentPost.aiReply" :reply="currentPost.aiReply" />
+        <!-- AI 批注统一用小芽「页边手写」样式；提示语来自原 PostAiReply，不能丢 -->
+        <div v-if="currentPost.aiReply" class="detail__note">
+          <XiaoyaNote :text="currentPost.aiReply" />
+          <p class="detail__note-hint">这条回复由 AI 自动生成，不代表平台立场</p>
+        </div>
 
         <PostReplyForm
           ref="replyFormRef"
@@ -251,5 +255,11 @@ onMounted(async () => {
 .detail__back:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
+}
+
+.detail__note-hint {
+  margin: 6px 0 0 16px;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
 }
 </style>

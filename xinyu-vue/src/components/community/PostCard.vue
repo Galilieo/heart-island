@@ -1,13 +1,14 @@
 <script setup>
 // 帖子卡。两种 variant：
-//   - card：列表中使用，3 行截断，整卡可点跳详情
+//   - card：列表中使用，3 行截断，整卡可点跳详情，小芽批注截 2 行
 //   - detail：详情页使用，全文展示 + 楼主才显示的编辑/删除
-// 点赞 / 收藏 / 编辑 / 删除都只发事件，逻辑在父级走 communityStore。
+// 抱抱 / 收藏 / 编辑 / 删除都只发事件，逻辑在父级走 communityStore
+// （前台文案叫「抱抱」，事件名与字段沿用 like / liked / likeCount）。
 import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
-import avatarUrl from '../../assets/xiaoya/xinyu-avatar.svg'
-import BaseTag from '../ui/BaseTag.vue'
-import { moodTone, formatTime } from '../../utils/mood'
+import MoodTag from '../mood/MoodTag.vue'
+import XiaoyaNote from '../ui/XiaoyaNote.vue'
+import { formatTime } from '../../utils/mood'
 
 const props = defineProps({
   post: { type: Object, required: true },
@@ -34,6 +35,12 @@ const authorName = computed(() => {
 const isOwner = computed(
   () => props.loginUserId && props.post.userId === props.loginUserId
 )
+
+// 有数量时统一写「抱抱 N」，无数量按是否已抱抱区分
+const likeLabel = computed(() => {
+  if (props.post.likeCount) return `抱抱 ${props.post.likeCount}`
+  return props.post.liked ? '已抱抱' : '抱抱'
+})
 </script>
 
 <template>
@@ -44,29 +51,24 @@ const isOwner = computed(
     :class="`pc--${variant}`"
     @click="variant === 'card' ? $emit('open', post.id) : null"
   >
-    <header class="pc__head">
-      <div class="pc__author">
-        <img :src="avatarUrl" alt="" aria-hidden="true" width="36" height="36" class="pc__avatar" />
-        <div class="pc__author-meta">
-          <p class="pc__author-name">{{ authorName }}</p>
-          <p class="pc__author-time">{{ formatTime(post.createTime) }}</p>
-        </div>
-      </div>
-      <div class="pc__tags">
-        <BaseTag tone="brand" variant="soft" size="sm">{{ topicName }}</BaseTag>
-        <BaseTag :tone="moodTone(post.moodType)" variant="soft" size="sm">
-          {{ post.moodType }}
-        </BaseTag>
-      </div>
+    <header class="pc__meta">
+      <MoodTag :mood-type="post.moodType" size="sm" />
+      <span class="pc__meta-item">{{ authorName }}</span>
+      <span class="pc__meta-sep" aria-hidden="true">·</span>
+      <span class="pc__meta-item">{{ topicName }}</span>
+      <span class="pc__meta-time">{{ formatTime(post.createTime) }}</span>
     </header>
 
-    <div class="pc__body">
-      <span v-if="variant === 'detail'" class="pc__quote" aria-hidden="true">“</span>
-      <p
-        class="pc__content"
-        :class="variant === 'card' ? 'clamp-3' : ''"
-      >{{ post.content }}</p>
-    </div>
+    <p
+      class="pc__content"
+      :class="variant === 'card' ? 'clamp-3' : ''"
+    >{{ post.content }}</p>
+
+    <XiaoyaNote
+      v-if="variant === 'card' && post.aiReply"
+      :text="post.aiReply"
+      :clamp="2"
+    />
 
     <footer class="pc__actions" @click.stop>
       <button
@@ -76,8 +78,7 @@ const isOwner = computed(
         @click="$emit('toggle-like', post)"
       >
         <span class="pc__action-ico" aria-hidden="true">{{ post.liked ? '♥' : '♡' }}</span>
-        {{ post.liked ? '已共情' : '共情' }}
-        <span v-if="post.likeCount" class="pc__action-num">{{ post.likeCount }}</span>
+        {{ likeLabel }}
       </button>
 
       <button
@@ -91,8 +92,7 @@ const isOwner = computed(
       </button>
 
       <span v-if="post.replyCount" class="pc__action pc__action--ghost">
-        <span class="pc__action-ico" aria-hidden="true">💬</span>
-        {{ post.replyCount }} 条回复
+        回复 {{ post.replyCount }}
       </span>
 
       <span class="pc__spacer" />
@@ -115,136 +115,71 @@ const isOwner = computed(
     box-shadow var(--t-base) var(--ease-soft);
 }
 
-.pc--card { cursor: pointer; }
-
-.pc__head {
+/* 头部一行元信息：心情标签 + 匿名名 · 话题名，时间靠右；放不下时换行 */
+.pc__meta {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.pc__author {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.pc__avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--bg-soft);
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.pc__author-meta { min-width: 0; }
-
-.pc__author-name {
-  margin: 0;
-  font-size: var(--fs-md);
-  font-weight: 600;
-  color: var(--ink-1);
-}
-
-.pc__author-time {
-  margin: 2px 0 0;
+  gap: 4px 6px;
   color: var(--ink-3);
   font-size: var(--fs-xs);
+}
+
+.pc__meta-time {
+  margin-left: auto;
   white-space: nowrap;
 }
 
-.pc__tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.pc__body {
-  position: relative;
-  margin: 8px 0 14px;
-}
-
 .pc__content {
-  position: relative;
-  margin: 0;
+  margin: 10px 0 0;
   color: var(--ink-1);
-  line-height: 1.85;
   font-size: var(--fs-md);
+  line-height: 1.85;
   white-space: pre-wrap;
 }
 
-/* 详情态：内容更松、更大；左上角悬一个奶油色引号当装饰 */
-.pc--detail .pc__body {
-  padding: 14px 12px 18px 64px;
-  background: linear-gradient(135deg, var(--bg-soft), transparent 70%);
-  border-radius: var(--radius-2);
-}
-
+/* 详情态：全文更松、更大，与首页时间线一致，不加底色装饰 */
 .pc--detail .pc__content {
   font-size: var(--fs-lg);
   line-height: 1.95;
 }
 
-.pc__quote {
-  position: absolute;
-  left: 8px;
-  top: -18px;
-  font-family: var(--font-display);
-  font-size: 96px;
-  line-height: 1;
-  color: var(--accent);
-  opacity: 0.28;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* 详情卡再加一条虚线分隔，让底部 action 区域不那么"贴" */
-.pc--detail .pc__actions {
-  padding-top: 14px;
-  border-top: 1px dashed var(--line-strong);
-}
-
+/* 操作区：上方虚线分隔，纯文字按钮（选中变色加粗） */
 .pc__actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line-strong);
 }
 
 .pc__action {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 32px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 10px;
   border: none;
   background: transparent;
   color: var(--ink-2);
   font-size: var(--fs-sm);
   font-weight: 600;
-  border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft);
+  transition: color var(--t-fast) var(--ease-soft);
 }
 
 .pc__action:hover {
-  background: var(--bg-soft);
   color: var(--ink-1);
 }
 
 .pc__action.is-active {
-  background: var(--accent-soft);
   color: var(--accent-ink);
+  font-weight: 700;
 }
 
 .pc__action.is-fav {
-  background: var(--joy-soft);
   color: var(--joy-ink);
 }
 
@@ -252,19 +187,12 @@ const isOwner = computed(
   cursor: default;
   color: var(--ink-3);
 }
-.pc__action--ghost:hover {
-  background: transparent;
-  color: var(--ink-3);
-}
 
 .pc__action--soft {
-  background: var(--brand-soft);
   color: var(--brand-deep);
 }
-.pc__action--soft:hover { background: var(--brand-soft-deep); }
 
 .pc__action--danger:hover {
-  background: var(--danger-soft);
   color: var(--danger-ink);
 }
 
@@ -273,17 +201,5 @@ const isOwner = computed(
   line-height: 1;
 }
 
-.pc__action-num {
-  font-variant-numeric: tabular-nums;
-  margin-left: 1px;
-}
-
 .pc__spacer { flex: 1; }
-
-/* 移动端触控目标补足到 44px */
-@media (max-width: 768px) {
-  .pc__action {
-    min-height: 44px;
-  }
-}
 </style>

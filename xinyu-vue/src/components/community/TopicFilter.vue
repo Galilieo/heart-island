@@ -1,12 +1,16 @@
 <script setup>
-// 话题胶囊筛选器。第一个"全部"对应 topicId=null，
+// 话题筛选器。第一个"全部"对应 topicId=null，
 // 点击发 @select(topicId)，自身不知道当前的列表，纯展示。
 // 所有宽度下都自动换行展示——话题永远全部可见、可点，
 // 不做横向滚动隐藏（鼠标用户滚不了横排，等于选不到）。
+// 胶囊样式与首页 MoodFilterBar 的范围按钮一致（无边框、选中品牌柔底）；
+// vertical 供社区侧栏竖排整行使用，仅在 ≥1100px（社区主栏 + 侧栏网格的
+// 断点，与 Home.vue 保持一致）生效，窄屏自动回到横排换行。
 defineProps({
   topics: { type: Array, default: () => [] },
   selectedTopicId: { type: [String, Number, null], default: null },
-  loading: Boolean
+  loading: Boolean,
+  vertical: Boolean
 })
 
 defineEmits(['select'])
@@ -14,7 +18,7 @@ defineEmits(['select'])
 
 <template>
   <div class="topics-wrap">
-    <div class="topics">
+    <div class="topics" :class="{ 'topics--vertical': vertical }">
       <button
         type="button"
         class="topic-chip motion-press"
@@ -31,10 +35,7 @@ defineEmits(['select'])
         class="topic-chip motion-press"
         :class="{ 'is-active': selectedTopicId === topic.id }"
         @click="$emit('select', topic.id)"
-      >
-        <span class="topic-chip__dot" aria-hidden="true" />
-        {{ topic.name }}
-      </button>
+      >{{ topic.name }}</button>
     </div>
   </div>
 </template>
@@ -48,7 +49,7 @@ defineEmits(['select'])
 .topics {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
 }
 
 .topics__loading {
@@ -60,27 +61,20 @@ defineEmits(['select'])
 .topic-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
+  padding: 6px 12px;
+  border: none;
   border-radius: var(--radius-pill);
-  background: var(--bg-card);
+  background: transparent;
   color: var(--ink-2);
   font-size: var(--fs-sm);
-  font-weight: 600;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft),
-    border-color var(--t-fast) var(--ease-soft),
-    box-shadow var(--t-fast) var(--ease-soft),
-    transform var(--t-fast) var(--ease-bounce);
+    color var(--t-fast) var(--ease-soft);
 }
 
-.topic-chip:hover {
-  border-color: var(--brand-soft);
-  background: var(--brand-soft);
-  color: var(--brand-deep);
+.topic-chip:not(.is-active):hover {
+  background: var(--bg-soft);
+  color: var(--ink-1);
 }
 
 .topic-chip:focus-visible {
@@ -89,17 +83,32 @@ defineEmits(['select'])
 }
 
 .topic-chip.is-active {
-  border-color: transparent;
-  background: var(--brand);
-  color: #fff;
-  box-shadow: 0 6px 14px rgba(111, 169, 164, 0.28);
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 700;
 }
 
-.topic-chip__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.6;
+/* 侧栏竖排：整行左对齐、可点高度加大（仅在社区宽屏网格下生效） */
+@media (min-width: 1100px) {
+  .topics--vertical {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .topics--vertical .topic-chip {
+    justify-content: flex-start;
+    min-height: 40px;
+    padding: 0 12px;
+    text-align: left;
+  }
+}
+
+/* 窄屏触控目标补足到 44px，话题保持全部可见可点 */
+@media (max-width: 768px) {
+  .topic-chip {
+    min-height: 44px;
+  }
 }
 </style>
