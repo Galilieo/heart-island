@@ -1,5 +1,5 @@
 // 心情记录相关接口：增删改查 + 7 天趋势统计。
-// AI 回复由后端在 create/update 时自动生成，不需要前端单独调。
+// 保存只创建后台任务；GET查询状态，POST重试必须由用户主动触发。
 import { request, unwrap } from './_helpers'
 
 export const moodApi = {
@@ -21,6 +21,14 @@ export const moodApi = {
 
   remove(id) {
     return unwrap(request.delete(`/mood/delete/${id}`))
+  },
+
+  aiJob(id, options = {}) {
+    return unwrap(request.get(`/mood/ai-job/${id}`, options))
+  },
+
+  retryAiJob(id) {
+    return unwrap(request.post(`/mood/ai-job/${id}/retry`))
   },
 
   trendRecent7() {
