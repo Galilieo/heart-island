@@ -1,12 +1,10 @@
 <script setup>
-// 回复列表。
+// 回复列表：虚线分隔的条目（匿名名 · 时间一行，下面正文），不逐条做卡。
 // 楼主才能看到的"编辑/删除"按钮 inline 工作：
-//   - 编辑：在卡片内切到 textarea，保存通过 @edit-submit 给父级，
+//   - 编辑：在条目内切到 textarea，保存通过 @edit-submit 给父级，
 //     父级在成功后调用回调 done() 让本组件退出编辑态。
 //   - 删除：直接 @delete，由父级走 useConfirm + store。
 import { ref, computed } from 'vue'
-import BaseCard from '../ui/BaseCard.vue'
-import avatarUrl from '../../assets/xiaoya/xinyu-avatar.svg'
 import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import EmptyState from '../ui/EmptyState.vue'
@@ -80,24 +78,17 @@ async function saveEdit(reply) {
     </header>
 
     <template v-if="loading && !replies.length">
-      <SkeletonCard v-for="i in 2" :key="i" avatar rows="2" />
+      <SkeletonCard v-for="i in 2" :key="i" rows="2" />
     </template>
 
     <template v-else-if="replies.length">
-      <BaseCard
-        v-for="r in visibleReplies"
-        :key="r.id"
-        padding="md"
-        class="rl__item"
-      >
+      <article v-for="r in visibleReplies" :key="r.id" class="rl__item">
         <header class="rl__item-head">
-          <div class="rl__author">
-            <img :src="avatarUrl" alt="" aria-hidden="true" width="32" height="32" class="rl__avatar" />
-            <div>
-              <p class="rl__author-name">{{ r.anonymousName || r.nickname || '匿名朋友' }}</p>
-              <p class="rl__author-time">{{ formatTime(r.createTime) }}</p>
-            </div>
-          </div>
+          <p class="rl__meta">
+            <span class="rl__name">{{ r.anonymousName || r.nickname || '匿名朋友' }}</span>
+            <span class="rl__meta-sep" aria-hidden="true">·</span>
+            <span class="rl__time">{{ formatTime(r.createTime) }}</span>
+          </p>
 
           <div v-if="isOwner(r) && editingId !== r.id" class="rl__owner-ops">
             <button
@@ -136,7 +127,7 @@ async function saveEdit(reply) {
         </div>
 
         <p v-else class="rl__content">{{ r.content }}</p>
-      </BaseCard>
+      </article>
 
       <div v-if="remaining > 0 || collapsible" class="rl__more">
         <BaseButton
@@ -169,7 +160,6 @@ async function saveEdit(reply) {
 .rl {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .rl__head {
@@ -181,7 +171,9 @@ async function saveEdit(reply) {
 
 .rl__title {
   margin: 0;
+  font-family: var(--font-display);
   font-size: var(--fs-xl);
+  font-weight: 400;
 }
 
 .rl__count {
@@ -189,40 +181,32 @@ async function saveEdit(reply) {
   font-size: var(--fs-sm);
 }
 
+/* 条目之间用虚线分隔，同一回复的头与正文之间不再加线 */
+.rl__item {
+  padding: 14px 0;
+  border-top: 1px dashed var(--line-strong);
+}
+
 .rl__item-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
 }
 
-.rl__author {
+.rl__meta {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.rl__avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--bg-soft);
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.rl__author-name {
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   margin: 0;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--ink-1);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
 }
 
-.rl__author-time {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--ink-3);
+.rl__name {
+  color: var(--ink-2);
+  font-weight: 600;
 }
 
 .rl__owner-ops {
@@ -230,37 +214,26 @@ async function saveEdit(reply) {
   gap: 4px;
 }
 
+/* 自己回复的操作：纯文字按钮，与帖子卡操作区一致 */
 .rl__op {
-  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   padding: 0 10px;
   border: none;
-  background: var(--bg-soft);
+  background: transparent;
   color: var(--ink-2);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft);
+  transition: color var(--t-fast) var(--ease-soft);
 }
 
-.rl__op:hover { background: var(--line); }
-
-.rl__op:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-@media (max-width: 768px) {
-  .rl__op {
-    min-height: 44px;
-    padding: 0 14px;
-  }
-}
+.rl__op:hover { color: var(--ink-1); }
 
 .rl__op:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .rl__op--danger:hover {
-  background: var(--danger-soft);
   color: var(--danger-ink);
 }
 
@@ -281,6 +254,7 @@ async function saveEdit(reply) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 4px;
 }
 
 .rl__edit-actions {

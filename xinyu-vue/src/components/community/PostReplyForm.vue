@@ -33,7 +33,7 @@ defineExpose({ reset })
 </script>
 
 <template>
-  <BaseCard padding="md" tone="cream" class="reply-form">
+  <BaseCard padding="md" class="reply-form">
     <p class="reply-form__title">回复这条帖子</p>
     <BaseTextarea
       v-model="content"

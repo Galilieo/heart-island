@@ -1,6 +1,7 @@
 <script setup>
-// 帖子详情页。窄栏单列布局：
-//   - PostCard（detail 变体，含点赞/收藏；楼主额外见编辑/删除）
+// 帖子详情页。680px 单列居中，与首页主栏同宽：
+//   - PostCard（detail 变体，含抱抱/收藏；楼主额外见编辑/删除）
+//   - XiaoyaNote（小芽批注 + AI 生成提示小字）
 //   - PostReplyForm（发新回复）
 //   - PostReplyList（已有回复列表 + 楼主自己回复的 inline 编辑/删除）
 //   - PostEditDialog（楼主编辑帖子时打开）
@@ -165,7 +166,7 @@ onMounted(async () => {
       </button>
 
       <template v-if="postLoading && !currentPost">
-        <SkeletonCard avatar rows="4" />
+        <SkeletonCard rows="4" />
       </template>
 
       <template v-else-if="currentPost">
@@ -223,38 +224,35 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* 与首页主栏同宽的单列；卡片、批注、回复区依次向下排 */
 .detail {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
+/* 返回入口用文字链接样式，不占卡片视觉 */
 .detail__back {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  background: var(--bg-card);
-  color: var(--ink-2);
-  border-radius: var(--radius-pill);
+  min-height: 44px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--brand-deep);
   font-size: var(--fs-sm);
+  font-weight: 600;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
-    color var(--t-fast) var(--ease-soft);
+  transition: color var(--t-fast) var(--ease-soft);
 }
 
 .detail__back:hover {
-  background: var(--brand-soft);
-  color: var(--brand-deep);
-  border-color: var(--brand-soft);
-}
-
-.detail__back:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
+  color: var(--ink-1);
 }
 
 .detail__note-hint {
