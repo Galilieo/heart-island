@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -22,6 +23,10 @@ public class CommunityPost {
     private String content;
 
     private String aiReply;
+
+    /** 当前保存发起的AI生成标识；NULL表示无有效生成，仅服务端用于条件回写。 */
+    @JsonIgnore
+    private String aiGenerationId;
 
     private String anonymousName;
 
@@ -63,6 +68,10 @@ public class CommunityPost {
 
     public String getAiReply() {
         return aiReply;
+    }
+
+    public String getAiGenerationId() {
+        return aiGenerationId;
     }
 
     public String getAnonymousName() {
@@ -119,6 +128,10 @@ public class CommunityPost {
 
     public void setAiReply(String aiReply) {
         this.aiReply = aiReply;
+    }
+
+    public void setAiGenerationId(String aiGenerationId) {
+        this.aiGenerationId = aiGenerationId;
     }
 
     public void setAnonymousName(String anonymousName) {

@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.dto.CommunityReplyAddDTO;
 import com.xinyu.dto.CommunityReplyUpdateDTO;
-import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
@@ -111,18 +110,8 @@ public class CommunityReplyService {
 
         int rows =communityReplyMapper.insert(reply);
 
-        if(rows >0){
-            CommunityPost post = communityPostMapper.selectById(dto.getPostId());
-
-            if (post != null) {
-                Integer replyCount = post.getReplyCount();
-                if(replyCount ==null){
-                    replyCount = 0;
-                }
-
-                post.setReplyCount(replyCount+1);
-                communityPostMapper.updateById(post);
-            }
+        if (rows > 0) {
+            communityPostMapper.adjustReplyCount(dto.getPostId(), 1);
         }
 
         return rows > 0;
@@ -148,19 +137,7 @@ public class CommunityReplyService {
         int rows = communityReplyMapper.updateById(reply);
 
         if (rows > 0) {
-            CommunityPost post = communityPostMapper.selectById(reply.getPostId());
-
-            if (post != null) {
-                Integer replyCount = post.getReplyCount();
-                if (replyCount == null || replyCount <= 0) {
-                    replyCount = 0;
-                } else {
-                    replyCount = replyCount - 1;
-                }
-
-                post.setReplyCount(replyCount);
-                communityPostMapper.updateById(post);
-            }
+            communityPostMapper.adjustReplyCount(reply.getPostId(), -1);
         }
 
         return rows > 0;

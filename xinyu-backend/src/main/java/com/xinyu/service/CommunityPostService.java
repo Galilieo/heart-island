@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.vo.AdminPostVO;
 import com.xinyu.entity.Topic;
@@ -139,9 +140,18 @@ public class CommunityPostService {
             return null;
         }
 
-        post.setStatus(status);
-        communityPostMapper.updateById(post);
+        UpdateWrapper<CommunityPost> change = new UpdateWrapper<>();
+        change.eq("id", id).set("status", status);
+        if (status == 0) {
+            // 隐藏即使随后恢复，也不允许此前进行中的生成重新回写。
+            change.set("ai_generation_id", null);
+            post.setAiGenerationId(null);
+        }
+        if (communityPostMapper.update(null, change) <= 0) {
+            return null;
+        }
 
+        post.setStatus(status);
         return post;
     }
     /**
@@ -200,6 +210,8 @@ public class CommunityPostService {
         post.setLikeCount(0);
         post.setStatus(1);
 
+        boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
+        post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
         int rows = communityPostMapper.insert(post);
         if (rows <= 0) {
             return false;
@@ -207,7 +219,7 @@ public class CommunityPostService {
 
         // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
         // 用户选择不要 AI 回复时跳过生成（也不写调用日志）。
-        if (!Boolean.FALSE.equals(dto.getNeedAiReply())) {
+        if (needAiReply) {
             attachAiReply(post);
         }
 
@@ -230,9 +242,11 @@ public class CommunityPostService {
             return false;
         }
 
-        post.setStatus(0);
-
-        return communityPostMapper.updateById(post) > 0;
+        // 仅更新删除状态与生成标识，避免整实体回写覆盖并发编辑或互动计数。
+        UpdateWrapper<CommunityPost> removal = new UpdateWrapper<>();
+        removal.eq("id", id).eq("user_id", userId).eq("status", 1);
+        removal.set("status", 0).set("ai_generation_id", null);
+        return communityPostMapper.update(null, removal) > 0;
     }
 
     public Boolean update(CommunityPostUpdateDTO dto, Long userId) {
@@ -258,8 +272,11 @@ public class CommunityPostService {
         post.setMoodType(dto.getMoodType().trim());
         post.setContent(dto.getContent().trim());
         post.setAiReply(null);
+        boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
+        post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
 
         // 编辑与清旧回复是同一条UPDATE，必须在事务外的网络请求之前落库。
+        // 标识也在此处更换；相同正文、关闭AI及改回原文都会使旧生成失效。
         // 只更新编辑字段，不回写读取时的点赞数、状态等快照；NULL不能交给updateById忽略。
         UpdateWrapper<CommunityPost> edit = new UpdateWrapper<>();
         edit.eq("id", post.getId()).eq("user_id", userId).eq("status", 1);
@@ -267,12 +284,13 @@ public class CommunityPostService {
         edit.set("mood_type", post.getMoodType());
         edit.set("content", post.getContent());
         edit.set("ai_reply", null);
+        edit.set("ai_generation_id", post.getAiGenerationId());
         int rows = communityPostMapper.update(null, edit);
         if (rows <= 0) {
             return false;
         }
 
-        if (Boolean.FALSE.equals(dto.getNeedAiReply())) {
+        if (!needAiReply) {
             // 旧回复已经清除；不生成，也不写调用日志。
             return true;
         }
@@ -302,13 +320,7 @@ public class CommunityPostService {
         int rows = postLikeMapper.insert(postLike);
 
         if (rows > 0) {
-            Integer likeCount = post.getLikeCount();
-            if (likeCount == null) {
-                likeCount = 0;
-            }
-
-            post.setLikeCount(likeCount + 1);
-            communityPostMapper.updateById(post);
+            communityPostMapper.adjustLikeCount(postId, 1);
         }
 
         return rows > 0;
@@ -323,19 +335,7 @@ public class CommunityPostService {
         int rows = postLikeMapper.delete(queryWrapper);
 
         if (rows > 0) {
-            CommunityPost post = communityPostMapper.selectById(postId);
-
-            if (post != null) {
-                Integer likeCount = post.getLikeCount();
-                if (likeCount == null || likeCount <= 0) {
-                    likeCount = 0;
-                } else {
-                    likeCount = likeCount - 1;
-                }
-
-                post.setLikeCount(likeCount);
-                communityPostMapper.updateById(post);
-            }
+            communityPostMapper.adjustLikeCount(postId, -1);
         }
 
         return rows > 0;
@@ -409,7 +409,9 @@ public class CommunityPostService {
 
     /**
      * 已保存帖子在请求线程中同步生成，网络期间不持有数据库事务。
-     * 只发布成功正文；失败保持NULL。回复回写／日志失败不改变已保存帖子的结果。
+     * 只发布仍匹配本次生成标识的成功正文；失败或失效不改当前回复。
+     * 网络期间的编辑／关闭／删除／隐藏会使旧标识失效，回写检查与更新在同一条SQL内完成。
+     * 回复回写／日志失败不改变已保存帖子的结果；调用日志记录生成结果，不代表回复已发布。
      */
     private void attachAiReply(CommunityPost post) {
         String topicName = null;
@@ -424,6 +426,7 @@ public class CommunityPostService {
         if (Boolean.TRUE.equals(result.getSuccess())) {
             UpdateWrapper<CommunityPost> reply = new UpdateWrapper<>();
             reply.eq("id", post.getId()).eq("user_id", post.getUserId()).eq("status", 1);
+            reply.eq("ai_generation_id", post.getAiGenerationId());
             reply.set("ai_reply", result.getReplyContent());
             try {
                 if (communityPostMapper.update(null, reply) > 0) {

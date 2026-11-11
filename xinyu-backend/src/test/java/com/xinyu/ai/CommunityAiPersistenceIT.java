@@ -9,27 +9,46 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xinyu.dto.AiReplyResult;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
+import com.xinyu.dto.CommunityReplyAddDTO;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.CommunityPostMapper;
+import com.xinyu.mapper.CommunityReplyMapper;
+import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.service.AiReplyLogService;
 import com.xinyu.service.CommunityPostService;
+import com.xinyu.service.CommunityReplyService;
 import com.xinyu.config.RestTemplateConfig;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.http.MediaType;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.apache.ibatis.mapping.MappedStatement;
+import org.apache.ibatis.plugin.Interceptor;
+import org.apache.ibatis.plugin.Intercepts;
+import org.apache.ibatis.plugin.Invocation;
+import org.apache.ibatis.plugin.Signature;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.ResponseCreator;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.*;
@@ -44,6 +63,8 @@ class CommunityAiPersistenceIT {
     private CommunityPostService posts;
     private AiReplyLogService logs;
     private MockRestServiceServer upstream;
+    private CommunityReplyService comments;
+    private final PostCounterInterleaving counterInterleaving = new PostCounterInterleaving();
 
     @BeforeAll
     void connectToEmptyTestDatabase() throws Exception {
@@ -64,6 +85,17 @@ class CommunityAiPersistenceIT {
         new ResourceDatabasePopulator(new ClassPathResource("ai/schema.sql"),
                 new ClassPathResource("ai/community-schema.sql")).execute(source);
 
+        // 在旧表插入历史回复，再执行与部署相同的迁移，确认NULL标识不会清除历史数据。
+        jdbc.update("INSERT INTO topic(id,name,status) VALUES (1,'合成话题',1)");
+        jdbc.update("INSERT INTO community_post(user_id,topic_id,mood_type,content,ai_reply) "
+                + "VALUES (1,1,'平静','迁移前内容','迁移前回复')");
+        Path migration = Path.of("../sql/migrations/20261111_01_community_ai_generation.sql").toAbsolutePath();
+        new ResourceDatabasePopulator(new FileSystemResource(migration)).execute(source);
+        var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id FROM community_post");
+        assertThat(legacy.get("content")).isEqualTo("迁移前内容");
+        assertThat(legacy.get("ai_reply")).isEqualTo("迁移前回复");
+        assertThat(legacy.get("ai_generation_id")).isNull();
+
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         var configuration = new MybatisConfiguration();
@@ -71,10 +103,12 @@ class CommunityAiPersistenceIT {
         configuration.addMapper(AiReplyMapper.class);
         configuration.addMapper(CommunityPostMapper.class);
         configuration.addMapper(TopicMapper.class);
+        configuration.addMapper(PostLikeMapper.class);
+        configuration.addMapper(CommunityReplyMapper.class);
         factory.setConfiguration(configuration);
         var pagination = new MybatisPlusInterceptor();
         pagination.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
-        factory.setPlugins(pagination);
+        factory.setPlugins(pagination, counterInterleaving);
         var sessions = new SqlSessionTemplate(factory.getObject());
         logs = new AiReplyLogService();
         ReflectionTestUtils.setField(logs, "aiReplyMapper", sessions.getMapper(AiReplyMapper.class));
@@ -82,6 +116,10 @@ class CommunityAiPersistenceIT {
         ReflectionTestUtils.setField(posts, "communityPostMapper", sessions.getMapper(CommunityPostMapper.class));
         ReflectionTestUtils.setField(posts, "topicMapper", sessions.getMapper(TopicMapper.class));
         ReflectionTestUtils.setField(posts, "aiReplyLogService", logs);
+        ReflectionTestUtils.setField(posts, "postLikeMapper", sessions.getMapper(PostLikeMapper.class));
+        comments = new CommunityReplyService();
+        ReflectionTestUtils.setField(comments, "communityPostMapper", sessions.getMapper(CommunityPostMapper.class));
+        ReflectionTestUtils.setField(comments, "communityReplyMapper", sessions.getMapper(CommunityReplyMapper.class));
     }
 
     @BeforeEach
@@ -147,10 +185,197 @@ class CommunityAiPersistenceIT {
     }
 
     @Test
+    void disablingAiWithUnchangedContentRejectsAlreadyGeneratingReply() {
+        long id = existingPost();
+        upstream.expect(anything()).andRespond(request -> {
+            // 旧请求尚未返回时保存相同内容并关闭AI，随后才放行旧响应。
+            assertThat(posts.update(edit(id, false), 1L)).isTrue();
+            return withSuccess(
+                    "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"过期回复\"}}]}",
+                    MediaType.APPLICATION_JSON).createResponse(request);
+        });
+
+        assertThat(posts.update(edit(id, true), 1L)).isTrue();
+
+        assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
+                .as("关闭AI后，进行中的旧响应也不能恢复回复").isNull();
+        upstream.verify();
+    }
+
+    @ParameterizedTest(name = "旧回复不得覆盖后续编辑：{0}")
+    @ValueSource(strings = {"正文", "心情", "话题", "相同内容", "ABA"})
+    void lateReplyCannotOverwriteReplyFromLaterEdit(String change) {
+        long id = existingPost();
+        jdbc.update("INSERT IGNORE INTO topic(id,name,status) VALUES (2,'另一个合成话题',1)");
+        var newer = edit(id, true);
+        switch (change) {
+            case "正文" -> newer.setContent("合成后续正文");
+            case "心情" -> newer.setMoodType("开心");
+            case "话题" -> newer.setTopicId(2L);
+            default -> { /* 相同内容和ABA最终均保存原文，仍必须区分生成代次。 */ }
+        }
+
+        upstream.expect(anything()).andRespond(request -> {
+            // 旧响应返回前完成后续编辑及其生成，稳定构造迟到覆盖顺序，无需sleep。
+            if ("ABA".equals(change)) {
+                var intermediate = edit(id, false);
+                intermediate.setContent("合成中间正文B");
+                assertThat(posts.update(intermediate, 1L)).isTrue();
+            }
+            assertThat(posts.update(newer, 1L)).isTrue();
+            return generatedReply("过期回复").createResponse(request);
+        });
+        upstream.expect(anything()).andRespond(generatedReply("当前回复"));
+
+        assertThat(posts.update(edit(id, true), 1L)).isTrue();
+
+        var saved = jdbc.queryForMap("SELECT content,mood_type,topic_id,ai_reply FROM community_post WHERE id=?", id);
+        assertThat(saved.get("content")).isEqualTo(newer.getContent());
+        assertThat(saved.get("mood_type")).isEqualTo(newer.getMoodType());
+        assertThat(((Number) saved.get("topic_id")).longValue()).isEqualTo(newer.getTopicId());
+        assertThat(saved.get("ai_reply")).isEqualTo("当前回复");
+        upstream.verify();
+    }
+
+    @ParameterizedTest(name = "旧生成在帖子失效后不得回写：{0}")
+    @ValueSource(strings = {"删除", "隐藏", "隐藏后恢复", "删除后恢复"})
+    void removingOrHidingPostInvalidatesPendingReply(String action) {
+        long id = existingPost();
+        upstream.expect(anything()).andRespond(request -> {
+            if (action.startsWith("删除")) {
+                assertThat(posts.delete(id, 1L)).isTrue();
+            } else {
+                assertThat(posts.updateAdminStatus(id, 0)).isNotNull();
+            }
+            if (action.endsWith("恢复")) {
+                assertThat(posts.updateAdminStatus(id, 1)).isNotNull();
+            }
+            return generatedReply("过期回复").createResponse(request);
+        });
+
+        assertThat(posts.update(edit(id, true), 1L)).isTrue();
+
+        var saved = jdbc.queryForMap("SELECT status,ai_reply,ai_generation_id FROM community_post WHERE id=?", id);
+        int expectedStatus = action.endsWith("恢复") ? 1 : 0;
+        assertThat(((Number) saved.get("status")).intValue()).isEqualTo(expectedStatus);
+        assertThat(saved.get("ai_reply")).isNull();
+        assertThat(saved.get("ai_generation_id")).isNull();
+        upstream.verify();
+    }
+
+    @Test
+    void concurrentEditorsKeepNewReplyWhenOldHttpResponseArrivesLast() throws Exception {
+        long id = existingPost();
+        CountDownLatch oldWaiting = new CountDownLatch(1);
+        CountDownLatch releaseOld = new CountDownLatch(1);
+        ExecutorService editor = Executors.newSingleThreadExecutor();
+        upstream.expect(anything()).andRespond(request -> {
+            oldWaiting.countDown();
+            try {
+                assertThat(releaseOld.await(10, TimeUnit.SECONDS)).as("旧响应必须显式放行").isTrue();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IOException("合成响应等待被中断", interrupted);
+            }
+            return generatedReply("过期回复").createResponse(request);
+        });
+        upstream.expect(anything()).andRespond(generatedReply("当前回复"));
+
+        try {
+            var oldSave = editor.submit(() -> posts.update(edit(id, true), 1L));
+            assertThat(oldWaiting.await(3, TimeUnit.SECONDS)).isTrue();
+            assertThat(oldSave).as("旧HTTP响应仍在另一个线程等待").isNotDone();
+
+            assertThat(posts.update(edit(id, true), 1L)).isTrue();
+            assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
+                    .isEqualTo("当前回复");
+            releaseOld.countDown();
+            assertThat(oldSave.get(3, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
+                    .as("真实双线程交错下，迟到旧响应不能覆盖已保存的新回复").isEqualTo("当前回复");
+            upstream.verify();
+        } finally {
+            releaseOld.countDown();
+            editor.shutdownNow();
+            assertThat(editor.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void generationIdIsNotExposedInPublicPostJson() {
+        upstream.expect(anything()).andRespond(generatedReply("合成回复"));
+        assertThat(posts.add(add(), 1L)).isTrue();
+        long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
+
+        var saved = posts.listByTopicId(null, null, false, "latest").get(0);
+        assertThat(saved.getId()).isEqualTo(id);
+        assertThat(saved.getAiGenerationId()).isNotBlank();
+        var json = new ObjectMapper().findAndRegisterModules().valueToTree(saved);
+        assertThat(json.has("aiGenerationId")).isFalse();
+        assertThat(json.path("aiReply").asText()).isEqualTo("合成回复");
+    }
+
+    @ParameterizedTest(name = "互动计数不得恢复旧正文或生成标识：{0}")
+    @ValueSource(strings = {"点赞", "取消点赞", "评论", "删除评论"})
+    void interactionCounterCannotRestoreSnapshotBeforeAnEdit(String action) {
+        long id = existingPost();
+        jdbc.update("UPDATE community_post SET ai_generation_id=? WHERE id=?",
+                "00000000-0000-0000-0000-000000000001", id);
+        if ("取消点赞".equals(action)) {
+            jdbc.update("INSERT INTO post_like(post_id,user_id) VALUES (?,1)", id);
+        }
+        if ("删除评论".equals(action)) {
+            jdbc.update("INSERT INTO community_reply(post_id,user_id,content) VALUES (?,1,'合成评论')", id);
+            jdbc.update("UPDATE community_post SET reply_count=1 WHERE id=?", id);
+        }
+
+        // 计数写入前先完成一次编辑／关闭AI，稳定检查旧快照是否会被整个写回来。
+        counterInterleaving.beforeNextPostUpdate = () -> {
+            assertThat(posts.update(edit(id, false), 1L)).isTrue();
+        };
+        try {
+            boolean changed;
+            switch (action) {
+                case "点赞" -> changed = posts.like(id, 1L);
+                case "取消点赞" -> changed = posts.unlike(id, 1L);
+                case "评论" -> {
+                    var dto = new CommunityReplyAddDTO();
+                    dto.setPostId(id);
+                    dto.setContent("合成评论");
+                    changed = comments.add(dto, 1L);
+                }
+                default -> {
+                    long replyId = jdbc.queryForObject("SELECT id FROM community_reply WHERE post_id=?", Long.class, id);
+                    changed = comments.delete(replyId, 1L);
+                }
+            }
+
+            assertThat(changed).isTrue();
+            assertThat(counterInterleaving.beforeNextPostUpdate).as("已实际执行交错编辑").isNull();
+            var saved = jdbc.queryForMap("SELECT * FROM community_post WHERE id=?", id);
+            assertThat(saved.get("content")).isEqualTo("合成新内容");
+            assertThat(saved.get("ai_reply")).isNull();
+            assertThat(saved.get("ai_generation_id")).isNull();
+            int expectedLikes = switch (action) {
+                case "点赞" -> 8;
+                case "取消点赞" -> 6;
+                default -> 7;
+            };
+            assertThat(((Number) saved.get("like_count")).intValue()).isEqualTo(expectedLikes);
+            int expectedReplies = "评论".equals(action) ? 1 : 0;
+            assertThat(((Number) saved.get("reply_count")).intValue()).isEqualTo(expectedReplies);
+        } finally {
+            counterInterleaving.beforeNextPostUpdate = null;
+        }
+    }
+
+    @Test
     void choosingNoAiClearsReplyWithoutProviderCallOrLog() {
         long id = existingPost();
         assertThat(posts.update(edit(id, false), 1L)).isTrue();
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id)).isNull();
+        assertThat(jdbc.queryForObject("SELECT ai_generation_id FROM community_post WHERE id=?", String.class, id)).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply", Integer.class)).isZero();
         upstream.verify();
     }
@@ -224,6 +449,7 @@ class CommunityAiPersistenceIT {
         dto.setNeedAiReply(false);
         assertThat(posts.add(dto, 1L)).isTrue();
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
+        assertThat(jdbc.queryForObject("SELECT ai_generation_id FROM community_post", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply", Integer.class)).isZero();
         upstream.verify();
     }
@@ -232,6 +458,29 @@ class CommunityAiPersistenceIT {
         jdbc.update("INSERT INTO community_post(user_id,topic_id,mood_type,content,ai_reply,like_count) "
                 + "VALUES (1,1,'平静','合成旧内容','合成旧回复',7)");
         return jdbc.queryForObject("SELECT id FROM community_post", Long.class);
+    }
+
+    private static ResponseCreator generatedReply(String content) {
+        return withSuccess("{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"%s\"}}]}"
+                .formatted(content), MediaType.APPLICATION_JSON);
+    }
+
+    /** 仅在测试指定的一次帖子写入前安排编辑，不替换原SQL或结果；其余调用直接透传。 */
+    @Intercepts(@Signature(type = org.apache.ibatis.executor.Executor.class, method = "update",
+            args = {MappedStatement.class, Object.class}))
+    public static class PostCounterInterleaving implements Interceptor {
+        private Runnable beforeNextPostUpdate;
+
+        @Override
+        public Object intercept(Invocation invocation) throws Throwable {
+            MappedStatement statement = (MappedStatement) invocation.getArgs()[0];
+            Runnable edit = beforeNextPostUpdate;
+            if (edit != null && statement.getId().startsWith(CommunityPostMapper.class.getName() + ".")) {
+                beforeNextPostUpdate = null;
+                edit.run();
+            }
+            return invocation.proceed();
+        }
     }
 
     private static CommunityPostAddDTO add() {
