@@ -14,11 +14,17 @@ import org.apache.ibatis.annotations.Update;
 public interface AiJobMapper extends BaseMapper<AiJob> {
 
     /**
-     * 领取最早一条可执行任务；当前 worker 只实现日记回应，不能误领其他类型。
+     * 在领取事务内锁定最早一条未被锁定的日记任务，供随后CAS领取。
+     * 跳过其他领取者持有的行锁，不承诺严格FIFO；调用方必须在同一事务内完成领取。
      *
-     * @return 最早一条 queued 任务；没有时返回 null
+     * @return 最早一条未锁定的 queued 任务；没有时返回 null
      */
-    @Select("SELECT * FROM ai_job WHERE task_type='MOOD_REPLY' AND status='queued'  ORDER BY id LIMIT 1")
+    @Select("""
+        SELECT * FROM ai_job
+        WHERE task_type='MOOD_REPLY' AND status='queued'
+        ORDER BY id LIMIT 1
+        FOR UPDATE SKIP LOCKED
+        """)
     AiJob selectNextQueued();
 
     /**

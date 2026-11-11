@@ -3,6 +3,7 @@ package com.xinyu.ai;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.xinyu.entity.MoodRecord;
+import com.xinyu.entity.AiJob;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.dto.MoodAiResponse;
@@ -17,6 +18,13 @@ import com.xinyu.service.AiJobService;
 import com.xinyu.service.MoodRecordService;
 import org.junit.jupiter.api.*;
 import org.mybatis.spring.SqlSessionTemplate;
+import org.apache.ibatis.mapping.MappedStatement;
+import org.apache.ibatis.plugin.Interceptor;
+import org.apache.ibatis.plugin.Intercepts;
+import org.apache.ibatis.plugin.Invocation;
+import org.apache.ibatis.plugin.Signature;
+import org.apache.ibatis.session.ResultHandler;
+import org.apache.ibatis.session.RowBounds;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,6 +36,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -51,6 +61,7 @@ class AiJobPersistenceIT {
     private TransactionTemplate tx;
     private SqlSessionTemplate sessions;
     private long userId;
+    private final ClaimSelectionBarrier claimSelection = new ClaimSelectionBarrier();
 
     @BeforeAll
     void connectAndMigrate() throws Exception {
@@ -87,7 +98,8 @@ class AiJobPersistenceIT {
         factory.setConfiguration(configuration);
         com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor pagination = new com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor();
         pagination.addInnerInterceptor(new com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor(com.baomidou.mybatisplus.annotation.DbType.MYSQL));
-        factory.setPlugins(pagination);
+        // 屏障放在分页插件外层，真实候选查询返回后暂停，领取事务此时尚未提交。
+        factory.setPlugins(pagination, claimSelection);
         sessions = new SqlSessionTemplate(factory.getObject());
         moods = sessions.getMapper(MoodRecordMapper.class);
         jobs = sessions.getMapper(AiJobMapper.class);
@@ -451,6 +463,79 @@ class AiJobPersistenceIT {
         assertThat(jobService.complete(next.getId(), 1, next.getRequestId(), wrong)).isFalse();
         assertThat(jobs.selectById(next.getId()).getLastErrorCode()).isEqualTo("invalid_model_response");
         assertThat(logs()).isZero();
+    }
+
+    @Test
+    void threeConcurrentClaimersTakeDifferentQueuedJobsInOneWave() throws Exception {
+        service.add(input());
+        service.add(input());
+        service.add(input());
+        claimSelection.enable(3);
+
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        try {
+            Future<AiJob> first = executor.submit(jobService::claimNext);
+            Future<AiJob> second = executor.submit(jobService::claimNext);
+            Future<AiJob> third = executor.submit(jobService::claimNext);
+            List<AiJob> claimed = Arrays.asList(first.get(8, TimeUnit.SECONDS),
+                    second.get(8, TimeUnit.SECONDS), third.get(8, TimeUnit.SECONDS));
+
+            assertThat(claimSelection.selectedIds).as("三次真实候选查询均经过屏障").hasSize(3);
+            assertThat(claimed).as("三个领取机会应各取得一条任务").doesNotContainNull();
+            assertThat(claimed).extracting(AiJob::getId).doesNotHaveDuplicates();
+            assertThat(claimed).extracting(AiJob::getAttemptCount).containsOnly(1);
+        } finally {
+            claimSelection.disable();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void firstRuntimeScanFillsThreeSlotsAndLeavesFourthQueued() throws Exception {
+        long secondUser = userSequence.incrementAndGet();
+        jdbc.update("INSERT INTO user(id) VALUES (?)", secondUser);
+        try (WorkerExecution execution = new WorkerExecution()) {
+            var first = service.add(input());
+            var second = service.add(input());
+            var third = service.add(input());
+            MoodRecord otherUserInput = input();
+            otherUserInput.setUserId(secondUser);
+            var fourth = service.add(otherUserInput);
+            claimSelection.enable(3);
+
+            // Runtime停止时，让合成网络请求结束，仍由真实worker完成数据库收尾。
+            doAnswer(invocation -> {
+                for (ModelCall call : execution.inflight) {
+                    call.reply().completeExceptionally(new AiServiceException("execution_interrupted"));
+                }
+                return null;
+            }).when(execution.client).close();
+            when(execution.client.awaitTermination(any())).thenReturn(true);
+
+            // 首轮立即扫描，后续延后一小时，防止后续补扫掩盖首轮领取失败。
+            try (AiJobRuntime runtime = new AiJobRuntime(jobService, execution.client, manager,
+                    3, Duration.ofHours(1), Duration.ofSeconds(10))) {
+                runtime.start();
+                List<ModelCall> calls = List.of(execution.nextModelCall(),
+                        execution.nextModelCall(), execution.nextModelCall());
+
+                assertThat(claimSelection.selectedIds).hasSize(3);
+                assertThat(calls).extracting(call -> call.request().jobId())
+                        .containsExactlyInAnyOrder(first.getJobId().toString(),
+                                second.getJobId().toString(), third.getJobId().toString());
+                assertThat(jobs.selectById(first.getJobId()).getStatus()).isEqualTo("running");
+                assertThat(jobs.selectById(second.getJobId()).getStatus()).isEqualTo("running");
+                assertThat(jobs.selectById(third.getJobId()).getStatus()).isEqualTo("running");
+                assertThat(jobs.selectById(fourth.getJobId()).getStatus()).isEqualTo("queued");
+            }
+        } finally {
+            claimSelection.disable();
+            jdbc.update("DELETE FROM ai_reply WHERE user_id=?", secondUser);
+            jdbc.update("DELETE FROM ai_job WHERE user_id=?", secondUser);
+            jdbc.update("DELETE FROM mood_record WHERE user_id=?", secondUser);
+            jdbc.update("DELETE FROM user WHERE id=?", secondUser);
+        }
     }
 
     @Test
@@ -896,7 +981,7 @@ class AiJobPersistenceIT {
     }
 
     @Test
-    void claimRowLockTimeoutLeavesJobQueuedAndDoesNotCallModel() throws Exception {
+    void claimSkipsLockedHeadAndCanProcessNextTask() throws Exception {
         var saved = service.add(input());
         ExecutorService locker = Executors.newSingleThreadExecutor();
         CountDownLatch locked = new CountDownLatch(1);
@@ -911,20 +996,24 @@ class AiJobPersistenceIT {
             }));
             try {
                 assertThat(locked.await(3, TimeUnit.SECONDS)).isTrue();
-                assertThat(jdbc.queryForObject("SELECT @@innodb_lock_wait_timeout", Integer.class)).isGreaterThan(5);
-                long started = System.nanoTime();
                 var result = execution.worker.runOne();
 
-                assertThatThrownBy(() -> result.get(9, TimeUnit.SECONDS))
-                        .isInstanceOf(ExecutionException.class)
-                        .hasRootCauseInstanceOf(java.sql.SQLTimeoutException.class);
-                Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
-                assertThat(elapsed).isBetween(Duration.ofSeconds(3), Duration.ofSeconds(9));
+                // 唯一候选被锁时直接空闲，不等锁、不递增尝试，也不调用模型。
+                assertThat(result.get(3, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.IDLE);
                 assertThat(holding).isNotDone();
                 assertThat(jobs.selectById(saved.getJobId()).getStatus()).isEqualTo("queued");
                 assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isZero();
                 verifyNoInteractions(execution.client);
-                System.out.println("3C_REAL_DB claim_lock_timeout_ms=" + elapsed.toMillis());
+
+                // 队头仍被锁时，后来的任务也应有机会领取，而非一起等待队头。
+                var next = service.add(input());
+                var nextResult = execution.worker.runOne();
+                ModelCall call = execution.nextModelCall();
+                assertThat(call.request().jobId()).isEqualTo(next.getJobId().toString());
+                call.succeed();
+                assertThat(nextResult.get(3, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
+                assertThat(holding).isNotDone();
+                assertThat(jobs.selectById(saved.getJobId()).getAttemptCount()).isZero();
             } finally {
                 release.countDown();
                 holding.get(3, TimeUnit.SECONDS);
@@ -1225,6 +1314,41 @@ class AiJobPersistenceIT {
                 database.shutdownNow();
                 assertThat(database.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
             }
+        }
+    }
+
+    /** 仅协调真实SELECT返回时机，不替换SQL、候选行或事务；未启用时直接透传。 */
+    @Intercepts(@Signature(type = org.apache.ibatis.executor.Executor.class, method = "query", args = {
+            MappedStatement.class, Object.class, RowBounds.class, ResultHandler.class}))
+    public static class ClaimSelectionBarrier implements Interceptor {
+        private volatile CyclicBarrier barrier;
+        private final ConcurrentLinkedQueue<Long> selectedIds = new ConcurrentLinkedQueue<>();
+
+        void enable(int participants) {
+            selectedIds.clear();
+            barrier = new CyclicBarrier(participants);
+        }
+
+        void disable() {
+            barrier = null;
+        }
+
+        @Override
+        public Object intercept(Invocation invocation) throws Throwable {
+            Object result = invocation.proceed();
+            MappedStatement statement = (MappedStatement) invocation.getArgs()[0];
+            CyclicBarrier current = barrier;
+            if (current == null || !statement.getId().endsWith("AiJobMapper.selectNextQueued")) {
+                return result;
+            }
+
+            List<?> rows = (List<?>) result;
+            if (!rows.isEmpty()) {
+                selectedIds.add(((AiJob) rows.get(0)).getId());
+            }
+            // 三个事务均选完候选再继续CAS，避免靠线程调度偶然串行把测试跑绿。
+            current.await(5, TimeUnit.SECONDS);
+            return result;
         }
     }
 
