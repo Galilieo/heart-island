@@ -1,7 +1,7 @@
 // 异步动作封装：把"loading 状态 + try/catch + 成功/失败 toast"打包成一行。
 // 解决的问题：原来每个按钮都要写一遍 loading=true → try → toast → finally。
 import { ref } from 'vue'
-import { useToast } from './useToast'
+import { useToast } from './useToast.js'
 
 /**
  * 把"loading + try/catch + toast"三件套包成一个 composable。
@@ -12,13 +12,16 @@ import { useToast } from './useToast'
  * @param {string|((data)=>string)} [options.successMsg]
  * @param {string} [options.errorMsg] 默认错误兜底文案
  * @param {boolean} [options.silent] true 则不弹 toast
+ * @param {boolean} [options.concurrent] 允许读操作并发；调用方须防止旧响应覆盖新状态，写操作默认互斥
  */
 export function useAsyncAction(fn, options = {}) {
   const toast = useToast()
   const loading = ref(false)
+  let running = 0
 
   async function run(...args) {
-    if (loading.value) return { ok: false }
+    if (loading.value && !options.concurrent) return { ok: false }
+    running++
     loading.value = true
 
     try {
@@ -45,7 +48,8 @@ export function useAsyncAction(fn, options = {}) {
       if (!options.silent) toast.error(msg)
       return { ok: false, message: msg, error: err }
     } finally {
-      loading.value = false
+      running--
+      loading.value = running > 0
     }
   }
 
