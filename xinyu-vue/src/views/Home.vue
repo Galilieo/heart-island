@@ -8,6 +8,7 @@ import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import BaseButton from '../components/ui/BaseButton.vue'
 import BaseTag from '../components/ui/BaseTag.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
@@ -23,9 +24,11 @@ import { useUserStore } from '../stores/user'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
 import { useAsyncAction } from '../composables/useAsyncAction'
+import { useMoodPolling } from '../composables/useMoodPolling.js'
 
 const moodStore = useMoodStore()
 const userStore = useUserStore()
+const { now } = useMoodPolling(moodStore, userStore)
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -56,7 +59,7 @@ const todaySubtitle = computed(() => {
 
 const { run: doFetchList, loading: listLoading } = useAsyncAction(
   () => moodStore.fetchList(),
-  { silent: true }
+  { silent: true, concurrent: true }
 )
 
 const { run: doFetchTrend } = useAsyncAction(
@@ -66,12 +69,12 @@ const { run: doFetchTrend } = useAsyncAction(
 
 const { run: doAdd, loading: adding } = useAsyncAction(
   () => moodStore.add({ moodType: moodType.value, content: content.value.trim(), needAiReply: needAiReply.value }),
-  { successMsg: () => (needAiReply.value ? '记录成功，AI 回复已生成' : '记录成功'), errorMsg: '暂时没能保存，请稍后再试' }
+  { errorMsg: '暂时没能保存，请稍后再试' }
 )
 
 const { run: doUpdate, loading: updating } = useAsyncAction(
   (payload) => moodStore.update(payload.id, { moodType: payload.moodType, content: payload.content, needAiReply: payload.needAiReply }),
-  { successMsg: '已保存修改' }
+  {}
 )
 
 async function handleAdd() {
@@ -81,8 +84,26 @@ async function handleAdd() {
   if (res.ok) {
     moodType.value = ''
     content.value = ''
+    showSavedResult(res)
   }
 }
+
+function showSavedResult(res) {
+  if (res.refreshFailed) toast.warn('已保存，列表刷新失败，请刷新查看')
+  else toast.success('心情已保存，回复状态可在记录中查看')
+}
+
+async function handleRefresh() {
+  const detailId = moodStore.selected?.id
+  const operations = [moodStore.fetchList()]
+  if (detailId) operations.push(moodStore.openDetail(detailId))
+  const results = await Promise.allSettled(operations)
+  const failed = results.some(result => result.status === 'rejected' || !result.value?.ok)
+  if (failed) toast.warn('部分状态暂未能刷新，请稍后再试')
+  moodStore.refreshObservation()
+}
+
+const { run: handleRetry } = useAsyncAction(id => moodStore.retry(id), { successMsg: '已更新回复状态' })
 
 async function handleApplyFilter() {
   if (filters.value.startDate && filters.value.endDate && filters.value.startDate > filters.value.endDate) {
@@ -98,18 +119,20 @@ async function handleResetFilter() {
 }
 
 async function handlePageChange(p) {
-  pagination.value.pageNum = p
+  moodStore.setPage(p)
   await doFetchList()
 }
 
 async function openDetail(id) {
   detailLoadingId.value = id
-  const res = await moodStore.openDetail(id)
-  detailLoadingId.value = null
-  if (res.ok) {
-    detailOpen.value = true
-  } else {
-    toast.error(res.message || '加载详情失败')
+  try {
+    const res = await moodStore.openDetail(id)
+    if (res.ok) detailOpen.value = true
+    else if (!res.stale) toast.error(res.message || '加载详情失败')
+  } catch (error) {
+    toast.error(error.userMessage || '加载详情失败')
+  } finally {
+    if (detailLoadingId.value === id) detailLoadingId.value = null
   }
 }
 
@@ -120,7 +143,11 @@ function closeDetail() {
 
 async function handleUpdate(payload) {
   const res = await doUpdate(payload)
-  if (res.ok) detailOpen.value = false
+  if (res.ok) {
+    detailOpen.value = false
+    moodStore.closeDetail()
+    showSavedResult(res)
+  }
 }
 
 async function handleDelete(id) {
@@ -132,10 +159,18 @@ async function handleDelete(id) {
   })
   if (!ok) return
   deletingId.value = id
-  const res = await moodStore.remove(id)
-  deletingId.value = null
-  if (res.ok) toast.success('已删除')
-  else toast.error(res.message || '删除失败')
+  try {
+    const res = await moodStore.remove(id)
+    if (res.ok) {
+      if (!selected.value) detailOpen.value = false
+      if (res.refreshFailed) toast.warn('已删除，列表刷新失败，请刷新查看')
+      else toast.success('已删除')
+    } else toast.error(res.message || '删除失败')
+  } catch (error) {
+    toast.error(error.userMessage || '删除失败')
+  } finally {
+    deletingId.value = null
+  }
 }
 
 onMounted(() => {
@@ -184,6 +219,7 @@ onMounted(() => {
               <BaseTag v-if="total" tone="brand" variant="soft" size="md">
                 共 {{ total }} 条
               </BaseTag>
+              <BaseButton variant="link" size="sm" :loading="listLoading" @click="handleRefresh">刷新</BaseButton>
             </header>
 
             <MoodFilterBar
@@ -204,10 +240,14 @@ onMounted(() => {
                   v-for="m in list"
                   :key="m.id"
                   :mood="m"
+                  :now="now"
+                  :retrying="moodStore.pendingIds.has(String(m.id))"
                   :detail-loading="detailLoadingId === m.id"
                   :deleting="deletingId === m.id"
                   @detail="openDetail"
                   @delete="handleDelete"
+                  @retry="handleRetry"
+                  @refresh="handleRefresh"
                 />
               </template>
 
@@ -235,6 +275,10 @@ onMounted(() => {
         v-model="detailOpen"
         :mood="selected"
         :updating="updating"
+        :now="now"
+        :retrying="selected && moodStore.pendingIds.has(String(selected.id))"
+        @retry="handleRetry"
+        @refresh="handleRefresh"
         @update="handleUpdate"
         @close="closeDetail"
       />

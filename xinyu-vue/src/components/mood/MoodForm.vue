@@ -68,7 +68,7 @@ const canSubmit = computed(
       block
       @click="$emit('submit')"
     >
-      {{ adding ? (needAiReply ? 'AI 正在生成回复…' : '正在保存…') : '保存这条心情' }}
+      {{ adding ? '正在保存…' : '保存这条心情' }}
     </BaseButton>
   </BaseCard>
 </template>

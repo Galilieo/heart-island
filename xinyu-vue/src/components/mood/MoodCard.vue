@@ -2,6 +2,7 @@
 // 心情记录卡片。展示心情类型、时间、内容（3 行截断）和 AI 回复（2 行截断）。
 // 点查看详情触发 @detail，点删除触发 @delete，loading 状态由父级传入。
 import { ref } from 'vue'
+import MoodAiStatus from './MoodAiStatus.vue'
 import BaseCard from '../ui/BaseCard.vue'
 import BaseTag from '../ui/BaseTag.vue'
 import BaseButton from '../ui/BaseButton.vue'
@@ -11,10 +12,12 @@ import Xiaoya from '../ui/Xiaoya.vue'
 defineProps({
   mood: { type: Object, required: true },
   detailLoading: Boolean,
-  deleting: Boolean
+  deleting: Boolean,
+  retrying: Boolean,
+  now: Number
 })
 
-defineEmits(['detail', 'delete'])
+defineEmits(['detail', 'delete', 'retry', 'refresh'])
 
 // ≤480px 时心屿回复默认收起为一行开关，点开在卡内展开。
 // 纯展示层局部状态；桌面端始终完整显示。
@@ -54,6 +57,9 @@ const aiOpen = ref(false)
         {{ mood.aiReply || '暂无 AI 回复' }}
       </p>
     </div>
+
+    <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || deleting"
+      @retry="id => $emit('retry', id)" @refresh="$emit('refresh')" />
 
     <div class="mood-card__actions">
       <BaseButton

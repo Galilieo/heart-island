@@ -11,14 +11,17 @@ import BaseSwitch from '../ui/BaseSwitch.vue'
 import { moodTone, moodExpression, formatTime } from '../../utils/mood'
 import Xiaoya from '../ui/Xiaoya.vue'
 import MoodPicker from './MoodPicker.vue'
+import MoodAiStatus from './MoodAiStatus.vue'
 
 const props = defineProps({
   modelValue: Boolean,
   mood: { type: Object, default: null },
-  updating: Boolean
+  updating: Boolean,
+  retrying: Boolean,
+  now: Number
 })
 
-const emit = defineEmits(['update:modelValue', 'update', 'close'])
+const emit = defineEmits(['update:modelValue', 'update', 'close', 'retry', 'refresh'])
 
 const editing = ref(false)
 const editMoodType = ref('')
@@ -26,14 +29,15 @@ const editContent = ref('')
 const editNeedAiReply = ref(true)
 
 watch(
-  () => props.mood,
-  (m) => {
+  () => [props.modelValue, props.mood?.id],
+  () => {
+    const m = props.mood
     editing.value = false
     if (m) {
       editMoodType.value = m.moodType || ''
       editContent.value = m.content || ''
-      // 开关默认反映现状：有回复则开，没有则关
-      editNeedAiReply.value = !!m.aiReply
+      // 开关读取保存意愿，不能把排队／生成中暂无正文误当成关闭。
+      editNeedAiReply.value = m.aiReplyEnabled ?? !!m.aiReply
     }
   },
   { immediate: true }
@@ -51,7 +55,7 @@ function startEdit() {
   editing.value = true
   editMoodType.value = props.mood.moodType || ''
   editContent.value = props.mood.content || ''
-  editNeedAiReply.value = !!props.mood.aiReply
+  editNeedAiReply.value = props.mood.aiReplyEnabled ?? !!props.mood.aiReply
 }
 
 function cancelEdit() {
@@ -59,7 +63,7 @@ function cancelEdit() {
   if (props.mood) {
     editMoodType.value = props.mood.moodType || ''
     editContent.value = props.mood.content || ''
-    editNeedAiReply.value = !!props.mood.aiReply
+    editNeedAiReply.value = props.mood.aiReplyEnabled ?? !!props.mood.aiReply
   }
 }
 
@@ -106,7 +110,9 @@ function close() {
 
       <section class="md__block md__block--ai">
         <h4>AI 回复</h4>
-        <p>{{ mood.aiReply || '暂无 AI 回复' }}</p>
+        <p v-if="mood.aiReply">{{ mood.aiReply }}</p>
+        <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || updating"
+          @retry="id => emit('retry', id)" @refresh="emit('refresh')" />
       </section>
 
       <section v-if="editing" class="md__edit">
@@ -133,7 +139,7 @@ function close() {
       <template v-else>
         <BaseButton variant="plain" :disabled="updating" @click="cancelEdit">取消</BaseButton>
         <BaseButton variant="primary" :loading="updating" :disabled="!canSave" @click="save">
-          {{ updating ? (editNeedAiReply ? 'AI 正在生成回复…' : '正在保存…') : '保存修改' }}
+          {{ updating ? '正在保存…' : '保存修改' }}
         </BaseButton>
       </template>
     </template>
