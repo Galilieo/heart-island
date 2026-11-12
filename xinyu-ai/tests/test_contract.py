@@ -25,7 +25,7 @@ async def test_model_reply_accepts_exactly_500_utf16_and_echoes_correlation(cont
     assert response.json() == {
         "request_id": "request-1", "job_id": "9223372036854775807", "attempt": 1,
         "source_version": "1", "reply_content": provider.text, "result_kind": "MODEL",
-        "model_called": True, "template_version": "mood-reply-v1", "model_name": "test-model",
+        "model_called": True, "template_version": "mood-reply-v2", "model_name": "test-model",
     }
     assert len(provider.calls) == 1
 

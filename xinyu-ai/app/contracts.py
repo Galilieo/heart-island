@@ -5,7 +5,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-TEMPLATE_VERSION = "mood-reply-v1"
+# 版本号对应 evals/prompts/mood-reply-v2b.txt（提示词文件见该路径及 AI_WORKLOG 测评记录）。
+TEMPLATE_VERSION = "mood-reply-v2"
 
 # 以下范围与 Java 侧契约一致：正文按 UTF-16 代码单元计数，
 # budget_ms 与 ID／版本上限来自 Java 的字段定义和 signed long 范围。
@@ -104,7 +105,7 @@ class MoodReplyResponse(Correlation):
     reply_content: str
     result_kind: Literal["MODEL", "SUPPORT"]
     model_called: bool
-    template_version: Literal["mood-reply-v1"] = TEMPLATE_VERSION
+    template_version: Literal["mood-reply-v2"] = TEMPLATE_VERSION
     model_name: str | None
 
     @field_validator("reply_content")

@@ -115,6 +115,8 @@ Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕�
 
 200 响应：关联字段 + `reply_content`、`result_kind`（MODEL / SUPPORT）、`model_called`、`template_version`、`model_name`。正文去空白后非空、至多 2000 个 UTF-16 单位；MODEL 必须 model_called=true 且模型名非空；SUPPORT 必须 model_called=false 且模型名空。Java再校验一遍。
 
+`template_version` 取值（2026-11-12 提示词 v2 上线，对应提示词文件 `xinyu-ai/evals/prompts/mood-reply-v2b.txt`）：Python 当前只回 `mood-reply-v2`；Java `MoodAiResponse` 在滚动升级期间接受具名常量集合 `{mood-reply-v1, mood-reply-v2}`，v1 保留到确认不再有旧 Python 实例后再移除。**部署顺序必须先 Java（先能接受 v2），后 Python（再开始返回 v2）**，反向顺序会让旧 Java 拒绝 v2 回包；本轮仅代码落地，未部署。任务表 `ai_job.template_version` 由创建任务的 Java 进程按自身版本盖章，升级窗口内创建与执行的版本可能短暂不一致，以回包校验为准。
+
 3A客户端实施状态（2026-11-09）：采用Boot管理的Apache HttpClient 5.5.2，不改Boot或Java版本。成功与错误响应正文最多16KiB，状态行及响应头累计最多8KiB，在解析期间拒绝超界；禁止重定向、自动重试及自动内容解压。严格检查重复键、尾随JSON、必需／未知字段和实际JSON类型，再校验关联与语义。worker关闭时不创建客户端、不要求内部地址／凭据。新增generateAsync返回CompletableFuture，DNS等待仅登记续接；同一客户端逻辑请求及实际HTTP执行线程均受concurrency限制（默认3），交接队列上限同为concurrency，超容量安全overloaded。同步generate保留为明确阻塞的兼容入口，3C worker须使用异步入口；同步回调保持轻量，数据库收尾必须使用显式执行器。关闭取消未完成请求、DNS调度及HTTP资源，worker生命周期已在3D接入，默认关闭，新增主体已带读。
 
 DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解析，A／B／C共享一项查询并登记各自续接；成功后当前仍有效的请求使用剩余预算发送。失败后当前等待者分别provider_error，缓存失败默认10秒（AI_DNS_FAILURE_CACHE_SECONDS，配置范围1～3600秒）；缓存期内直接失败，到期新请求触发重查。物理查询单线程、最多一项；解析等待上限沿用connect预算（默认2秒），逻辑超时后若原生调用仍卡住就保留进行中标记，不因缓存过期不断创建线程；迟到地址丢弃，实际查询退出后才可发起新查询。DNS等待计入原总deadline，单请求取消／超时不取消共享查询；过期或关闭后的请求不再发送HTTP。成功地址缓存到客户端关闭，本轮不含动态IP／成功TTL刷新，不宣称强制终止不可中断的原生DNS。已完成180项Java普通／合成Python联调验证；独立评审状态和证据见执行稿11.7／11.8及本地progress。

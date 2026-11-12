@@ -42,7 +42,7 @@ public class AiJobService {
     private static final String RESULT_KIND_MODEL = "MODEL";
 
     /** 模板版本，须与 Python contracts.TEMPLATE_VERSION 保持一致。 */
-    private static final String TEMPLATE_VERSION = "mood-reply-v1";
+    private static final String TEMPLATE_VERSION = "mood-reply-v2";
 
     /** 持久排队容量，来源：1a 功能设计第 8 节（全局 queued 100、单用户 queued/running 3）。 */
     private static final int MAX_QUEUED_JOBS = 100;

@@ -56,4 +56,11 @@ class MoodAiResponseTests {
         MoodAiResponse badTemplate = new MoodAiResponse("req-A", "10", 1, "7", "回复", "MODEL", true, "unknown", "m");
         assertThatThrownBy(() -> badTemplate.validatedReply(10, 1, "req-A", 7)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void acceptsBothTemplateVersionsDuringRollingUpgrade() {
+        // 滚动升级期间 Python 可能回 v1 或 v2，两者都须接受；未知版本仍拒绝（见 rejectsEveryMismatchedCorrelationField）。
+        MoodAiResponse v2 = new MoodAiResponse("req-A", "10", 1, "7", "回复", "MODEL", true, "mood-reply-v2", "test-model");
+        assertThat(v2.validatedReply(10, 1, "req-A", 7)).isEqualTo("回复");
+    }
 }
