@@ -2,6 +2,8 @@ package com.xinyu.service;
 
 import com.xinyu.dto.MoodAiRequest;
 import com.xinyu.dto.MoodAiResponse;
+import com.xinyu.dto.ReviewAiRequest;
+import com.xinyu.dto.ReviewAiResponse;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamReadFeature;
@@ -62,6 +64,16 @@ public final class AiServiceClient implements AutoCloseable {
 
     /** response给出业务结果；terminated在本次HTTP执行及资源清理结束后完成，供worker归还槽位。 */
     public record Generation(CompletableFuture<MoodAiResponse> response, CompletableFuture<Void> terminated) { }
+
+    /** 回顾与日记共用 DNS、HTTP线程、总预算和取消机制。 */
+    public record ReviewGeneration(CompletableFuture<ReviewAiResponse> response, CompletableFuture<Void> terminated) { }
+
+    private record Exchange<T>(CompletableFuture<T> response, CompletableFuture<Void> terminated) { }
+
+    @FunctionalInterface
+    private interface ResponseParser<T> {
+        T parse(JsonNode root) throws IOException;
+    }
 
     /** 单次调用的时间上限；只允许收紧，不允许超过生产初值。 */
     public record Limits(Duration connect, Duration read, Duration total) {
@@ -126,7 +138,7 @@ public final class AiServiceClient implements AutoCloseable {
     private final CloseableHttpClient http;
     private final ScheduledThreadPoolExecutor deadlines;
     private final Object lifecycle = new Object();
-    private final Set<Call> active = ConcurrentHashMap.newKeySet();
+    private final Set<Call<?>> active = ConcurrentHashMap.newKeySet();
     private final FixedAiDnsResolver dns;
     private final ThreadPoolExecutor httpWorkers;
     private final int concurrency;
@@ -142,6 +154,8 @@ public final class AiServiceClient implements AutoCloseable {
                     .maxNumberLength(MAX_JSON_NUMBER_LENGTH)
                     .build())
             .build())
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 
     public AiServiceClient(String baseUrl, String token, int concurrency) {
@@ -226,14 +240,45 @@ public final class AiServiceClient implements AutoCloseable {
 
     /** worker同时观察结果与清理信号；取消response只取消本请求，不取消共享DNS。 */
     public Generation startGeneration(MoodAiRequest request, Duration remaining) {
-        Call call;
+        Exchange<MoodAiResponse> exchange = startCall(request, remaining, null, root -> parseSuccessResponse(root, request));
+        return new Generation(exchange.response(), exchange.terminated());
+    }
+
+    /** 回顾请求只改变协议载荷和结果解析，沿用同一有界传输执行器。 */
+    public ReviewGeneration startReviewGeneration(ReviewAiRequest request, Duration remaining) {
+        MoodAiRequest correlation = new MoodAiRequest(request.requestId(), request.jobId(), request.attempt(),
+                request.sourceVersion(), "平静", "review", request.budgetMs());
+        Exchange<ReviewAiResponse> exchange = startCall(correlation, remaining, request, root -> {
+            Set<String> fields = Set.of("request_id", "job_id", "attempt", "source_version", "body", "ps",
+                    "result_kind", "model_called", "model_name", "template_version");
+            requireExactFields(root, fields);
+            for (String field : fields) {
+                JsonNode value = root.get(field);
+                boolean valid = "ps".equals(field) ? value.isNull() || value.isTextual() : hasExpectedType(field, value);
+                if (!valid) {
+                    throw failure(INVALID_MODEL_RESPONSE);
+                }
+            }
+            ReviewAiResponse response = json.treeToValue(root, ReviewAiResponse.class);
+            try {
+                response.validate(request);
+            } catch (IllegalArgumentException invalid) {
+                throw failure(INVALID_MODEL_RESPONSE);
+            }
+            return response;
+        });
+        return new ReviewGeneration(exchange.response(), exchange.terminated());
+    }
+
+    private <T> Exchange<T> startCall(MoodAiRequest request, Duration remaining, ReviewAiRequest review, ResponseParser<T> parser) {
+        Call<T> call;
         try {
             if (Thread.currentThread().isInterrupted() || closed) throw failure(EXECUTION_INTERRUPTED);
             if (remaining == null || remaining.isNegative() || remaining.isZero()) throw failure(PROVIDER_TIMEOUT);
             Duration allowed = remaining.compareTo(limits.total()) < 0 ? remaining : limits.total();
             long deadline = clock.getAsLong() + allowed.toNanos();
             validateInput(request);
-            call = new Call(request, deadline);
+            call = new Call<>(request, deadline, review, parser);
             synchronized (lifecycle) {
                 if (closed) throw failure(EXECUTION_INTERRUPTED);
                 if (active.size() >= concurrency) throw failure("overloaded");
@@ -245,14 +290,14 @@ public final class AiServiceClient implements AutoCloseable {
                 }, Math.max(0, nanosUntil(deadline)), TimeUnit.NANOSECONDS);
             }
         } catch (AiServiceException invalid) {
-            return new Generation(CompletableFuture.failedFuture(invalid), CompletableFuture.completedFuture(null));
+            return new Exchange<>(CompletableFuture.failedFuture(invalid), CompletableFuture.completedFuture(null));
         }
         call.result.whenComplete((value, problem) -> release(call));
         dns.prepare().whenComplete((ignored, problem) -> afterDns(call, problem));
-        return new Generation(call.result, call.terminated);
+        return new Exchange<>(call.result, call.terminated);
     }
 
-    private void afterDns(Call call, Throwable dnsFailure) {
+    private <T> void afterDns(Call<T> call, Throwable dnsFailure) {
         if (call.result.isDone()) return;
         try {
             synchronized (lifecycle) {
@@ -263,7 +308,12 @@ public final class AiServiceClient implements AutoCloseable {
                 long remainingMs = nanosUntil(call.deadline) / 1_000_000;
                 int budgetMs = providerBudgetMs(call.request.budgetMs(), remainingMs);
                 if (budgetMs < 1) throw failure(PROVIDER_TIMEOUT);
-                call.post = buildPost(withBudget(call.request, budgetMs), remainingMs);
+                Object payload = call.review == null ? withBudget(call.request, budgetMs)
+                        : new ReviewAiRequest(call.review.requestId(), call.review.jobId(), call.review.attempt(),
+                                call.review.sourceVersion(), call.review.reviewType(), call.review.records(),
+                                call.review.aiEnabledTotal(), call.review.stats(), budgetMs);
+                URI target = call.review == null ? endpoint : endpoint.resolve("/internal/v1/mood-reviews");
+                call.post = buildPost(payload, remainingMs, target);
                 call.task = () -> executeHttp(call);
                 httpWorkers.execute(call.task);
             }
@@ -276,13 +326,13 @@ public final class AiServiceClient implements AutoCloseable {
         }
     }
 
-    private void executeHttp(Call call) {
+    private <T> void executeHttp(Call<T> call) {
         try {
             if (call.result.isDone()) return;
             checkDeadline(call.deadline, call.expired);
-            MoodAiResponse result = http.execute(call.post, response -> {
+            T result = http.execute(call.post, response -> {
                 try {
-                    MoodAiResponse parsed = parse(response, call.request);
+                    T parsed = parse(response, call);
                     checkDeadline(call.deadline, call.expired);
                     return parsed;
                 } catch (IOException | RuntimeException problem) {
@@ -302,7 +352,7 @@ public final class AiServiceClient implements AutoCloseable {
         }
     }
 
-    private void finish(Call call, MoodAiResponse value, AiServiceException problem) {
+    private <T> void finish(Call<T> call, T value, AiServiceException problem) {
         if (!call.finished.compareAndSet(false, true)) return;
         // 先释放逻辑容量再公开结果，允许调用方在完成回调里立即提交下一请求。
         release(call);
@@ -310,7 +360,7 @@ public final class AiServiceClient implements AutoCloseable {
         else call.result.completeExceptionally(problem);
     }
 
-    private void release(Call call) {
+    private void release(Call<?> call) {
         synchronized (lifecycle) {
             call.alarm.cancel(false);
             call.cancelPost();
@@ -325,18 +375,22 @@ public final class AiServiceClient implements AutoCloseable {
     /** 测试观察实际HTTP线程占用，区别于等待DNS的逻辑请求数。 */
     int httpActiveCount() { return httpWorkers.getActiveCount(); }
 
-    private static final class Call {
+    private static final class Call<T> {
+        final ReviewAiRequest review;
+        final ResponseParser<T> parser;
         final MoodAiRequest request;
         final long deadline;
         final AtomicBoolean expired = new AtomicBoolean();
         final AtomicBoolean finished = new AtomicBoolean();
-        final CompletableFuture<MoodAiResponse> result = new CompletableFuture<>();
+        final CompletableFuture<T> result = new CompletableFuture<>();
         final CompletableFuture<Void> terminated = new CompletableFuture<>();
         volatile HttpPost post;
         Runnable task;
         ScheduledFuture<?> alarm;
 
-        Call(MoodAiRequest request, long deadline) {
+        Call(MoodAiRequest request, long deadline, ReviewAiRequest review, ResponseParser<T> parser) {
+            this.review = review;
+            this.parser = parser;
             this.request = request;
             this.deadline = deadline;
         }
@@ -358,8 +412,8 @@ public final class AiServiceClient implements AutoCloseable {
         return new MoodAiRequest(r.requestId(), r.jobId(), r.attempt(), r.sourceVersion(), r.moodType(), r.content(), budgetMs);
     }
 
-    private HttpPost buildPost(MoodAiRequest input, long remainingMs) {
-        HttpPost post = new HttpPost(endpoint);
+    private HttpPost buildPost(Object input, long remainingMs, URI target) {
+        HttpPost post = new HttpPost(target);
         try {
             post.setHeader("Authorization", "Bearer " + token);
             post.setHeader("Accept", "application/json");
@@ -397,12 +451,12 @@ public final class AiServiceClient implements AutoCloseable {
     // 响应解析：状态码 → 正文读取 → JSON 结构 → 业务关联校验
     // =====================================================================
 
-    private MoodAiResponse parse(ClassicHttpResponse response, MoodAiRequest request) throws IOException {
+    private <T> T parse(ClassicHttpResponse response, Call<T> call) throws IOException {
         int status = response.getCode();
         requireAcceptedStatus(status);
         JsonNode root = readJsonBody(response.getEntity());
-        if (status != 200) throw parseErrorResponse(root, status, request);
-        return parseSuccessResponse(root, request);
+        if (status != 200) throw parseErrorResponse(root, status, call.request);
+        return call.parser.parse(root);
     }
 
     private static void requireAcceptedStatus(int status) {
@@ -605,20 +659,20 @@ public final class AiServiceClient implements AutoCloseable {
 
     @Override
     public void close() {
-        Call[] pending;
+        Call<?>[] pending;
         List<Runnable> abandoned;
         synchronized (lifecycle) {
             if (closed) return;
             closed = true;
-            pending = active.toArray(Call[]::new);
-            for (Call call : pending) call.cancelPost();
+            pending = active.toArray(Call<?>[]::new);
+            for (Call<?> call : pending) call.cancelPost();
             deadlines.shutdownNow();
             abandoned = httpWorkers.shutdownNow();
         }
         dns.close();
         http.close(CloseMode.IMMEDIATE);
         // 不持有生命周期锁执行Future续接；迟到DNS和HTTP结果不能覆盖已终止的结果。
-        for (Call call : pending) {
+        for (Call<?> call : pending) {
             if (abandoned.contains(call.task)) {
                 call.terminated.complete(null);
             }

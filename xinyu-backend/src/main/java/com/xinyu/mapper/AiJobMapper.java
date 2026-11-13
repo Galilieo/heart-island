@@ -140,4 +140,45 @@ public interface AiJobMapper extends BaseMapper<AiJob> {
           AND status IN ('queued', 'running', 'failed')
         """)
     int supersedeUnfinished(@Param("targetId") Long targetId, @Param("userId") Long userId);
+
+    /** MOOD_REVIEW 专用领取；共享原 worker 的执行槽位，不修改日记 SQL。 */
+    @Select("SELECT * FROM ai_job WHERE task_type='MOOD_REVIEW' AND status='queued' ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED")
+    AiJob selectNextReviewQueued();
+
+    @Update("""
+        UPDATE ai_job SET status='running',attempt_count=attempt_count+1,request_id=#{requestId},
+          started_at=CURRENT_TIMESTAMP,finished_at=NULL,last_error_code=NULL,
+          result_kind=NULL,model_name=NULL,model_called=NULL,update_time=CURRENT_TIMESTAMP
+        WHERE id=#{id} AND task_type='MOOD_REVIEW' AND status='queued' AND attempt_count=#{expectedAttempt}
+        """)
+    int claimReview(@Param("id") long id, @Param("expectedAttempt") int expectedAttempt, @Param("requestId") String requestId);
+
+    @Update("""
+        UPDATE ai_job SET status=#{status},last_error_code=#{errorCode},result_kind=#{resultKind},
+          model_called=#{modelCalled},model_name=#{modelName},finished_at=CURRENT_TIMESTAMP,update_time=CURRENT_TIMESTAMP
+        WHERE id=#{job.id} AND task_type='MOOD_REVIEW' AND user_id=#{job.userId}
+          AND target_id=#{job.targetId} AND target_version=#{job.targetVersion}
+          AND status='running' AND attempt_count=#{job.attemptCount} AND request_id=#{job.requestId}
+        """)
+    int finishReviewAttempt(@Param("job") AiJob job, @Param("status") String status,
+                            @Param("errorCode") String errorCode, @Param("resultKind") String resultKind,
+                            @Param("modelCalled") Boolean modelCalled, @Param("modelName") String modelName);
+
+    @Update("""
+        UPDATE ai_job SET status='queued',request_id=NULL,started_at=NULL,finished_at=NULL,last_error_code=NULL,
+          result_kind=NULL,model_called=NULL,model_name=NULL,update_time=CURRENT_TIMESTAMP
+        WHERE id=#{job.id} AND task_type='MOOD_REVIEW' AND user_id=#{job.userId}
+          AND target_id=#{job.targetId} AND target_version=#{job.targetVersion}
+          AND status='failed' AND attempt_count=#{job.attemptCount}
+          AND (#{cooldownSeconds}=0 OR finished_at IS NULL
+            OR CURRENT_TIMESTAMP>=TIMESTAMPADD(SECOND,#{cooldownSeconds},finished_at))
+        """)
+    int requeueReviewAfterCooldown(@Param("job") AiJob job, @Param("cooldownSeconds") int cooldownSeconds);
+
+    @Update("""
+        UPDATE ai_job SET status='failed',last_error_code='execution_interrupted',result_kind=NULL,
+          model_called=NULL,model_name=NULL,finished_at=CURRENT_TIMESTAMP,update_time=CURRENT_TIMESTAMP
+        WHERE task_type='MOOD_REVIEW' AND status='running'
+        """)
+    int failInterruptedReviews();
 }

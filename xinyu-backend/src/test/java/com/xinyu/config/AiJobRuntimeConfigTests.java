@@ -25,11 +25,15 @@ class AiJobRuntimeConfigTests {
     @Test
     void workerDisabledDoesNotRecoverOrClaim() {
         AiJobService jobs = mock(AiJobService.class);
-        new ApplicationContextRunner().withUserConfiguration(AiJobRuntimeConfig.class)
+        new ApplicationContextRunner()
+                .withBean(com.xinyu.mapper.AiJobMapper.class, () -> mock(com.xinyu.mapper.AiJobMapper.class))
+                .withBean(com.xinyu.service.MoodReviewService.class, () -> mock(com.xinyu.service.MoodReviewService.class))
+                .withUserConfiguration(AiJobRuntimeConfig.class)
                 .withBean(AiJobService.class, () -> jobs)
                 .run(context -> {
                     assertThat(context).hasNotFailed().doesNotHaveBean(AiJobRuntime.class);
-                    verifyNoInteractions(jobs);
+                    verify(jobs, never()).recoverInterrupted();
+                    verify(jobs, never()).claimNext();
                 });
     }
 
@@ -39,7 +43,8 @@ class AiJobRuntimeConfigTests {
         runner(jobs, false).run(context -> {
             assertThat(context).hasFailed();
             assertThat(context.getStartupFailure()).hasRootCauseMessage("invalid_ai_worker_database_timeouts");
-            verifyNoInteractions(jobs);
+            verify(jobs, never()).recoverInterrupted();
+            verify(jobs, never()).claimNext();
         });
     }
 
@@ -97,7 +102,10 @@ class AiJobRuntimeConfigTests {
         } catch (InterruptedException impossible) {
             throw new AssertionError(impossible);
         }
-        return new ApplicationContextRunner().withUserConfiguration(AiJobRuntimeConfig.class)
+        return new ApplicationContextRunner()
+                .withBean(com.xinyu.mapper.AiJobMapper.class, () -> mock(com.xinyu.mapper.AiJobMapper.class))
+                .withBean(com.xinyu.service.MoodReviewService.class, () -> mock(com.xinyu.service.MoodReviewService.class))
+                .withUserConfiguration(AiJobRuntimeConfig.class)
                 .withPropertyValues("AI_WORKER_ENABLED=true")
                 .withBean(AiJobService.class, () -> jobs)
                 .withBean(AiServiceClient.class, () -> client)

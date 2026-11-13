@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.contracts import ModelReply, MoodReplyRequest, MoodReplyResponse
+from app.reviews import ReviewRequest, validate_output, success_response
 from app.provider import HttpProvider, Provider, ProviderFailure
 from app.safety import build_support_reply
 from app.settings import Settings
@@ -56,10 +57,10 @@ async def _read_limited_body(request: Request) -> bytes | None:
     return bytes(body)
 
 
-def _parse_request(body: bytes) -> MoodReplyRequest | None:
+def _parse_request(body: bytes, review: bool = False) -> MoodReplyRequest | ReviewRequest | None:
     """解析并校验内部请求；非 JSON、结构不符或非法 Unicode 均返回 None。"""
     try:
-        return MoodReplyRequest.model_validate(json.loads(body))
+        return (ReviewRequest if review else MoodReplyRequest).model_validate(json.loads(body))
     except (ValueError, TypeError, RecursionError):
         return None
 
@@ -95,6 +96,7 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
         """返回应用就绪状态，不探测供应商，也不暴露配置。"""
         return {"ready": True}
 
+    @app.post("/internal/v1/mood-reviews")
     @app.post("/internal/v1/mood-replies")
     async def reply(request: Request):
         """在总时限内完成认证、输入校验、风险分流和单次回应。"""
@@ -111,7 +113,8 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                 body = await _read_limited_body(request)
                 if body is None:
                     return error("invalid_request")
-                data = _parse_request(body)
+                is_review = request.url.path == "/internal/v1/mood-reviews"
+                data = _parse_request(body, is_review)
                 if data is None:
                     return error("invalid_request")
                 request_id = data.request_id
@@ -124,23 +127,37 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                     if _deadline_reached(deadline):
                         raise TimeoutError
                     async with asyncio.timeout_at(deadline):
-                        support = build_support_reply(data.content)
-                        if _deadline_reached(deadline):
-                            raise TimeoutError
-                        if support is not None:
-                            text, kind, called, model = support, "SUPPORT", False, None
+                        if is_review:
+                            support = next((text for record in data.records
+                                            if (text := build_support_reply(record.content)) is not None), None)
+                            if support is not None:
+                                response = success_response(data, support, None, None)
+                            else:
+                                raw = await provider.generate(data, deadline)
+                                try:
+                                    validated_model = ModelReply(reply_content=raw.reply_content, model_name=raw.model_name)
+                                    validated_text = validate_output(validated_model.reply_content, data)
+                                except (ValueError, TypeError, AttributeError, RecursionError):
+                                    return error("invalid_model_response", request_id)
+                                response = success_response(data, validated_text.body, validated_text.ps, validated_model.model_name)
                         else:
-                            raw = await provider.generate(data, deadline)
-                            try:
-                                validated = ModelReply(reply_content=raw.reply_content, model_name=raw.model_name)
-                            except (ValidationError, AttributeError):
-                                return error("invalid_model_response", request_id)
-                            text, kind, called, model = validated.reply_content, "MODEL", True, validated.model_name
-                        response = MoodReplyResponse(
-                            **data.model_dump(include={"request_id", "job_id", "attempt", "source_version"}),
-                            reply_content=text, result_kind=kind, model_called=called, model_name=model,
-                        )
-                        result = JSONResponse(response.model_dump())
+                            support = build_support_reply(data.content)
+                            if _deadline_reached(deadline):
+                                raise TimeoutError
+                            if support is not None:
+                                text, kind, called, model = support, "SUPPORT", False, None
+                            else:
+                                raw = await provider.generate(data, deadline)
+                                try:
+                                    validated = ModelReply(reply_content=raw.reply_content, model_name=raw.model_name)
+                                except (ValidationError, AttributeError):
+                                    return error("invalid_model_response", request_id)
+                                text, kind, called, model = validated.reply_content, "MODEL", True, validated.model_name
+                            response = MoodReplyResponse(
+                                **data.model_dump(include={"request_id", "job_id", "attempt", "source_version"}),
+                                reply_content=text, result_kind=kind, model_called=called, model_name=model,
+                            )
+                        result = JSONResponse(response if is_review else response.model_dump())
                         # 异步超时无法抢占同步校验和序列化，返回成功前必须再次检查截止时间。
                         if _deadline_reached(deadline):
                             raise TimeoutError

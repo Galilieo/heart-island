@@ -1,68 +1,105 @@
 package com.xinyu.controller;
 
 import com.xinyu.common.Result;
-import com.xinyu.service.MoodReviewStatsService;
+import com.xinyu.service.MoodReviewService;
 import com.xinyu.utils.JwtUtil;
-import com.xinyu.vo.MoodReviewStatsVO;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
-/** 回顾页统计接口；只读，不产生模型调用，也不写库。 */
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/** 回顾报告接口；用户由登录 token 决定，GET 只读取统计与已保存报告。 */
 @RestController
 @RequestMapping("/mood")
 public class MoodReviewController {
-
-    private final MoodReviewStatsService moodReviewStatsService;
+    private final MoodReviewService reviews;
     private final JwtUtil jwtUtil;
 
-    public MoodReviewController(MoodReviewStatsService moodReviewStatsService, JwtUtil jwtUtil) {
-        this.moodReviewStatsService = moodReviewStatsService;
+    public MoodReviewController(MoodReviewService reviews, JwtUtil jwtUtil) {
+        this.reviews = reviews;
         this.jwtUtil = jwtUtil;
     }
 
-    /**
-     * 周统计。start 缺省时取上一个完整自然周；只允许周一，且不能是未来的周。
-     * 本周只返回统计，不生成报告。
-     */
+    public record GenerateRequest(String start) { }
+
     @GetMapping("/report/week")
-    public Result<MoodReviewStatsVO> week(@RequestHeader(value = "token", required = false) String token,
-                                          @RequestParam(required = false) String start) {
-        Long userId = currentUserId(token);
-        if (userId == null) {
-            return Result.error("请先登录");
-        }
-
+    public Result<Map<String, Object>> week(@RequestHeader(value = "token", required = false) String token,
+                                            @RequestParam(required = false) String start) {
         try {
-            return Result.success("查询成功", moodReviewStatsService.getWeekStats(userId, start));
+            return Result.success("查询成功", page(reviews.get(currentUserId(token), "WEEK", start)));
         } catch (IllegalArgumentException invalid) {
-            return Result.error(invalid.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalid.getMessage());
         }
     }
 
-    /** 近 30 天统计；当前只支持 range=30d。 */
     @GetMapping("/analysis")
-    public Result<MoodReviewStatsVO> analysis(@RequestHeader(value = "token", required = false) String token,
-                                              @RequestParam(required = false, defaultValue = "30d") String range) {
-        Long userId = currentUserId(token);
-        if (userId == null) {
-            return Result.error("请先登录");
+    public Result<Map<String, Object>> analysis(@RequestHeader(value = "token", required = false) String token,
+                                                @RequestParam(defaultValue = "30d") String range) {
+        long user = currentUserId(token);
+        if (!"30d".equals(range)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_range");
         }
-
-        if (range != null && !range.isBlank() && !"30d".equals(range)) {
-            return Result.error("不支持的统计范围");
-        }
-
-        return Result.success("查询成功", moodReviewStatsService.getRecent30Stats(userId));
+        return Result.success("查询成功", page(reviews.get(user, "RECENT_30", null)));
     }
 
-    /** 从请求头 token 解析登录用户；缺失或空白返回 null。 */
-    private Long currentUserId(String token) {
-        if (token == null || token.trim().isEmpty()) {
-            return null;
+    @PostMapping("/report/week/generate")
+    public Result<MoodReviewService.Report> generate(@RequestHeader(value = "token", required = false) String token,
+                                                      @RequestBody(required = false) GenerateRequest request) {
+        return generateWeek(token, request, false);
+    }
+
+    @PostMapping("/report/week/regenerate")
+    public Result<MoodReviewService.Report> regenerate(@RequestHeader(value = "token", required = false) String token,
+                                                        @RequestBody(required = false) GenerateRequest request) {
+        return generateWeek(token, request, true);
+    }
+
+    @PostMapping("/analysis/generate")
+    public Result<MoodReviewService.Report> generateRecent(@RequestHeader(value = "token", required = false) String token) {
+        return Result.success("生成任务已保存", reviews.generate(currentUserId(token), "RECENT_30", null, false));
+    }
+
+    @GetMapping("/report/week/history")
+    public Result<List<MoodReviewService.History>> history(@RequestHeader(value = "token", required = false) String token,
+                                                           @RequestParam(defaultValue = "1") int page) {
+        return Result.success("查询成功", reviews.history(currentUserId(token), page));
+    }
+
+    private Result<MoodReviewService.Report> generateWeek(String token, GenerateRequest request, boolean regenerate) {
+        try {
+            return Result.success("生成任务已保存", reviews.generate(currentUserId(token), "WEEK",
+                    request == null ? null : request.start(), regenerate));
+        } catch (IllegalArgumentException invalid) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, invalid.getMessage());
         }
-        return jwtUtil.getUserId(token);
+    }
+
+    /** 保留第1步统计字段在顶层，只追加 report/active，现有统计页面继续可读。 */
+    private Map<String, Object> page(MoodReviewService.Page value) {
+        var result = new LinkedHashMap<String, Object>();
+        var stats = value.stats();
+        result.put("rangeStart", stats.rangeStart());
+        result.put("rangeEnd", stats.rangeEnd());
+        result.put("total", stats.total());
+        result.put("daysWithRecords", stats.daysWithRecords());
+        result.put("days", stats.days());
+        result.put("moodCounts", stats.moodCounts());
+        result.put("report", value.report());
+        result.put("active", value.active());
+        return result;
+    }
+
+    private long currentUserId(String token) {
+        if (token == null || token.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "login_required");
+        }
+        Long user = jwtUtil.getUserId(token);
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "login_required");
+        }
+        return user;
     }
 }

@@ -88,6 +88,21 @@ public class AiJobService {
         this.workerEnabled = workerEnabled;
     }
 
+    private MoodReviewService reviews;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setReviews(MoodReviewService reviews) {
+        this.reviews = reviews;
+    }
+
+    public MoodReviewService.Prepared prepareReview(long id, int attempt, String requestId) {
+        return reviews.prepare(id, attempt, requestId);
+    }
+
+    public boolean completeReview(long id, int attempt, String requestId, com.xinyu.dto.ReviewAiResponse response) {
+        return reviews.complete(id, attempt, requestId, response);
+    }
+
     /**
      * 原子领取一条待办；没有领取成功时由下一次扫描继续，不在这里反复抢占。
      *
@@ -97,7 +112,7 @@ public class AiJobService {
         if (!workerEnabled) return null;
         return admission.transaction(() -> {
             AiJob candidate = jobs.selectNextQueued();
-            if (candidate == null) return null;
+            if (candidate == null) return reviews == null ? null : reviews.claimNext();
             String requestId = UUID.randomUUID().toString();
             if (jobs.claim(candidate.getId(), candidate.getAttemptCount(), requestId) != 1) return null;
             // 同一事务内重新读取，返回 CAS 之后的真实行并锁到提交。
@@ -175,6 +190,9 @@ public class AiJobService {
      */
     public boolean fail(long jobId, int attempt, String requestId, String errorCode) {
         AiJob job = jobs.selectById(jobId);
+        if (job != null && MoodReviewService.TASK_TYPE.equals(job.getTaskType())) {
+            return reviews.fail(jobId, attempt, requestId, errorCode);
+        }
         if (!isCurrentAttempt(job, attempt, requestId)) return false;
         String safeCode = ERROR_CODES.contains(errorCode == null ? "" : errorCode) ? errorCode : ERROR_INTERNAL;
         return finish(job, STATUS_FAILED, safeCode, null);
@@ -187,6 +205,10 @@ public class AiJobService {
      * @throws ResponseStatusException 任务不可重试、容量已满或状态已变化
      */
     public AiJobVO retry(long userId, long jobId) {
+        AiJob observed = jobs.selectById(jobId);
+        if (observed != null && MoodReviewService.TASK_TYPE.equals(observed.getTaskType())) {
+            return reviews.retry(userId, jobId);
+        }
         return admission.save(() -> {
             AiJob job = ownedJob(userId, jobId);
             MoodRecord source = ownedCurrentSource(job);
@@ -221,6 +243,10 @@ public class AiJobService {
      */
     public AiJobVO getOwned(long userId, long jobId) {
         return admission.transaction(() -> {
+            AiJob observed = jobs.selectById(jobId);
+            if (observed != null && MoodReviewService.TASK_TYPE.equals(observed.getTaskType())) {
+                return reviews.getOwned(userId, jobId);
+            }
             AiJob job = ownedJob(userId, jobId);
             return view(job, ownedCurrentSource(job));
         });
@@ -228,7 +254,7 @@ public class AiJobService {
 
     /** 仅供唯一启用 worker 且旧进程已停止后的启动流程调用；此阶段不自动注册调度。 */
     public int recoverInterrupted() {
-        return workerEnabled ? jobs.failInterrupted() : 0;
+        return workerEnabled ? jobs.failInterrupted() + (reviews == null ? 0 : reviews.recoverInterrupted()) : 0;
     }
 
     /** 调用方先按用户过滤来源，并在同一读取事务内组合列表或详情。 */

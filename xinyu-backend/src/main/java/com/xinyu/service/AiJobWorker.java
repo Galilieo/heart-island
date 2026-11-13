@@ -84,7 +84,7 @@ public final class AiJobWorker {
         long deadlineNanos = nanoTime.getAsLong() + GENERATION_LIMIT.toNanos();
         // 保存领取时的身份快照，后续不再依赖可变实体的 attempt 或 requestId。
         Attempt attempt = new Attempt(job.getId(), job.getAttemptCount(),
-                job.getRequestId(), job.getTargetVersion());
+                job.getRequestId(), job.getTargetVersion(), job.getTaskType());
         return new Claimed(attempt, deadlineNanos);
     }
 
@@ -97,6 +97,10 @@ public final class AiJobWorker {
         try {
             // 交接排队可能已经耗尽预算，过期时不再发起来源查询。
             requireBudget(claimed);
+
+            if (MoodReviewService.TASK_TYPE.equals(attempt.taskType())) {
+                return generateReview(claimed);
+            }
 
             // 预检可能将失效来源标为superseded，因而也必须限制更新时的锁等待。
             MoodRecord source = shortTransactions.execute(status ->
@@ -121,6 +125,36 @@ public final class AiJobWorker {
             return settled.thenCombine(generation.terminated(), (outcome, ignored) -> outcome);
         } catch (RuntimeException problem) {
             return CompletableFuture.completedFuture(finishFailure(attempt, errorCode(problem)));
+        }
+    }
+
+    private CompletableFuture<Outcome> generateReview(Claimed claimed) {
+        Attempt attempt = claimed.attempt();
+        MoodReviewService.Prepared prepared = shortTransactions.execute(status ->
+                jobs.prepareReview(attempt.jobId(), attempt.attemptNumber(), attempt.requestId()));
+        if (prepared == null) {
+            return CompletableFuture.completedFuture(Outcome.SKIPPED);
+        }
+        requireBudget(claimed);
+        if (prepared.support() != null) {
+            return CompletableFuture.completedFuture(settleReview(attempt, prepared.support(), null));
+        }
+        AiServiceClient.ReviewGeneration generation = client.startReviewGeneration(prepared.request(),
+                Duration.ofNanos(budgetLeftNanos(claimed)));
+        return generation.response().handleAsync((reply, problem) -> settleReview(attempt, reply, problem), database)
+                .thenCombine(generation.terminated(), (outcome, ignored) -> outcome);
+    }
+
+    private Outcome settleReview(Attempt attempt, com.xinyu.dto.ReviewAiResponse reply, Throwable problem) {
+        if (problem != null) {
+            return finishFailure(attempt, errorCode(problem));
+        }
+        try {
+            Boolean completed = shortTransactions.execute(status -> jobs.completeReview(
+                    attempt.jobId(), attempt.attemptNumber(), attempt.requestId(), reply));
+            return Boolean.TRUE.equals(completed) ? Outcome.SUCCEEDED : Outcome.SKIPPED;
+        } catch (RuntimeException failure) {
+            return finishFailure(attempt, INTERNAL_ERROR_CODE);
         }
     }
 
@@ -187,7 +221,7 @@ public final class AiJobWorker {
         return cause instanceof AiServiceException safe ? safe.code() : INTERNAL_ERROR_CODE;
     }
 
-    private record Attempt(long jobId, int attemptNumber, String requestId, long sourceVersion) { }
+    private record Attempt(long jobId, int attemptNumber, String requestId, long sourceVersion, String taskType) { }
 
     private record Claimed(Attempt attempt, long deadlineNanos) { }
 }

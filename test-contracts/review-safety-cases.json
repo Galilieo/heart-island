@@ -1,0 +1,309 @@
+{
+  "supportText": "你写下的这些，听起来真的很难熬。如果你有伤害自己的想法，请先把身边可能伤到自己的东西放远一点，然后联系一个你信任的人，告诉对方你现在需要有人陪。可以直接说：“我现在状态很不好，想请你陪我一会儿。”如果危险就在眼前，请立即联系当地急救或警方，或请身边的人陪你前往急诊。",
+  "cases": [
+    {
+      "content": "我想自杀",
+      "support": true
+    },
+    {
+      "content": "今晚我要结束生命",
+      "support": true
+    },
+    {
+      "content": "我正在割腕",
+      "support": true
+    },
+    {
+      "content": "I want to kill myself",
+      "support": true
+    },
+    {
+      "content": "我想死",
+      "support": true
+    },
+    {
+      "content": "我想去死",
+      "support": true
+    },
+    {
+      "content": "不想活了",
+      "support": true
+    },
+    {
+      "content": "我不想活了",
+      "support": true
+    },
+    {
+      "content": "想自杀",
+      "support": true
+    },
+    {
+      "content": "活不下去了",
+      "support": true
+    },
+    {
+      "content": "我活不下去了",
+      "support": true
+    },
+    {
+      "content": "我现在真的想死",
+      "support": true
+    },
+    {
+      "content": "今天很难受，不想活了",
+      "support": true
+    },
+    {
+      "content": "我不想自杀了，但今晚我想死",
+      "support": true
+    },
+    {
+      "content": "好想死",
+      "support": true
+    },
+    {
+      "content": "太想死了",
+      "support": true
+    },
+    {
+      "content": "我已经在计划自杀了",
+      "support": true
+    },
+    {
+      "content": "我在想怎么结束自己的生命",
+      "support": true
+    },
+    {
+      "content": "想结束自己的生命",
+      "support": true
+    },
+    {
+      "content": "我真的好想去死",
+      "support": true
+    },
+    {
+      "content": "再这样下去我就去死",
+      "support": true
+    },
+    {
+      "content": "最近总是想自杀",
+      "support": true
+    },
+    {
+      "content": "我每天都想死",
+      "support": true
+    },
+    {
+      "content": "考试要是没过我就自杀",
+      "support": true
+    },
+    {
+      "content": "我准备好去死了",
+      "support": true
+    },
+    {
+      "content": "我一直想结束生命",
+      "support": true
+    },
+    {
+      "content": "好想结束自己的生命",
+      "support": true
+    },
+    {
+      "content": "我正在计划怎么自杀，每天都在想这件事",
+      "support": true
+    },
+    {
+      "content": "真的很想死，可是放不下我妈",
+      "support": true
+    },
+    {
+      "content": "每天都在想自杀的事，今天特别强烈",
+      "support": true
+    },
+    {
+      "content": "如果这次再失败，我就去死",
+      "support": true
+    },
+    {
+      "content": "我很不想活了",
+      "support": true
+    },
+    {
+      "content": "我真的很不想活了",
+      "support": true
+    },
+    {
+      "content": "我现在很不想活了",
+      "support": true
+    },
+    {
+      "content": "我很活不下去了",
+      "support": true
+    },
+    {
+      "content": "今天考试好难，压力很大",
+      "support": false
+    },
+    {
+      "content": "我不想自杀，我想好好生活",
+      "support": false
+    },
+    {
+      "content": "新闻提到了自杀预防",
+      "support": false
+    },
+    {
+      "content": "散步后很平静",
+      "support": false
+    },
+    {
+      "content": "我不想自杀了，现在好多了",
+      "support": false
+    },
+    {
+      "content": "我朋友说他想自杀",
+      "support": false
+    },
+    {
+      "content": "他想死",
+      "support": false
+    },
+    {
+      "content": "累死了",
+      "support": false
+    },
+    {
+      "content": "笑死我了",
+      "support": false
+    },
+    {
+      "content": "想死你了",
+      "support": false
+    },
+    {
+      "content": "我想死你了",
+      "support": false
+    },
+    {
+      "content": "我不想活在过去了",
+      "support": false
+    },
+    {
+      "content": "不想活成别人期待的样子",
+      "support": false
+    },
+    {
+      "content": "我想死磕这道题",
+      "support": false
+    },
+    {
+      "content": "我不想死",
+      "support": false
+    },
+    {
+      "content": "我从来没想过自杀",
+      "support": false
+    },
+    {
+      "content": "好想死你们了",
+      "support": false
+    },
+    {
+      "content": "每天都在想他",
+      "support": false
+    },
+    {
+      "content": "真的很想死你",
+      "support": false
+    },
+    {
+      "content": "太想死你了",
+      "support": false
+    },
+    {
+      "content": "我就去死磕这道题",
+      "support": false
+    },
+    {
+      "content": "他说再失败就去死",
+      "support": false
+    },
+    {
+      "content": "我朋友每天都想自杀，我很担心",
+      "support": false
+    },
+    {
+      "content": "之前好想死，现在好多了",
+      "support": false
+    },
+    {
+      "content": "新闻里有人跳楼了",
+      "support": false
+    },
+    {
+      "content": "我不打算自杀",
+      "support": false
+    },
+    {
+      "content": "我真的不想活在阴影里",
+      "support": false
+    },
+    {
+      "content": "想起结束生命那段剧情就哭",
+      "support": false
+    },
+    {
+      "content": "我想结束这段关系",
+      "support": false
+    },
+    {
+      "content": "我死了",
+      "support": false
+    },
+    {
+      "content": "我死心了",
+      "support": false
+    },
+    {
+      "content": "我就死心了",
+      "support": false
+    },
+    {
+      "content": "我死党今天来找我玩",
+      "support": false
+    },
+    {
+      "content": "我会死吗",
+      "support": false
+    },
+    {
+      "content": "我太死板了",
+      "support": false
+    },
+    {
+      "content": "我在死记硬背",
+      "support": false
+    },
+    {
+      "content": "气得我死死关上门",
+      "support": false
+    },
+    {
+      "content": "再加班我会死的",
+      "support": false
+    },
+    {
+      "content": "没有咖啡我会死",
+      "support": false
+    },
+    {
+      "content": "I　want to kill myself",
+      "support": true
+    },
+    {
+      "content": " 好想死",
+      "support": true
+    }
+  ]
+}
