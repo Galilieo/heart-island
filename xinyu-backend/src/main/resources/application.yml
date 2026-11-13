@@ -17,6 +17,11 @@ spring:
 server:
   forward-headers-strategy: framework
 
+xinyu:
+  review:
+    # 回顾统计的自然周和近 30 天都按这个时区的墙上时间计算。
+    time-zone: Asia/Shanghai
+
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}
   base-url: https://api.deepseek.com

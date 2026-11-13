@@ -36,8 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // MVC、路由和 JWT 使用真实实现；只替换数据库业务依赖，不启动 MySQL/AI。
 @WebMvcTest
 @Import({JwtUtil.class, AuthWebConfig.class, CorsConfig.class, JacksonConfig.class})
-@MockitoBean(types = {MoodRecordService.class, AiJobService.class, CommunityPostService.class,
-        CommunityReplyService.class, TopicService.class, AiReplyLogService.class,
+@MockitoBean(types = {MoodRecordService.class, MoodReviewStatsService.class, AiJobService.class,
+        CommunityPostService.class, CommunityReplyService.class, TopicService.class, AiReplyLogService.class,
         UserMapper.class, CommunityPostMapper.class, CommunityReplyMapper.class, AiReplyMapper.class})
 class AuthHttpTests {
     @Autowired MockMvc mvc;

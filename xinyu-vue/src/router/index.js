@@ -33,6 +33,11 @@ const routes = [
     component: () => import('../views/Profile.vue'),
     meta: { title: '我的', requiresAuth: true },
   },
+  {
+    path: '/review',
+    component: () => import('../views/Review.vue'),
+    meta: { title: '回顾', requiresAuth: true },
+  },
   // 后台改为嵌套路由：父级提供独立布局，子路由只负责页面内容。
   // 网址、路由名称和 requiresAuth / requiresAdmin 的效果保持不变；
   // 权限放在父路由，Vue Router 会把父级 meta 合并到子路由的 to.meta 上。

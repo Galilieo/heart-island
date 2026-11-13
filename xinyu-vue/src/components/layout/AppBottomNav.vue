@@ -4,14 +4,19 @@ import Doodle from '../ui/Doodle.vue'
 import { navigationItems, isNavigationActive } from './navigation'
 
 const route = useRoute()
+const mobileItems = navigationItems.filter(item => item.mobile !== false)
 </script>
 
 <template>
   <!-- 避开路由过渡 transform 创建的包含块，始终固定在视口底边。 -->
   <Teleport to="body">
-    <nav class="bottom-nav" aria-label="手机主导航">
+    <nav
+      class="bottom-nav"
+      aria-label="手机主导航"
+      :style="{ gridTemplateColumns: `repeat(${mobileItems.length}, minmax(0, 1fr))` }"
+    >
       <RouterLink
-        v-for="item in navigationItems"
+        v-for="item in mobileItems"
         :key="item.to"
         :to="item.to"
         class="bottom-nav__item"
@@ -36,7 +41,6 @@ const route = useRoute()
     inset: auto 0 0;
     z-index: var(--z-header);
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
     min-height: calc(64px + env(safe-area-inset-bottom, 0px));
     padding: 4px 12px calc(4px + env(safe-area-inset-bottom, 0px));
     background: var(--bg-card);

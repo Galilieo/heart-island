@@ -2,6 +2,7 @@
 // 侧栏「这一周」摘要：主旋律表情 + 按次数比例的配色长条 + 图例。
 // 外层卡片容器（背景、边框、内边距）由首页侧栏提供，本组件只负责卡内内容。
 import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
 import Xiaoya from '../ui/Xiaoya.vue'
 import { moodExpression, moodTone } from '../../utils/mood'
 
@@ -80,6 +81,8 @@ const barLabel = computed(() => {
     <p v-else class="week__empty">
       最近 7 天还没有记录。记下心情后，可以在这里查看统计。
     </p>
+
+    <RouterLink to="/review" class="week__report-link">看周报 ›</RouterLink>
   </section>
 </template>
 
@@ -153,6 +156,19 @@ const barLabel = computed(() => {
 .week__legend-count {
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
+}
+
+.week__report-link {
+  display: inline-flex;
+  margin-top: 12px;
+  color: var(--brand-deep);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.week__report-link:hover {
+  text-decoration: underline;
 }
 
 .week__empty {

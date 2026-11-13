@@ -33,5 +33,15 @@ export const moodApi = {
 
   trendRecent7() {
     return unwrap(request.get('/mood/trend/recent7'))
+  },
+
+  // 回顾页统计：GET 只读，不生成报告、不调用模型。
+  reviewWeek(start) {
+    const params = start ? { start } : {}
+    return unwrap(request.get('/mood/report/week', { params }))
+  },
+
+  reviewRecent30() {
+    return unwrap(request.get('/mood/analysis', { params: { range: '30d' } }))
   }
 }

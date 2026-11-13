@@ -3,6 +3,7 @@
 // 头部为头像 + 昵称概况 + 四项数据条；下方用局部 tabs 分层「基本资料 / 账号安全」。
 // 用户名不可改，仅展示。所有逻辑走 userStore + userApi，tabs 只是展示层状态。
 import { ref, computed, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
@@ -168,6 +169,12 @@ async function handleSavePassword() {
           <span>加入心屿</span>
         </div>
       </div>
+
+      <!-- 手机底部导航不再放「收藏」，这里保留统一入口。 -->
+      <RouterLink to="/favorites" class="profile__favorites">
+        <span>我的收藏</span>
+        <span class="profile__favorites-arrow" aria-hidden="true">›</span>
+      </RouterLink>
 
       <!-- 设置区：局部 tabs 分层 -->
       <BaseCard padding="lg" class="profile__panel">
@@ -394,6 +401,40 @@ async function handleSavePassword() {
   font-size: var(--fs-xs);
   line-height: 1.2;
   white-space: nowrap;
+}
+
+/* ── 收藏入口：手机底部导航收起收藏后的统一入口 ── */
+.profile__favorites {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-2);
+  background: var(--bg-card);
+  color: var(--ink-1);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color var(--t-fast) var(--ease-soft),
+    color var(--t-fast) var(--ease-soft);
+}
+
+.profile__favorites:hover {
+  border-color: var(--brand-soft-deep);
+  color: var(--brand-deep);
+}
+
+.profile__favorites:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.profile__favorites-arrow {
+  color: var(--ink-3);
+  font-size: var(--fs-lg);
+  line-height: 1;
 }
 
 /* ── 设置面板 + tabs ── */

@@ -97,6 +97,9 @@
   --radius-pill: 999px;
 
   /* 阴影（暖色调） */
+  /* 回顾信纸横线：只画在正文段落上，行高与线距一致 */
+  --paper-line: rgba(121, 173, 151, 0.30);
+
   --shadow-sm: 0 2px 6px rgba(120, 98, 60, 0.06);
   --shadow-md: 0 12px 28px rgba(120, 98, 60, 0.10);
   --shadow-lg: 0 22px 50px rgba(120, 98, 60, 0.14);
@@ -222,6 +225,8 @@
   --hero-to: #1b343b;
   --hero-fav-from: #152a30;
   --hero-fav-to: #1e383d;
+
+  --paper-line: rgba(147, 191, 171, 0.16);
 
   --shadow-sm: 0 2px 6px rgba(2, 6, 8, 0.42);
   --shadow-md: 0 12px 28px rgba(2, 6, 8, 0.5);
