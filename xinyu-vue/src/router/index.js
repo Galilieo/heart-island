@@ -80,10 +80,6 @@ const routes = [
       },
     ],
   },
-  // 设计对比页只在开发服务器注册，生产构建不包含该路由及其代码。
-  ...(import.meta.env.DEV
-    ? [{ path: '/design-lab', component: () => import('../design-lab/DesignLab.vue'), meta: { title: '设计对比' } }]
-    : []),
   // 未知地址由登录守卫送回心情页或登录页。
   { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]

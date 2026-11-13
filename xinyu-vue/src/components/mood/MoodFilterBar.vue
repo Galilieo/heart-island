@@ -193,7 +193,7 @@ async function selectRange(range) {
   gap: 8px 12px;
 }
 
-/* ── 常驻范围切换：样式同 design-lab 的 .j-range ── */
+/* ── 常驻范围切换：圆角分段按钮 ── */
 .filter-bar__ranges {
   display: flex;
   gap: 4px;

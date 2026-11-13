@@ -310,7 +310,7 @@ onMounted(() => {
 .home__layout {
   display: grid;
   /* 列宽来源：主栏 680 + 侧栏 300 + 间距 40 ≈ 1020，再留两侧留白后取 1100。
-     侧栏从 compose 行开始跨两行，首卡与书写卡顶边对齐（design-lab 同款视觉）。 */
+     侧栏从 compose 行开始跨两行，首卡与书写卡顶边对齐。 */
   grid-template-columns: minmax(0, 680px) 300px;
   grid-template-areas:
     "hello hello"

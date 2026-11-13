@@ -49,7 +49,7 @@ export function formatTime(time) {
 }
 
 // 小芽对每种心情的一句回应，用于书写卡在选中心情后的副标题；
-// 文案与品牌素材包的设计稿一致（取自 design-lab/mock.js 的 MASCOT_LINES，真实页面不依赖设计对比页）。
+// 文案与品牌素材包的设计稿一致。
 export const MOOD_RESPONSE_LINES = {
   开心: '真好！是什么让你开心的？说给我听听。',
   满足: '这种刚刚好的感觉很珍贵，记下来吧。',
