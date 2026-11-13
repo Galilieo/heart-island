@@ -23,13 +23,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** 社区同步生成与旧调用兼容入口；失败不发布兜底，诊断详情只供管理员日志使用。 */
+/** 社区帖子同步生成入口；失败不发布兜底，诊断详情只供管理员日志使用。 */
 @Service
 public class AiReplyService {
     private static final Logger logger = LoggerFactory.getLogger(AiReplyService.class);
-    // 保留原社区／旧心情请求参数；2000 UTF-16上限沿用1a回复正文约定，prompt仍要求社区120字。
+    // 保留原社区请求参数；2000 UTF-16上限沿用1a回复正文约定，prompt仍要求社区120字。
     private static final int POST_MAX_TOKENS = 200;
-    private static final int LEGACY_MOOD_MAX_TOKENS = 300;
     private static final int MAX_REPLY_UTF16 = 2000;
     private static final int NEXT_LINE = 0x85;
     // ai_reply.error_message为TEXT；限制详情规模，避免异常长响应占满调用记录。
@@ -49,15 +48,6 @@ public class AiReplyService {
 
     @Autowired
     private RestTemplate restTemplate;
-
-    /** 旧调用兼容入口；失败返回null，不能将公开兜底当成生成成功。 */
-    public String generateReply(String moodType, String content) {
-        return generateReplyResult(moodType, content).getReplyContent();
-    }
-
-    public AiReplyResult generateReplyResult(String moodType, String content) {
-        return generate(buildMessages(moodType, content), LEGACY_MOOD_MAX_TOKENS);
-    }
 
     /** 社区使用原公开语境prompt；同步请求不自动重试，失败不影响已保存的帖子。 */
     public AiReplyResult generateReplyForPost(String topicName, String moodType, String content) {
@@ -181,33 +171,6 @@ public class AiReplyService {
                 + "不预设性别、不评判、不诊断、不给医疗建议；"
                 + "像在公开社区里轻轻接住对方一句，不要长篇大论；"
                 + "不要逐字引用原话，不要使用列表、表情符号或英文。";
-    }
-
-    private List<Map<String, String>> buildMessages(String moodType, String content) {
-        List<Map<String, String>> messages = new ArrayList<>();
-
-        Map<String, String> systemMessage = new HashMap<>();
-        systemMessage.put("role", "system");
-        systemMessage.put("content",
-                "你是“心屿 AI 情绪陪伴系统”的情绪陪伴助手。" +
-                        "你的任务是根据用户记录的心情，生成一段简短、温和、真诚的陪伴回复。" +
-                        "回复要像朋友一样理解用户，不要说教，不要鸡汤，不要夸张鼓励。" +
-                        "不要做心理疾病诊断，不要提供医疗建议，不要使用“你一定会”“必须”“应该马上”等强硬表达。" +
-                        "可以适当给一个很小、很轻的行动建议，但不要列清单。" +
-                        "回复控制在60到100字之间，只输出回复正文。"
-        );
-        messages.add(systemMessage);
-
-        Map<String, String> userMessage = new HashMap<>();
-        userMessage.put("role", "user");
-        userMessage.put("content",
-                "用户当前心情类型：" + moodType + "\n" +
-                        "用户记录的内容：" + content + "\n" +
-                        "请基于用户的真实表达进行回应，先接住情绪，再给出一句轻量的陪伴或建议。"
-        );
-        messages.add(userMessage);
-
-        return messages;
     }
 
 }
