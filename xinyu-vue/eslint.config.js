@@ -21,6 +21,16 @@ export default defineConfig([
     },
   },
 
+  // 单测跑在 Node（node --test），需要 setImmediate 等 Node 全局变量。
+  {
+    files: ['tests/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
 
