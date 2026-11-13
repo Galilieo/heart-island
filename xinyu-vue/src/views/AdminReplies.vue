@@ -1,9 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import AppShell from '../components/layout/AppShell.vue'
-import AdminTabs from '../components/admin/AdminTabs.vue'
-import AdminPageHeader from '../components/admin/AdminPageHeader.vue'
+import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
@@ -94,115 +92,111 @@ async function handleToggleStatus(reply) {
 </script>
 
 <template>
-  <AppShell width="wide">
-    <div class="container admin-replies">
-      <AdminPageHeader
-        title="回复管理"
-        desc="查找帖子回复，隐藏或恢复展示。"
-      />
+  <div class="admin-replies">
+    <AdminPageTitle
+      title="回复管理"
+      desc="查找帖子回复，隐藏或恢复展示。"
+    />
 
-      <AdminTabs />
-
-      <BaseCard padding="lg">
-        <div class="admin-replies__toolbar">
-          <BaseInput
-            v-model="replyFilters.keyword"
-            label="回复内容"
-            placeholder="输入关键词搜索回复内容"
-            @enter="handleSearch"
-          />
-
-          <BaseInput
-            v-model="replyFilters.postId"
-            label="帖子 ID"
-            placeholder="按帖子 ID 筛选"
-            @enter="handleSearch"
-          />
-
-          <BaseInput
-            v-model="replyFilters.userId"
-            label="用户 ID"
-            placeholder="按用户 ID 筛选"
-            @enter="handleSearch"
-          />
-
-          <BaseSelect
-            v-model="replyFilters.status"
-            label="状态"
-            :options="statusOptions"
-            placeholder=""
-          />
-
-          <AdminFilterActions
-            :loading="repliesLoading"
-            @search="handleSearch"
-            @reset="handleReset"
-          />
-        </div>
-
-        <div v-if="repliesLoading && !replies.length" class="admin-replies__loading">
-          <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-        </div>
-
-        <div v-else-if="replies.length" class="admin-replies__table-wrap">
-          <table class="admin-replies__table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>帖子 ID</th>
-                <th>用户 ID</th>
-                <th>回复内容</th>
-                <th>匿名名</th>
-                <th>状态</th>
-                <th>发布时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="reply in replies" :key="reply.id">
-                <td>{{ reply.id }}</td>
-                <td>{{ reply.postId }}</td>
-                <td>{{ reply.userId }}</td>
-                <td>{{ shortContent(reply.content) }}</td>
-                <td>{{ reply.anonymousName || '-' }}</td>
-                <td>
-                  <BaseTag :variant="statusVariant(reply.status)">
-                    {{ statusText(reply.status) }}
-                  </BaseTag>
-                </td>
-                <td>{{ formatTime(reply.createTime) }}</td>
-                <td>
-                  <BaseButton
-                    size="sm"
-                    :variant="reply.status === 1 ? 'danger' : 'soft'"
-                    @click="handleToggleStatus(reply)"
-                  >
-                    {{ reply.status === 1 ? '隐藏' : '恢复' }}
-                  </BaseButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <BasePagination
-            class="admin-replies__pagination"
-            :page-num="replyPagination.pageNum"
-            :pages="replyPages"
-            :total="replyPagination.total"
-            :page-size="replyPagination.pageSize"
-            @change="handlePageChange"
-          />
-        </div>
-
-        <EmptyState
-          v-else
-          title="暂无回复"
-          hint="没有找到匹配的回复，可以调整筛选条件后再查。"
+    <BaseCard padding="lg">
+      <div class="admin-replies__toolbar">
+        <BaseInput
+          v-model="replyFilters.keyword"
+          label="回复内容"
+          placeholder="输入关键词搜索回复内容"
+          @enter="handleSearch"
         />
-      </BaseCard>
-    </div>
-  </AppShell>
+
+        <BaseInput
+          v-model="replyFilters.postId"
+          label="帖子 ID"
+          placeholder="按帖子 ID 筛选"
+          @enter="handleSearch"
+        />
+
+        <BaseInput
+          v-model="replyFilters.userId"
+          label="用户 ID"
+          placeholder="按用户 ID 筛选"
+          @enter="handleSearch"
+        />
+
+        <BaseSelect
+          v-model="replyFilters.status"
+          label="状态"
+          :options="statusOptions"
+          placeholder=""
+        />
+
+        <AdminFilterActions
+          :loading="repliesLoading"
+          @search="handleSearch"
+          @reset="handleReset"
+        />
+      </div>
+
+      <div v-if="repliesLoading && !replies.length" class="admin-replies__loading">
+        <SkeletonCard v-for="i in 3" :key="i" rows="3" />
+      </div>
+
+      <div v-else-if="replies.length" class="admin-replies__table-wrap">
+        <table class="admin-replies__table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>帖子 ID</th>
+              <th>用户 ID</th>
+              <th>回复内容</th>
+              <th>匿名名</th>
+              <th>状态</th>
+              <th>发布时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="reply in replies" :key="reply.id">
+              <td>{{ reply.id }}</td>
+              <td>{{ reply.postId }}</td>
+              <td>{{ reply.userId }}</td>
+              <td>{{ shortContent(reply.content) }}</td>
+              <td>{{ reply.anonymousName || '-' }}</td>
+              <td>
+                <BaseTag :variant="statusVariant(reply.status)">
+                  {{ statusText(reply.status) }}
+                </BaseTag>
+              </td>
+              <td>{{ formatTime(reply.createTime) }}</td>
+              <td>
+                <BaseButton
+                  size="sm"
+                  :variant="reply.status === 1 ? 'danger' : 'soft'"
+                  @click="handleToggleStatus(reply)"
+                >
+                  {{ reply.status === 1 ? '隐藏' : '恢复' }}
+                </BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <BasePagination
+          class="admin-replies__pagination"
+          :page-num="replyPagination.pageNum"
+          :pages="replyPages"
+          :total="replyPagination.total"
+          :page-size="replyPagination.pageSize"
+          @change="handlePageChange"
+        />
+      </div>
+
+      <EmptyState
+        v-else
+        title="暂无回复"
+        hint="没有找到匹配的回复，可以调整筛选条件后再查。"
+      />
+    </BaseCard>
+  </div>
 </template>
 
 <style scoped>

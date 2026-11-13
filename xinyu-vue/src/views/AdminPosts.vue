@@ -1,9 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import AppShell from '../components/layout/AppShell.vue'
-import AdminTabs from '../components/admin/AdminTabs.vue'
-import AdminPageHeader from '../components/admin/AdminPageHeader.vue'
+import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
@@ -94,119 +92,115 @@ async function handleToggleStatus(post) {
 </script>
 
 <template>
-  <AppShell width="wide">
-    <div class="container admin-posts">
-      <AdminPageHeader
-        title="帖子管理"
-        desc="查找社区帖子，隐藏或恢复展示。"
-      />
+  <div class="admin-posts">
+    <AdminPageTitle
+      title="帖子管理"
+      desc="查找社区帖子，隐藏或恢复展示。"
+    />
 
-      <AdminTabs />
-
-      <BaseCard padding="lg">
-        <div class="admin-posts__toolbar">
-          <BaseInput
-            v-model="postsFilters.keyword"
-            label="帖子内容"
-            placeholder="输入关键词搜索帖子内容"
-            @enter="handleSearch"
-          />
-
-          <BaseInput
-            v-model="postsFilters.postId"
-            label="帖子 ID"
-            placeholder="按帖子 ID 筛选"
-            @enter="handleSearch"
-          />
-
-          <BaseInput
-            v-model="postsFilters.userId"
-            label="用户 ID"
-            placeholder="按用户 ID 筛选"
-            @enter="handleSearch"
-          />
-
-          <BaseSelect
-            v-model="postsFilters.status"
-            label="状态"
-            :options="statusOptions"
-            placeholder=""
-          />
-
-          <AdminFilterActions
-            :loading="postsLoading"
-            @search="handleSearch"
-            @reset="handleReset"
-          />
-        </div>
-
-        <div v-if="postsLoading && !posts.length" class="admin-posts__loading">
-          <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-        </div>
-
-        <div v-else-if="posts.length" class="admin-posts__table-wrap">
-          <table class="admin-posts__table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>用户 ID</th>
-                <th>帖子情绪</th>
-                <th>帖子内容</th>
-                <th>匿名名</th>
-                <th>回复数</th>
-                <th>点赞数</th>
-                <th>状态</th>
-                <th>发布时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="post in posts" :key="post.id">
-                <td>{{ post.id }}</td>
-                <td>{{ post.userId }}</td>
-                <td>{{ post.moodType || '-' }}</td>
-                <td>{{ shortContent(post.content) }}</td>
-                <td>{{ post.anonymousName || '-' }}</td>
-                <td>{{ post.replyCount || 0 }}</td>
-                <td>{{ post.likeCount || 0 }}</td>
-                <td>
-                  <BaseTag :variant="statusVariant(post.status)">
-                    {{ statusText(post.status) }}
-                  </BaseTag>
-                </td>
-                <td>{{ formatTime(post.createTime) }}</td>
-                <td>
-                  <BaseButton
-                    size="sm"
-                    :variant="post.status === 1 ? 'danger' : 'soft'"
-                    @click="handleToggleStatus(post)"
-                  >
-                    {{ post.status === 1 ? '隐藏' : '恢复' }}
-                  </BaseButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <BasePagination
-            class="admin-posts__pagination"
-            :page-num="postPagination.pageNum"
-            :pages="postPages"
-            :total="postPagination.total"
-            :page-size="postPagination.pageSize"
-            @change="handlePageChange"
-          />
-        </div>
-
-        <EmptyState
-          v-else
-          title="暂无帖子"
-          hint="没有找到匹配的帖子，可以调整筛选条件后再查。"
+    <BaseCard padding="lg">
+      <div class="admin-posts__toolbar">
+        <BaseInput
+          v-model="postsFilters.keyword"
+          label="帖子内容"
+          placeholder="输入关键词搜索帖子内容"
+          @enter="handleSearch"
         />
-      </BaseCard>
-    </div>
-  </AppShell>
+
+        <BaseInput
+          v-model="postsFilters.postId"
+          label="帖子 ID"
+          placeholder="按帖子 ID 筛选"
+          @enter="handleSearch"
+        />
+
+        <BaseInput
+          v-model="postsFilters.userId"
+          label="用户 ID"
+          placeholder="按用户 ID 筛选"
+          @enter="handleSearch"
+        />
+
+        <BaseSelect
+          v-model="postsFilters.status"
+          label="状态"
+          :options="statusOptions"
+          placeholder=""
+        />
+
+        <AdminFilterActions
+          :loading="postsLoading"
+          @search="handleSearch"
+          @reset="handleReset"
+        />
+      </div>
+
+      <div v-if="postsLoading && !posts.length" class="admin-posts__loading">
+        <SkeletonCard v-for="i in 3" :key="i" rows="3" />
+      </div>
+
+      <div v-else-if="posts.length" class="admin-posts__table-wrap">
+        <table class="admin-posts__table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户 ID</th>
+              <th>帖子情绪</th>
+              <th>帖子内容</th>
+              <th>匿名名</th>
+              <th>回复数</th>
+              <th>点赞数</th>
+              <th>状态</th>
+              <th>发布时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="post in posts" :key="post.id">
+              <td>{{ post.id }}</td>
+              <td>{{ post.userId }}</td>
+              <td>{{ post.moodType || '-' }}</td>
+              <td>{{ shortContent(post.content) }}</td>
+              <td>{{ post.anonymousName || '-' }}</td>
+              <td>{{ post.replyCount || 0 }}</td>
+              <td>{{ post.likeCount || 0 }}</td>
+              <td>
+                <BaseTag :variant="statusVariant(post.status)">
+                  {{ statusText(post.status) }}
+                </BaseTag>
+              </td>
+              <td>{{ formatTime(post.createTime) }}</td>
+              <td>
+                <BaseButton
+                  size="sm"
+                  :variant="post.status === 1 ? 'danger' : 'soft'"
+                  @click="handleToggleStatus(post)"
+                >
+                  {{ post.status === 1 ? '隐藏' : '恢复' }}
+                </BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <BasePagination
+          class="admin-posts__pagination"
+          :page-num="postPagination.pageNum"
+          :pages="postPages"
+          :total="postPagination.total"
+          :page-size="postPagination.pageSize"
+          @change="handlePageChange"
+        />
+      </div>
+
+      <EmptyState
+        v-else
+        title="暂无帖子"
+        hint="没有找到匹配的帖子，可以调整筛选条件后再查。"
+      />
+    </BaseCard>
+  </div>
 </template>
 
 <style scoped>

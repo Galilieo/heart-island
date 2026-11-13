@@ -1,9 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import AppShell from '../components/layout/AppShell.vue'
-import AdminTabs from '../components/admin/AdminTabs.vue'
-import AdminPageHeader from '../components/admin/AdminPageHeader.vue'
+import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseDialog from '../components/ui/BaseDialog.vue'
@@ -142,138 +140,134 @@ function formatTime(value) {
 </script>
 
 <template>
-  <AppShell width="wide">
-    <div class="container admin-topics">
-      <AdminPageHeader
-        title="话题管理"
-        desc="新增或编辑话题，设置发帖时可选的话题和排列顺序。"
-      />
+  <div class="admin-topics">
+    <AdminPageTitle
+      title="话题管理"
+      desc="新增或编辑话题，设置发帖时可选的话题和排列顺序。"
+    />
 
-      <AdminTabs />
-
-      <BaseCard padding="lg">
-        <div class="admin-topics__toolbar">
-          <BaseInput
-            v-model="topicFilters.keyword"
-            label="话题名称"
-            placeholder="输入话题名称搜索"
-            @enter="handleSearch"
-          />
-
-          <BaseSelect
-            v-model="topicFilters.status"
-            label="状态"
-            :options="statusOptions"
-            placeholder=""
-          />
-
-          <AdminFilterActions
-            :loading="topicsLoading"
-            @search="handleSearch"
-            @reset="handleReset"
-          >
-            <BaseButton variant="soft" :disabled="topicsLoading" @click="openCreateDialog">
-              新增话题
-            </BaseButton>
-          </AdminFilterActions>
-        </div>
-
-        <div v-if="topicsLoading && !topics.length" class="admin-topics__loading">
-          <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-        </div>
-
-        <div v-else-if="topics.length" class="admin-topics__table-wrap">
-          <table class="admin-topics__table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>话题名称</th>
-                <th>话题说明</th>
-                <th>排序</th>
-                <th>帖子数</th>
-                <th>状态</th>
-                <th>创建时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="topic in topics" :key="topic.id">
-                <td>{{ topic.id }}</td>
-                <td>{{ topic.name }}</td>
-                <td>{{ topic.description || '-' }}</td>
-                <td class="admin-topics__sort">{{ topic.sort }}</td>
-                <td>{{ topic.postCount ?? 0 }}</td>
-                <td>
-                  <BaseTag :variant="statusVariant(topic.status)">
-                    {{ statusText(topic.status) }}
-                  </BaseTag>
-                </td>
-                <td>{{ formatTime(topic.createTime) }}</td>
-                <td>
-                  <div class="admin-topics__row-actions">
-                    <BaseButton size="sm" variant="soft" @click="editTopic(topic)">
-                      编辑
-                    </BaseButton>
-                    <BaseButton
-                      size="sm"
-                      :variant="topic.status === 1 ? 'danger' : 'soft'"
-                      @click="handleToggleStatus(topic)"
-                    >
-                      {{ topic.status === 1 ? '禁用' : '启用' }}
-                    </BaseButton>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <EmptyState
-          v-else
-          title="暂无话题"
-          hint="没有找到匹配的话题，可以调整筛选条件，或新增一个话题。"
+    <BaseCard padding="lg">
+      <div class="admin-topics__toolbar">
+        <BaseInput
+          v-model="topicFilters.keyword"
+          label="话题名称"
+          placeholder="输入话题名称搜索"
+          @enter="handleSearch"
         />
-      </BaseCard>
 
-      <BaseDialog
-        v-model="dialogVisible"
-        :title="isEditing ? '编辑话题' : '新增话题'"
-        width="md"
-        @close="resetForm"
-      >
-        <div class="admin-topics__dialog-form">
-          <BaseInput
-            v-model="form.name"
-            label="话题名称"
-            placeholder="例如：学习压力"
-          />
+        <BaseSelect
+          v-model="topicFilters.status"
+          label="状态"
+          :options="statusOptions"
+          placeholder=""
+        />
 
-          <BaseInput
-            v-model="form.description"
-            label="话题说明"
-            placeholder="简单说明这个话题适合讨论什么"
-          />
-
-          <BaseInput
-            v-model="form.sort"
-            type="number"
-            label="排序"
-            placeholder="例如：0，数字越小越靠前"
-          />
-        </div>
-
-        <template #footer>
-          <BaseButton variant="plain" @click="closeDialog">
-            取消
+        <AdminFilterActions
+          :loading="topicsLoading"
+          @search="handleSearch"
+          @reset="handleReset"
+        >
+          <BaseButton variant="soft" :disabled="topicsLoading" @click="openCreateDialog">
+            新增话题
           </BaseButton>
-          <BaseButton variant="primary" @click="handleSubmit">
-            {{ isEditing ? '保存修改' : '新增话题' }}
-          </BaseButton>
-        </template>
-      </BaseDialog>
-    </div>
-  </AppShell>
+        </AdminFilterActions>
+      </div>
+
+      <div v-if="topicsLoading && !topics.length" class="admin-topics__loading">
+        <SkeletonCard v-for="i in 3" :key="i" rows="3" />
+      </div>
+
+      <div v-else-if="topics.length" class="admin-topics__table-wrap">
+        <table class="admin-topics__table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>话题名称</th>
+              <th>话题说明</th>
+              <th>排序</th>
+              <th>帖子数</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="topic in topics" :key="topic.id">
+              <td>{{ topic.id }}</td>
+              <td>{{ topic.name }}</td>
+              <td>{{ topic.description || '-' }}</td>
+              <td class="admin-topics__sort">{{ topic.sort }}</td>
+              <td>{{ topic.postCount ?? 0 }}</td>
+              <td>
+                <BaseTag :variant="statusVariant(topic.status)">
+                  {{ statusText(topic.status) }}
+                </BaseTag>
+              </td>
+              <td>{{ formatTime(topic.createTime) }}</td>
+              <td>
+                <div class="admin-topics__row-actions">
+                  <BaseButton size="sm" variant="soft" @click="editTopic(topic)">
+                    编辑
+                  </BaseButton>
+                  <BaseButton
+                    size="sm"
+                    :variant="topic.status === 1 ? 'danger' : 'soft'"
+                    @click="handleToggleStatus(topic)"
+                  >
+                    {{ topic.status === 1 ? '禁用' : '启用' }}
+                  </BaseButton>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <EmptyState
+        v-else
+        title="暂无话题"
+        hint="没有找到匹配的话题，可以调整筛选条件，或新增一个话题。"
+      />
+    </BaseCard>
+
+    <BaseDialog
+      v-model="dialogVisible"
+      :title="isEditing ? '编辑话题' : '新增话题'"
+      width="md"
+      @close="resetForm"
+    >
+      <div class="admin-topics__dialog-form">
+        <BaseInput
+          v-model="form.name"
+          label="话题名称"
+          placeholder="例如：学习压力"
+        />
+
+        <BaseInput
+          v-model="form.description"
+          label="话题说明"
+          placeholder="简单说明这个话题适合讨论什么"
+        />
+
+        <BaseInput
+          v-model="form.sort"
+          type="number"
+          label="排序"
+          placeholder="例如：0，数字越小越靠前"
+        />
+      </div>
+
+      <template #footer>
+        <BaseButton variant="plain" @click="closeDialog">
+          取消
+        </BaseButton>
+        <BaseButton variant="primary" @click="handleSubmit">
+          {{ isEditing ? '保存修改' : '新增话题' }}
+        </BaseButton>
+      </template>
+    </BaseDialog>
+  </div>
 </template>
 
 <style scoped>

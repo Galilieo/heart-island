@@ -33,37 +33,47 @@ const routes = [
     component: () => import('../views/Profile.vue'),
     meta: { title: '我的', requiresAuth: true },
   },
+  // 后台改为嵌套路由：父级提供独立布局，子路由只负责页面内容。
+  // 网址、路由名称和 requiresAuth / requiresAdmin 的效果保持不变；
+  // 权限放在父路由，Vue Router 会把父级 meta 合并到子路由的 to.meta 上。
   {
     path: '/admin',
-    name: 'AdminDashboard',
-    component: () => import('../views/AdminDashboard.vue'),
-    meta: { title: '后台概览', requiresAuth: true, requiresAdmin: true },
-  },
-  {
-    path: '/admin/users',
-    component: () => import('../views/AdminUsers.vue'),
-    meta: { title: '用户管理', requiresAuth: true, requiresAdmin: true },
-  },
-  {
-    path: '/admin/posts',
-    component: () => import('../views/AdminPosts.vue'),
-    meta: { title: '帖子管理', requiresAuth: true, requiresAdmin: true },
-  },
-  {
-    path: '/admin/replies',
-    component: () => import('../views/AdminReplies.vue'),
-    meta: { title: '评论管理', requiresAuth: true, requiresAdmin: true },
-  },
-  {
-    path: '/admin/topics',
-    component: () => import('../views/AdminTopics.vue'),
-    meta: { title: '话题管理', requiresAuth: true, requiresAdmin: true },
-  },
-  {
-    path: '/admin/ai-replies',
-    name: 'AdminAiReplies',
-    component: () => import('../views/AdminAiReplies.vue'),
-    meta: { title: 'AI 记录', requiresAuth: true, requiresAdmin: true },
+    component: () => import('../components/admin/AdminLayout.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+    children: [
+      {
+        path: '',
+        name: 'AdminDashboard',
+        component: () => import('../views/AdminDashboard.vue'),
+        meta: { title: '概览' },
+      },
+      {
+        path: 'users',
+        component: () => import('../views/AdminUsers.vue'),
+        meta: { title: '用户管理' },
+      },
+      {
+        path: 'posts',
+        component: () => import('../views/AdminPosts.vue'),
+        meta: { title: '帖子管理' },
+      },
+      {
+        path: 'replies',
+        component: () => import('../views/AdminReplies.vue'),
+        meta: { title: '回复管理' },
+      },
+      {
+        path: 'topics',
+        component: () => import('../views/AdminTopics.vue'),
+        meta: { title: '话题管理' },
+      },
+      {
+        path: 'ai-replies',
+        name: 'AdminAiReplies',
+        component: () => import('../views/AdminAiReplies.vue'),
+        meta: { title: 'AI 记录' },
+      },
+    ],
   },
   // 设计对比页只在开发服务器注册，生产构建不包含该路由及其代码。
   ...(import.meta.env.DEV

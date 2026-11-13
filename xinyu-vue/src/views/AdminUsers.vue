@@ -1,9 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import AppShell from '../components/layout/AppShell.vue'
-import AdminTabs from '../components/admin/AdminTabs.vue'
-import AdminPageHeader from '../components/admin/AdminPageHeader.vue'
+import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
@@ -83,97 +81,93 @@ async function handleToggleStatus(user) {
 </script>
 
 <template>
-  <AppShell width="wide">
-    <div class="container admin-users">
-      <AdminPageHeader
-        title="用户管理"
-        desc="查找用户，启用或禁用账号。"
-      />
+  <div class="admin-users">
+    <AdminPageTitle
+      title="用户管理"
+      desc="查找用户，启用或禁用账号。"
+    />
 
-      <AdminTabs />
-
-      <BaseCard padding="lg">
-        <div class="admin-users__toolbar">
-          <BaseInput
-            v-model="filters.username"
-            label="用户名"
-            placeholder="输入用户名搜索"
-            @enter="handleSearch"
-          />
-          <BaseSelect
-            v-model="filters.status"
-            label="状态"
-            :options="statusOptions"
-            placeholder=""
-          />
-          <AdminFilterActions
-            :loading="loading"
-            @search="handleSearch"
-            @reset="handleReset"
-          />
-        </div>
-
-        <div v-if="loading && !users.length" class="admin-users__loading">
-          <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-        </div>
-
-        <div v-else-if="users.length" class="admin-users__table-wrap">
-          <table class="admin-users__table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>用户名</th>
-                <th>昵称</th>
-                <th>角色</th>
-                <th>状态</th>
-                <th>创建时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="user in users" :key="user.id">
-                <td>{{ user.id }}</td>
-                <td>{{ user.username }}</td>
-                <td>{{ user.nickname || '-' }}</td>
-                <td>{{ roleText(user.role) }}</td>
-                <td>
-                  <BaseTag :variant="user.status === 1 ? 'success' : 'danger'">
-                    {{ statusText(user.status) }}
-                  </BaseTag>
-                </td>
-                <td>{{ formatTime(user.createTime) }}</td>
-                <td>
-                  <BaseButton
-                    size="sm"
-                    :variant="user.status === 1 ? 'danger' : 'soft'"
-                    @click="handleToggleStatus(user)"
-                  >
-                    {{ user.status === 1 ? '禁用' : '启用' }}
-                  </BaseButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          <BasePagination
-            class="admin-users__pagination"
-            :page-num="pagination.pageNum"
-            :pages="pages"
-            :total="pagination.total"
-            :page-size="pagination.pageSize"
-            @change="handlePageChange"
-          />
-        </div>
-
-        <EmptyState
-          v-else
-          title="暂无用户"
-          hint="没有找到匹配的用户，可以调整筛选条件后再查。"
+    <BaseCard padding="lg">
+      <div class="admin-users__toolbar">
+        <BaseInput
+          v-model="filters.username"
+          label="用户名"
+          placeholder="输入用户名搜索"
+          @enter="handleSearch"
         />
-      </BaseCard>
-    </div>
-  </AppShell>
+        <BaseSelect
+          v-model="filters.status"
+          label="状态"
+          :options="statusOptions"
+          placeholder=""
+        />
+        <AdminFilterActions
+          :loading="loading"
+          @search="handleSearch"
+          @reset="handleReset"
+        />
+      </div>
+
+      <div v-if="loading && !users.length" class="admin-users__loading">
+        <SkeletonCard v-for="i in 3" :key="i" rows="3" />
+      </div>
+
+      <div v-else-if="users.length" class="admin-users__table-wrap">
+        <table class="admin-users__table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户名</th>
+              <th>昵称</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="user in users" :key="user.id">
+              <td>{{ user.id }}</td>
+              <td>{{ user.username }}</td>
+              <td>{{ user.nickname || '-' }}</td>
+              <td>{{ roleText(user.role) }}</td>
+              <td>
+                <BaseTag :variant="user.status === 1 ? 'success' : 'danger'">
+                  {{ statusText(user.status) }}
+                </BaseTag>
+              </td>
+              <td>{{ formatTime(user.createTime) }}</td>
+              <td>
+                <BaseButton
+                  size="sm"
+                  :variant="user.status === 1 ? 'danger' : 'soft'"
+                  @click="handleToggleStatus(user)"
+                >
+                  {{ user.status === 1 ? '禁用' : '启用' }}
+                </BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <BasePagination
+          class="admin-users__pagination"
+          :page-num="pagination.pageNum"
+          :pages="pages"
+          :total="pagination.total"
+          :page-size="pagination.pageSize"
+          @change="handlePageChange"
+        />
+      </div>
+
+      <EmptyState
+        v-else
+        title="暂无用户"
+        hint="没有找到匹配的用户，可以调整筛选条件后再查。"
+      />
+    </BaseCard>
+  </div>
 </template>
 
 <style scoped>

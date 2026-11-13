@@ -1,9 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import AppShell from '../components/layout/AppShell.vue'
-import AdminTabs from '../components/admin/AdminTabs.vue'
-import AdminPageHeader from '../components/admin/AdminPageHeader.vue'
+import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import BaseDialog from '../components/ui/BaseDialog.vue'
@@ -103,190 +101,186 @@ function closeDetail() {
 </script>
 
 <template>
-  <AppShell width="wide">
-    <div class="container admin-ai-replies">
-      <AdminPageHeader
-        title="AI 回复记录"
-        desc="查看 AI 回复、失败原因，以及对应的心情记录或帖子。"
-      />
+  <div class="admin-ai-replies">
+    <AdminPageTitle
+      title="AI 记录"
+      desc="查看 AI 回复、失败原因，以及对应的心情记录或帖子。"
+    />
 
-      <AdminTabs />
-
-      <BaseCard padding="lg">
-        <div class="admin-ai-replies__toolbar">
-          <BaseInput
-            v-model="aiReplyFilters.userId"
-            label="用户ID"
-            placeholder="输入用户ID"
-            @enter="handleSearch"
-          />
-
-          <BaseSelect
-            v-model="aiReplyFilters.targetType"
-            label="关联类型"
-            :options="targetTypeOptions"
-            placeholder=""
-          />
-
-          <BaseSelect
-            v-model="aiReplyFilters.status"
-            label="状态"
-            :options="statusOptions"
-            placeholder=""
-          />
-
-          <BaseInput
-            v-model="aiReplyFilters.keyword"
-            label="关键词"
-            placeholder="搜索回复、错误或提示词"
-            @enter="handleSearch"
-          />
-
-          <AdminFilterActions
-            :loading="aiRepliesLoading"
-            @search="handleSearch"
-            @reset="handleReset"
-          />
-        </div>
-
-        <div v-if="aiRepliesLoading && !aiReplies.length" class="admin-ai-replies__loading">
-          <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-        </div>
-
-        <div v-else-if="aiReplies.length" class="admin-ai-replies__table-wrap">
-          <table class="admin-ai-replies__table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>用户ID</th>
-                <th>关联类型</th>
-                <th>关联ID</th>
-                <th>模型</th>
-                <th>状态</th>
-                <th>AI回复</th>
-                <th>错误信息</th>
-                <th>创建时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="item in aiReplies" :key="item.id">
-                <td>{{ item.id }}</td>
-                <td>{{ item.userId }}</td>
-                <td>{{ targetTypeText(item.targetType) }}</td>
-                <td>{{ item.targetId }}</td>
-                <td>{{ item.modelName || '-' }}</td>
-                <td>
-                  <BaseTag :variant="statusVariant(item.status)">
-                    {{ statusText(item.status) }}
-                  </BaseTag>
-                </td>
-                <td :title="item.replyContent">{{ shortText(item.replyContent, 36) }}</td>
-                <td :title="item.errorMessage">{{ shortText(item.errorMessage, 28) }}</td>
-                <td>{{ formatTime(item.createTime) }}</td>
-                <td>
-                  <BaseButton size="sm" variant="soft" @click="openDetail(item)">
-                    详情
-                  </BaseButton>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <EmptyState
-          v-else
-          title="暂无 AI 回复记录"
-          hint="没有找到匹配的调用记录，可以调整筛选条件后再查。"
+    <BaseCard padding="lg">
+      <div class="admin-ai-replies__toolbar">
+        <BaseInput
+          v-model="aiReplyFilters.userId"
+          label="用户ID"
+          placeholder="输入用户ID"
+          @enter="handleSearch"
         />
 
-        <div v-if="aiRepliesTotal > 0" class="admin-ai-replies__pager">
-          <span>共 {{ aiRepliesTotal }} 条</span>
-          <BaseButton
-            variant="plain"
-            size="sm"
-            :disabled="aiReplyFilters.pageNum <= 1 || aiRepliesLoading"
-            @click="handlePageChange(aiReplyFilters.pageNum - 1)"
-          >
-            上一页
-          </BaseButton>
-          <span>{{ aiReplyFilters.pageNum }} / {{ aiReplyPages }}</span>
-          <BaseButton
-            variant="plain"
-            size="sm"
-            :disabled="aiReplyFilters.pageNum >= aiReplyPages || aiRepliesLoading"
-            @click="handlePageChange(aiReplyFilters.pageNum + 1)"
-          >
-            下一页
-          </BaseButton>
-        </div>
-      </BaseCard>
+        <BaseSelect
+          v-model="aiReplyFilters.targetType"
+          label="关联类型"
+          :options="targetTypeOptions"
+          placeholder=""
+        />
 
-      <BaseDialog
-        v-model="detailVisible"
-        title="AI 回复详情"
-        width="lg"
-        @close="closeDetail"
-      >
-        <div v-if="currentRecord" class="admin-ai-replies__detail">
-          <div class="admin-ai-replies__detail-grid">
-            <div>
-              <span>记录ID</span>
-              <strong>{{ currentRecord.id }}</strong>
-            </div>
-            <div>
-              <span>用户ID</span>
-              <strong>{{ currentRecord.userId }}</strong>
-            </div>
-            <div>
-              <span>关联类型</span>
-              <strong>{{ targetTypeText(currentRecord.targetType) }}</strong>
-            </div>
-            <div>
-              <span>关联ID</span>
-              <strong>{{ currentRecord.targetId }}</strong>
-            </div>
-            <div>
-              <span>模型</span>
-              <strong>{{ currentRecord.modelName || '-' }}</strong>
-            </div>
-            <div>
-              <span>状态</span>
-              <BaseTag :variant="statusVariant(currentRecord.status)">
-                {{ statusText(currentRecord.status) }}
-              </BaseTag>
-            </div>
-            <div>
-              <span>创建时间</span>
-              <strong>{{ formatTime(currentRecord.createTime) }}</strong>
-            </div>
+        <BaseSelect
+          v-model="aiReplyFilters.status"
+          label="状态"
+          :options="statusOptions"
+          placeholder=""
+        />
+
+        <BaseInput
+          v-model="aiReplyFilters.keyword"
+          label="关键词"
+          placeholder="搜索回复、错误或提示词"
+          @enter="handleSearch"
+        />
+
+        <AdminFilterActions
+          :loading="aiRepliesLoading"
+          @search="handleSearch"
+          @reset="handleReset"
+        />
+      </div>
+
+      <div v-if="aiRepliesLoading && !aiReplies.length" class="admin-ai-replies__loading">
+        <SkeletonCard v-for="i in 3" :key="i" rows="3" />
+      </div>
+
+      <div v-else-if="aiReplies.length" class="admin-ai-replies__table-wrap">
+        <table class="admin-ai-replies__table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户ID</th>
+              <th>关联类型</th>
+              <th>关联ID</th>
+              <th>模型</th>
+              <th>状态</th>
+              <th>AI回复</th>
+              <th>错误信息</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="item in aiReplies" :key="item.id">
+              <td>{{ item.id }}</td>
+              <td>{{ item.userId }}</td>
+              <td>{{ targetTypeText(item.targetType) }}</td>
+              <td>{{ item.targetId }}</td>
+              <td>{{ item.modelName || '-' }}</td>
+              <td>
+                <BaseTag :variant="statusVariant(item.status)">
+                  {{ statusText(item.status) }}
+                </BaseTag>
+              </td>
+              <td :title="item.replyContent">{{ shortText(item.replyContent, 36) }}</td>
+              <td :title="item.errorMessage">{{ shortText(item.errorMessage, 28) }}</td>
+              <td>{{ formatTime(item.createTime) }}</td>
+              <td>
+                <BaseButton size="sm" variant="soft" @click="openDetail(item)">
+                  详情
+                </BaseButton>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <EmptyState
+        v-else
+        title="暂无 AI 回复记录"
+        hint="没有找到匹配的调用记录，可以调整筛选条件后再查。"
+      />
+
+      <div v-if="aiRepliesTotal > 0" class="admin-ai-replies__pager">
+        <span>共 {{ aiRepliesTotal }} 条</span>
+        <BaseButton
+          variant="plain"
+          size="sm"
+          :disabled="aiReplyFilters.pageNum <= 1 || aiRepliesLoading"
+          @click="handlePageChange(aiReplyFilters.pageNum - 1)"
+        >
+          上一页
+        </BaseButton>
+        <span>{{ aiReplyFilters.pageNum }} / {{ aiReplyPages }}</span>
+        <BaseButton
+          variant="plain"
+          size="sm"
+          :disabled="aiReplyFilters.pageNum >= aiReplyPages || aiRepliesLoading"
+          @click="handlePageChange(aiReplyFilters.pageNum + 1)"
+        >
+          下一页
+        </BaseButton>
+      </div>
+    </BaseCard>
+
+    <BaseDialog
+      v-model="detailVisible"
+      title="AI 回复详情"
+      width="lg"
+      @close="closeDetail"
+    >
+      <div v-if="currentRecord" class="admin-ai-replies__detail">
+        <div class="admin-ai-replies__detail-grid">
+          <div>
+            <span>记录ID</span>
+            <strong>{{ currentRecord.id }}</strong>
           </div>
-
-          <section class="admin-ai-replies__detail-section">
-            <h3>提示词</h3>
-            <p>{{ currentRecord.prompt || '-' }}</p>
-          </section>
-
-          <section class="admin-ai-replies__detail-section">
-            <h3>AI 回复</h3>
-            <p>{{ currentRecord.replyContent || '-' }}</p>
-          </section>
-
-          <section class="admin-ai-replies__detail-section">
-            <h3>错误信息</h3>
-            <p>{{ currentRecord.errorMessage || '-' }}</p>
-          </section>
+          <div>
+            <span>用户ID</span>
+            <strong>{{ currentRecord.userId }}</strong>
+          </div>
+          <div>
+            <span>关联类型</span>
+            <strong>{{ targetTypeText(currentRecord.targetType) }}</strong>
+          </div>
+          <div>
+            <span>关联ID</span>
+            <strong>{{ currentRecord.targetId }}</strong>
+          </div>
+          <div>
+            <span>模型</span>
+            <strong>{{ currentRecord.modelName || '-' }}</strong>
+          </div>
+          <div>
+            <span>状态</span>
+            <BaseTag :variant="statusVariant(currentRecord.status)">
+              {{ statusText(currentRecord.status) }}
+            </BaseTag>
+          </div>
+          <div>
+            <span>创建时间</span>
+            <strong>{{ formatTime(currentRecord.createTime) }}</strong>
+          </div>
         </div>
 
-        <template #footer>
-          <BaseButton variant="plain" @click="closeDetail">
-            关闭
-          </BaseButton>
-        </template>
-      </BaseDialog>
-    </div>
-  </AppShell>
+        <section class="admin-ai-replies__detail-section">
+          <h3>提示词</h3>
+          <p>{{ currentRecord.prompt || '-' }}</p>
+        </section>
+
+        <section class="admin-ai-replies__detail-section">
+          <h3>AI 回复</h3>
+          <p>{{ currentRecord.replyContent || '-' }}</p>
+        </section>
+
+        <section class="admin-ai-replies__detail-section">
+          <h3>错误信息</h3>
+          <p>{{ currentRecord.errorMessage || '-' }}</p>
+        </section>
+      </div>
+
+      <template #footer>
+        <BaseButton variant="plain" @click="closeDetail">
+          关闭
+        </BaseButton>
+      </template>
+    </BaseDialog>
+  </div>
 </template>
 
 <style scoped>

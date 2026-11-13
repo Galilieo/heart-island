@@ -6,9 +6,14 @@ import ConfirmDialog from './components/ui/ConfirmDialog.vue'
 </script>
 
 <template>
+  <!-- 嵌套路由（目前只有后台）按父级路径做 key，切换子页面时不重挂布局；
+       其他页面仍按完整路径播放路由过渡。 -->
   <RouterView v-slot="{ Component, route }">
     <Transition name="route-fade" mode="out-in">
-      <component :is="Component" :key="route.fullPath" />
+      <component
+        :is="Component"
+        :key="route.matched.length > 1 ? route.matched[0].path : route.fullPath"
+      />
     </Transition>
   </RouterView>
   <Toast />
