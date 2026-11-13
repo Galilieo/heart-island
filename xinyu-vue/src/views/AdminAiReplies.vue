@@ -2,12 +2,16 @@
 import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
-import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
+import AdminFilterBar from '../components/admin/AdminFilterBar.vue'
+import AdminFilterField from '../components/admin/AdminFilterField.vue'
+import AdminDataTable from '../components/admin/AdminDataTable.vue'
+import AdminStatus from '../components/admin/AdminStatus.vue'
+import AdminRowAction from '../components/admin/AdminRowAction.vue'
 import BaseDialog from '../components/ui/BaseDialog.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
+import BasePagination from '../components/ui/BasePagination.vue'
 import BaseTag from '../components/ui/BaseTag.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
@@ -38,16 +42,67 @@ const statusOptions = [
   { label: '失败', value: '0' }
 ]
 
+// 固定列合计 686，加 2 个自动列（AI 回复、错误信息）×160 = 1006，
+// 1280 宽度下不出现横向滚动；两个自动列截断后用 title 展示全文。
+const columns = [
+  { key: 'id', title: 'ID', width: 64, mono: true, mobile: 'eyebrow', mobilePrefix: '#' },
+  {
+    key: 'userId',
+    title: '用户 ID',
+    width: 80,
+    mono: true,
+    mobile: 'eyebrow',
+    mobilePrefix: '用户 '
+  },
+  {
+    key: 'targetType',
+    title: '关联类型',
+    width: 80,
+    mobile: 'eyebrow',
+    format: (row) => targetTypeText(row.targetType)
+  },
+  { key: 'targetId', title: '关联 ID', width: 64, mono: true, mobile: 'hidden' },
+  {
+    key: 'modelName',
+    title: '模型',
+    width: 110,
+    mobile: 'hidden',
+    format: (row) => row.modelName || '-',
+    tooltip: (row) => row.modelName || ''
+  },
+  { key: 'status', title: '状态', width: 72, mobile: 'status' },
+  {
+    key: 'replyContent',
+    title: 'AI 回复',
+    mobile: 'body',
+    format: (row) => row.replyContent || '-',
+    tooltip: (row) => row.replyContent || ''
+  },
+  {
+    key: 'errorMessage',
+    title: '错误信息',
+    mobile: 'hidden',
+    format: (row) => row.errorMessage || '-',
+    tooltip: (row) => row.errorMessage || ''
+  },
+  {
+    key: 'createTime',
+    title: '创建时间',
+    width: 140,
+    mono: true,
+    mobile: 'meta',
+    mobileLabel: '',
+    format: (row) => formatTime(row.createTime)
+  },
+  { key: 'actions', title: '操作', width: 76, align: 'right', mobile: 'hidden' }
+]
+
 onMounted(() => {
   adminStore.fetchAiReplies()
 })
 
 function statusText(status) {
   return status === 1 ? '成功' : '失败'
-}
-
-function statusVariant(status) {
-  return status === 1 ? 'success' : 'danger'
 }
 
 function targetTypeText(targetType) {
@@ -58,18 +113,6 @@ function targetTypeText(targetType) {
   }
 
   return map[targetType] || targetType || '-'
-}
-
-function shortText(value, length = 40) {
-  if (!value) return '-'
-
-  const text = String(value)
-
-  if (text.length <= length) {
-    return text
-  }
-
-  return `${text.slice(0, length)}...`
 }
 
 function formatTime(value) {
@@ -107,116 +150,90 @@ function closeDetail() {
       desc="查看 AI 回复、失败原因，以及对应的心情记录或帖子。"
     />
 
-    <BaseCard padding="lg">
-      <div class="admin-ai-replies__toolbar">
+    <AdminFilterBar
+      :loading="aiRepliesLoading"
+      @search="handleSearch"
+      @reset="handleReset"
+    >
+      <AdminFilterField size="md">
         <BaseInput
           v-model="aiReplyFilters.userId"
           label="用户ID"
           placeholder="输入用户ID"
           @enter="handleSearch"
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="md">
         <BaseSelect
           v-model="aiReplyFilters.targetType"
           label="关联类型"
           :options="targetTypeOptions"
           placeholder=""
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="sm" full>
         <BaseSelect
           v-model="aiReplyFilters.status"
           label="状态"
           :options="statusOptions"
           placeholder=""
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="wide" full>
         <BaseInput
           v-model="aiReplyFilters.keyword"
           label="关键词"
           placeholder="搜索回复、错误或提示词"
           @enter="handleSearch"
         />
+      </AdminFilterField>
+    </AdminFilterBar>
 
-        <AdminFilterActions
-          :loading="aiRepliesLoading"
-          @search="handleSearch"
-          @reset="handleReset"
+    <AdminDataTable
+      :columns="columns"
+      :rows="aiReplies"
+      :total="Number(aiRepliesTotal)"
+      :loading="aiRepliesLoading"
+      row-key="id"
+      order-hint="按创建时间倒序"
+    >
+      <template #cell-status="{ row }">
+        <AdminStatus
+          :text="statusText(row.status)"
+          :tone="row.status === 1 ? 'ok' : 'bad'"
         />
-      </div>
+      </template>
 
-      <div v-if="aiRepliesLoading && !aiReplies.length" class="admin-ai-replies__loading">
+      <template #actions="{ row }">
+        <AdminRowAction @click="openDetail(row)">
+          详情
+        </AdminRowAction>
+      </template>
+
+      <template #loading>
         <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-      </div>
+      </template>
 
-      <div v-else-if="aiReplies.length" class="admin-ai-replies__table-wrap">
-        <table class="admin-ai-replies__table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>用户ID</th>
-              <th>关联类型</th>
-              <th>关联ID</th>
-              <th>模型</th>
-              <th>状态</th>
-              <th>AI回复</th>
-              <th>错误信息</th>
-              <th>创建时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
+      <template #empty>
+        <EmptyState
+          title="暂无 AI 回复记录"
+          hint="没有找到匹配的调用记录，可以调整筛选条件后再查。"
+        />
+      </template>
 
-          <tbody>
-            <tr v-for="item in aiReplies" :key="item.id">
-              <td>{{ item.id }}</td>
-              <td>{{ item.userId }}</td>
-              <td>{{ targetTypeText(item.targetType) }}</td>
-              <td>{{ item.targetId }}</td>
-              <td>{{ item.modelName || '-' }}</td>
-              <td>
-                <BaseTag :variant="statusVariant(item.status)">
-                  {{ statusText(item.status) }}
-                </BaseTag>
-              </td>
-              <td :title="item.replyContent">{{ shortText(item.replyContent, 36) }}</td>
-              <td :title="item.errorMessage">{{ shortText(item.errorMessage, 28) }}</td>
-              <td>{{ formatTime(item.createTime) }}</td>
-              <td>
-                <BaseButton size="sm" variant="soft" @click="openDetail(item)">
-                  详情
-                </BaseButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <EmptyState
-        v-else
-        title="暂无 AI 回复记录"
-        hint="没有找到匹配的调用记录，可以调整筛选条件后再查。"
-      />
-
-      <div v-if="aiRepliesTotal > 0" class="admin-ai-replies__pager">
-        <span>共 {{ aiRepliesTotal }} 条</span>
-        <BaseButton
-          variant="plain"
-          size="sm"
-          :disabled="aiReplyFilters.pageNum <= 1 || aiRepliesLoading"
-          @click="handlePageChange(aiReplyFilters.pageNum - 1)"
-        >
-          上一页
-        </BaseButton>
-        <span>{{ aiReplyFilters.pageNum }} / {{ aiReplyPages }}</span>
-        <BaseButton
-          variant="plain"
-          size="sm"
-          :disabled="aiReplyFilters.pageNum >= aiReplyPages || aiRepliesLoading"
-          @click="handlePageChange(aiReplyFilters.pageNum + 1)"
-        >
-          下一页
-        </BaseButton>
-      </div>
-    </BaseCard>
+      <template #pagination>
+        <BasePagination
+          :page-num="Number(aiReplyFilters.pageNum)"
+          :pages="Number(aiReplyPages)"
+          :total="Number(aiRepliesTotal)"
+          :page-size="Number(aiReplyFilters.pageSize)"
+          @change="handlePageChange"
+        />
+      </template>
+    </AdminDataTable>
 
     <BaseDialog
       v-model="detailVisible"
@@ -248,7 +265,7 @@ function closeDetail() {
           </div>
           <div>
             <span>状态</span>
-            <BaseTag :variant="statusVariant(currentRecord.status)">
+            <BaseTag :tone="currentRecord.status === 1 ? 'success' : 'danger'">
               {{ statusText(currentRecord.status) }}
             </BaseTag>
           </div>
@@ -287,59 +304,7 @@ function closeDetail() {
 .admin-ai-replies {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.admin-ai-replies__toolbar {
-  display: grid;
-  grid-template-columns: 160px 180px 160px minmax(260px, 1fr) auto;
-  gap: 12px;
-  align-items: end;
-  margin-bottom: 18px;
-}
-
-.admin-ai-replies__loading {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.admin-ai-replies__table-wrap {
-  overflow-x: auto;
-}
-
-.admin-ai-replies__table {
-  width: 100%;
-  min-width: 1180px;
-  border-collapse: collapse;
-}
-
-.admin-ai-replies__table th,
-.admin-ai-replies__table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  font-size: var(--fs-sm);
-  vertical-align: top;
-}
-
-.admin-ai-replies__table th {
-  color: var(--ink-3);
-  font-weight: 700;
-  background: var(--bg-soft);
-}
-
-.admin-ai-replies__table td {
-  color: var(--ink-1);
-}
-
-.admin-ai-replies__pager {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 18px;
-  color: var(--ink-3);
-  font-size: var(--fs-sm);
+  gap: 14px;
 }
 
 .admin-ai-replies__detail {
@@ -364,7 +329,7 @@ function closeDetail() {
 .admin-ai-replies__detail-grid span {
   display: block;
   margin-bottom: 6px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--fs-xs);
   font-weight: 700;
 }
@@ -397,29 +362,7 @@ function closeDetail() {
   word-break: break-word;
 }
 
-@media (min-width: 769px) and (max-width: 1100px) {
-  .admin-ai-replies__toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  :deep(.admin-filter-actions) {
-    grid-column: 1 / -1;
-  }
-}
-
 @media (max-width: 768px) {
-  .admin-ai-replies__toolbar {
-    grid-template-columns: 1fr;
-  }
-
-  :deep(.admin-filter-actions) {
-    width: 100%;
-  }
-
-  .admin-ai-replies__pager {
-    flex-wrap: wrap;
-  }
-
   .admin-ai-replies__detail-grid {
     grid-template-columns: 1fr;
   }

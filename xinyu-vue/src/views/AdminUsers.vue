@@ -2,12 +2,13 @@
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
-import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
+import AdminFilterBar from '../components/admin/AdminFilterBar.vue'
+import AdminFilterField from '../components/admin/AdminFilterField.vue'
+import AdminDataTable from '../components/admin/AdminDataTable.vue'
+import AdminStatus from '../components/admin/AdminStatus.vue'
+import AdminRowAction from '../components/admin/AdminRowAction.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
-import BaseButton from '../components/ui/BaseButton.vue'
-import BaseTag from '../components/ui/BaseTag.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
@@ -25,6 +26,38 @@ const statusOptions = [
   { label: '全部状态', value: '' },
   { label: '正常', value: '1' },
   { label: '禁用', value: '0' }
+]
+
+// 固定列宽合计 814px，小于 1280 宽度下的内容区，不需要横向滚动。
+const columns = [
+  { key: 'id', title: 'ID', width: 64, mono: true, mobile: 'eyebrow', mobilePrefix: '#' },
+  { key: 'username', title: '用户名', width: 160, mobile: 'eyebrow' },
+  {
+    key: 'nickname',
+    title: '昵称',
+    width: 160,
+    mobile: 'eyebrow',
+    format: (row) => row.nickname || '-'
+  },
+  {
+    key: 'role',
+    title: '角色',
+    width: 110,
+    mobile: 'meta',
+    mobileLabel: '角色',
+    format: (row) => roleText(row.role)
+  },
+  { key: 'status', title: '状态', width: 80, mobile: 'status' },
+  {
+    key: 'createTime',
+    title: '创建时间',
+    width: 140,
+    mono: true,
+    mobile: 'meta',
+    mobileLabel: '',
+    format: (row) => formatTime(row.createTime)
+  },
+  { key: 'actions', title: '操作', width: 100, align: 'right', mobile: 'hidden' }
 ]
 
 onMounted(() => {
@@ -87,86 +120,74 @@ async function handleToggleStatus(user) {
       desc="查找用户，启用或禁用账号。"
     />
 
-    <BaseCard padding="lg">
-      <div class="admin-users__toolbar">
+    <AdminFilterBar
+      :loading="loading"
+      @search="handleSearch"
+      @reset="handleReset"
+    >
+      <AdminFilterField size="wide" full>
         <BaseInput
           v-model="filters.username"
           label="用户名"
           placeholder="输入用户名搜索"
           @enter="handleSearch"
         />
+      </AdminFilterField>
+
+      <AdminFilterField size="sm" full>
         <BaseSelect
           v-model="filters.status"
           label="状态"
           :options="statusOptions"
           placeholder=""
         />
-        <AdminFilterActions
-          :loading="loading"
-          @search="handleSearch"
-          @reset="handleReset"
+      </AdminFilterField>
+    </AdminFilterBar>
+
+    <AdminDataTable
+      :columns="columns"
+      :rows="users"
+      :total="Number(pagination.total)"
+      :loading="loading"
+      row-key="id"
+    >
+      <template #cell-status="{ row }">
+        <AdminStatus
+          :text="statusText(row.status)"
+          :tone="row.status === 1 ? 'ok' : 'bad'"
         />
-      </div>
+      </template>
 
-      <div v-if="loading && !users.length" class="admin-users__loading">
+      <template #actions="{ row }">
+        <AdminRowAction
+          :tone="row.status === 1 ? 'danger' : 'default'"
+          @click="handleToggleStatus(row)"
+        >
+          {{ row.status === 1 ? '禁用' : '启用' }}
+        </AdminRowAction>
+      </template>
+
+      <template #loading>
         <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-      </div>
+      </template>
 
-      <div v-else-if="users.length" class="admin-users__table-wrap">
-        <table class="admin-users__table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>用户名</th>
-              <th>昵称</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>创建时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
+      <template #empty>
+        <EmptyState
+          title="暂无用户"
+          hint="没有找到匹配的用户，可以调整筛选条件后再查。"
+        />
+      </template>
 
-          <tbody>
-            <tr v-for="user in users" :key="user.id">
-              <td>{{ user.id }}</td>
-              <td>{{ user.username }}</td>
-              <td>{{ user.nickname || '-' }}</td>
-              <td>{{ roleText(user.role) }}</td>
-              <td>
-                <BaseTag :variant="user.status === 1 ? 'success' : 'danger'">
-                  {{ statusText(user.status) }}
-                </BaseTag>
-              </td>
-              <td>{{ formatTime(user.createTime) }}</td>
-              <td>
-                <BaseButton
-                  size="sm"
-                  :variant="user.status === 1 ? 'danger' : 'soft'"
-                  @click="handleToggleStatus(user)"
-                >
-                  {{ user.status === 1 ? '禁用' : '启用' }}
-                </BaseButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
+      <template #pagination>
         <BasePagination
-          class="admin-users__pagination"
-          :page-num="pagination.pageNum"
-          :pages="pages"
-          :total="pagination.total"
-          :page-size="pagination.pageSize"
+          :page-num="Number(pagination.pageNum)"
+          :pages="Number(pages)"
+          :total="Number(pagination.total)"
+          :page-size="Number(pagination.pageSize)"
           @change="handlePageChange"
         />
-      </div>
-
-      <EmptyState
-        v-else
-        title="暂无用户"
-        hint="没有找到匹配的用户，可以调整筛选条件后再查。"
-      />
-    </BaseCard>
+      </template>
+    </AdminDataTable>
   </div>
 </template>
 
@@ -174,59 +195,6 @@ async function handleToggleStatus(user) {
 .admin-users {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.admin-users__toolbar {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 180px auto;
-  gap: 12px;
-  align-items: end;
-  margin-bottom: 18px;
-}
-
-.admin-users__loading {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.admin-users__table-wrap {
-  overflow-x: auto;
-}
-
-.admin-users__table {
-  width: 100%;
-  min-width: 760px;
-  border-collapse: collapse;
-}
-
-.admin-users__table th,
-.admin-users__table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  font-size: var(--fs-sm);
-}
-
-.admin-users__table th {
-  color: var(--ink-3);
-  font-weight: 700;
-  background: var(--bg-soft);
-}
-
-.admin-users__table td {
-  color: var(--ink-1);
-}
-
-.admin-users__pagination {
-  margin-top: 18px;
-}
-
-@media (max-width: 768px) {
-  .admin-users__toolbar {
-    grid-template-columns: 1fr;
-  }
-
+  gap: 14px;
 }
 </style>

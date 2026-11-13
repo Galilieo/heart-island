@@ -2,13 +2,16 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
-import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
+import AdminFilterBar from '../components/admin/AdminFilterBar.vue'
+import AdminFilterField from '../components/admin/AdminFilterField.vue'
+import AdminDataTable from '../components/admin/AdminDataTable.vue'
+import AdminStatus from '../components/admin/AdminStatus.vue'
+import AdminRowAction from '../components/admin/AdminRowAction.vue'
+import AdminButton from '../components/admin/AdminButton.vue'
 import BaseDialog from '../components/ui/BaseDialog.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
-import BaseTag from '../components/ui/BaseTag.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import { useAdminStore } from '../stores/admin'
@@ -36,6 +39,40 @@ const statusOptions = [
   { label: '全部状态', value: '' },
   { label: '启用', value: '1' },
   { label: '禁用', value: '0' }
+]
+
+// 固定列宽合计 690px（说明列自动伸缩），小于 1280 宽度下的内容区，不需要横向滚动。
+const columns = [
+  { key: 'id', title: 'ID', width: 64, mono: true, mobile: 'eyebrow', mobilePrefix: '#' },
+  { key: 'name', title: '话题名称', width: 150, mobile: 'eyebrow' },
+  {
+    key: 'description',
+    title: '话题说明',
+    mobile: 'body',
+    format: (row) => row.description || '-',
+    tooltip: (row) => row.description || ''
+  },
+  { key: 'sort', title: '排序', width: 64, align: 'right', mobile: 'meta', mobileLabel: '排序' },
+  {
+    key: 'postCount',
+    title: '帖子数',
+    width: 72,
+    align: 'right',
+    mobile: 'meta',
+    mobileLabel: '帖子',
+    format: (row) => row.postCount ?? 0
+  },
+  { key: 'status', title: '状态', width: 80, mobile: 'status' },
+  {
+    key: 'createTime',
+    title: '创建时间',
+    width: 140,
+    mono: true,
+    mobile: 'meta',
+    mobileLabel: '',
+    format: (row) => formatTime(row.createTime)
+  },
+  { key: 'actions', title: '操作', width: 120, align: 'right', mobile: 'hidden' }
 ]
 
 onMounted(() => {
@@ -129,10 +166,6 @@ function statusText(status) {
   return status === 1 ? '启用' : '禁用'
 }
 
-function statusVariant(status) {
-  return status === 1 ? 'success' : 'danger'
-}
-
 function formatTime(value) {
   if (!value) return '-'
   return String(value).replace('T', ' ').slice(0, 16)
@@ -144,92 +177,77 @@ function formatTime(value) {
     <AdminPageTitle
       title="话题管理"
       desc="新增或编辑话题，设置发帖时可选的话题和排列顺序。"
-    />
+    >
+      <template #actions>
+        <AdminButton
+          variant="primary"
+          :disabled="topicsLoading"
+          @click="openCreateDialog"
+        >
+          新增话题
+        </AdminButton>
+      </template>
+    </AdminPageTitle>
 
-    <BaseCard padding="lg">
-      <div class="admin-topics__toolbar">
+    <AdminFilterBar
+      :loading="topicsLoading"
+      @search="handleSearch"
+      @reset="handleReset"
+    >
+      <AdminFilterField size="wide" full>
         <BaseInput
           v-model="topicFilters.keyword"
           label="话题名称"
           placeholder="输入话题名称搜索"
           @enter="handleSearch"
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="sm" full>
         <BaseSelect
           v-model="topicFilters.status"
           label="状态"
           :options="statusOptions"
           placeholder=""
         />
+      </AdminFilterField>
+    </AdminFilterBar>
 
-        <AdminFilterActions
-          :loading="topicsLoading"
-          @search="handleSearch"
-          @reset="handleReset"
+    <AdminDataTable
+      :columns="columns"
+      :rows="topics"
+      :total="Number(topics.length)"
+      :loading="topicsLoading"
+      row-key="id"
+    >
+      <template #cell-status="{ row }">
+        <AdminStatus
+          :text="statusText(row.status)"
+          :tone="row.status === 1 ? 'ok' : 'bad'"
+        />
+      </template>
+
+      <template #actions="{ row }">
+        <AdminRowAction @click="editTopic(row)">编辑</AdminRowAction>
+        <AdminRowAction
+          :tone="row.status === 1 ? 'danger' : 'default'"
+          @click="handleToggleStatus(row)"
         >
-          <BaseButton variant="soft" :disabled="topicsLoading" @click="openCreateDialog">
-            新增话题
-          </BaseButton>
-        </AdminFilterActions>
-      </div>
+          {{ row.status === 1 ? '禁用' : '启用' }}
+        </AdminRowAction>
+      </template>
 
-      <div v-if="topicsLoading && !topics.length" class="admin-topics__loading">
+      <template #loading>
         <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-      </div>
+      </template>
 
-      <div v-else-if="topics.length" class="admin-topics__table-wrap">
-        <table class="admin-topics__table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>话题名称</th>
-              <th>话题说明</th>
-              <th>排序</th>
-              <th>帖子数</th>
-              <th>状态</th>
-              <th>创建时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr v-for="topic in topics" :key="topic.id">
-              <td>{{ topic.id }}</td>
-              <td>{{ topic.name }}</td>
-              <td>{{ topic.description || '-' }}</td>
-              <td class="admin-topics__sort">{{ topic.sort }}</td>
-              <td>{{ topic.postCount ?? 0 }}</td>
-              <td>
-                <BaseTag :variant="statusVariant(topic.status)">
-                  {{ statusText(topic.status) }}
-                </BaseTag>
-              </td>
-              <td>{{ formatTime(topic.createTime) }}</td>
-              <td>
-                <div class="admin-topics__row-actions">
-                  <BaseButton size="sm" variant="soft" @click="editTopic(topic)">
-                    编辑
-                  </BaseButton>
-                  <BaseButton
-                    size="sm"
-                    :variant="topic.status === 1 ? 'danger' : 'soft'"
-                    @click="handleToggleStatus(topic)"
-                  >
-                    {{ topic.status === 1 ? '禁用' : '启用' }}
-                  </BaseButton>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <EmptyState
-        v-else
-        title="暂无话题"
-        hint="没有找到匹配的话题，可以调整筛选条件，或新增一个话题。"
-      />
-    </BaseCard>
+      <template #empty>
+        <EmptyState
+          title="暂无话题"
+          hint="没有找到匹配的话题，可以调整筛选条件，或新增一个话题。"
+        />
+      </template>
+    </AdminDataTable>
 
     <BaseDialog
       v-model="dialogVisible"
@@ -274,84 +292,12 @@ function formatTime(value) {
 .admin-topics {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.admin-topics__toolbar {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) 180px auto;
-  gap: 12px;
-  align-items: end;
-  margin-bottom: 18px;
-}
-
-.admin-topics__row-actions {
-  display: flex;
-  gap: 10px;
+  gap: 14px;
 }
 
 .admin-topics__dialog-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.admin-topics__loading {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.admin-topics__table-wrap {
-  overflow-x: auto;
-}
-
-.admin-topics__table {
-  width: 100%;
-  min-width: 900px;
-  border-collapse: collapse;
-}
-
-.admin-topics__table th,
-.admin-topics__table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  font-size: var(--fs-sm);
-}
-
-.admin-topics__table th {
-  color: var(--ink-3);
-  font-weight: 700;
-  background: var(--bg-soft);
-}
-
-.admin-topics__table td {
-  color: var(--ink-1);
-}
-
-.admin-topics__sort {
-  color: var(--brand-deep);
-  font-weight: 700;
-}
-
-@media (min-width: 769px) and (max-width: 1100px) {
-  .admin-topics__toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  :deep(.admin-filter-actions) {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 768px) {
-  .admin-topics__toolbar {
-    grid-template-columns: 1fr;
-  }
-
-  :deep(.admin-filter-actions) {
-    width: 100%;
-  }
 }
 </style>

@@ -2,12 +2,13 @@
 import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
-import AdminFilterActions from '../components/admin/AdminFilterActions.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
+import AdminFilterBar from '../components/admin/AdminFilterBar.vue'
+import AdminFilterField from '../components/admin/AdminFilterField.vue'
+import AdminDataTable from '../components/admin/AdminDataTable.vue'
+import AdminStatus from '../components/admin/AdminStatus.vue'
+import AdminRowAction from '../components/admin/AdminRowAction.vue'
 import BaseInput from '../components/ui/BaseInput.vue'
 import BaseSelect from '../components/ui/BaseSelect.vue'
-import BaseButton from '../components/ui/BaseButton.vue'
-import BaseTag from '../components/ui/BaseTag.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
@@ -33,26 +34,64 @@ const statusOptions = [
   { label: '已隐藏', value: '0' }
 ]
 
+// 回复内容自动伸缩，表格里截断、title 放全文；手机卡片按 mobile 角色渲染。
+const columns = [
+  { key: 'id', title: 'ID', width: 64, mono: true, mobile: 'eyebrow', mobilePrefix: '#' },
+  {
+    key: 'postId',
+    title: '帖子 ID',
+    width: 92,
+    mono: true,
+    mobile: 'eyebrow',
+    mobilePrefix: '帖子 '
+  },
+  {
+    key: 'userId',
+    title: '用户 ID',
+    width: 92,
+    mono: true,
+    mobile: 'eyebrow',
+    mobilePrefix: '用户 '
+  },
+  {
+    key: 'content',
+    title: '回复内容',
+    mobile: 'body',
+    format: (row) => row.content || '-',
+    tooltip: (row) => row.content || ''
+  },
+  {
+    key: 'anonymousName',
+    title: '匿名名',
+    width: 96,
+    mono: true,
+    mobile: 'hidden',
+    format: (row) => row.anonymousName || '-'
+  },
+  { key: 'status', title: '状态', width: 80, mobile: 'status' },
+  {
+    key: 'createTime',
+    title: '发布时间',
+    width: 140,
+    mono: true,
+    mobile: 'meta',
+    mobileLabel: '',
+    format: (row) => formatTime(row.createTime)
+  },
+  { key: 'actions', title: '操作', width: 100, align: 'right', mobile: 'hidden' }
+]
+
 onMounted(() => {
   adminStore.fetchReplies()
 })
 
 function statusText(status) {
-  return status === 1 ? '正常展示' : '已隐藏'
-}
-
-function statusVariant(status) {
-  return status === 1 ? 'success' : 'danger'
+  return status === 1 ? '正常' : '隐藏'
 }
 
 function formatTime(value) {
   if (!value) return '-'
   return String(value).replace('T', ' ').slice(0, 16)
-}
-
-function shortContent(content) {
-  if (!content) return '-'
-  return content.length > 48 ? `${content.slice(0, 48)}...` : content
 }
 
 function handleSearch() {
@@ -98,104 +137,93 @@ async function handleToggleStatus(reply) {
       desc="查找帖子回复，隐藏或恢复展示。"
     />
 
-    <BaseCard padding="lg">
-      <div class="admin-replies__toolbar">
+    <AdminFilterBar
+      :loading="repliesLoading"
+      @search="handleSearch"
+      @reset="handleReset"
+    >
+      <AdminFilterField size="wide" full>
         <BaseInput
           v-model="replyFilters.keyword"
           label="回复内容"
           placeholder="输入关键词搜索回复内容"
           @enter="handleSearch"
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="md">
         <BaseInput
           v-model="replyFilters.postId"
           label="帖子 ID"
           placeholder="按帖子 ID 筛选"
           @enter="handleSearch"
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="md">
         <BaseInput
           v-model="replyFilters.userId"
           label="用户 ID"
           placeholder="按用户 ID 筛选"
           @enter="handleSearch"
         />
+      </AdminFilterField>
 
+      <AdminFilterField size="sm" full>
         <BaseSelect
           v-model="replyFilters.status"
           label="状态"
           :options="statusOptions"
           placeholder=""
         />
+      </AdminFilterField>
+    </AdminFilterBar>
 
-        <AdminFilterActions
-          :loading="repliesLoading"
-          @search="handleSearch"
-          @reset="handleReset"
+    <AdminDataTable
+      :columns="columns"
+      :rows="replies"
+      :total="Number(replyPagination.total)"
+      :loading="repliesLoading"
+      row-key="id"
+      order-hint="按发布时间倒序"
+    >
+      <template #cell-status="{ row }">
+        <AdminStatus
+          :text="statusText(row.status)"
+          :tone="row.status === 1 ? 'ok' : 'bad'"
         />
-      </div>
+      </template>
 
-      <div v-if="repliesLoading && !replies.length" class="admin-replies__loading">
+      <template #actions="{ row }">
+        <AdminRowAction
+          :tone="row.status === 1 ? 'danger' : 'default'"
+          @click="handleToggleStatus(row)"
+        >
+          {{ row.status === 1 ? '隐藏' : '恢复' }}
+        </AdminRowAction>
+      </template>
+
+      <template #loading>
         <SkeletonCard v-for="i in 3" :key="i" rows="3" />
-      </div>
+      </template>
 
-      <div v-else-if="replies.length" class="admin-replies__table-wrap">
-        <table class="admin-replies__table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>帖子 ID</th>
-              <th>用户 ID</th>
-              <th>回复内容</th>
-              <th>匿名名</th>
-              <th>状态</th>
-              <th>发布时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
+      <template #empty>
+        <EmptyState
+          title="暂无回复"
+          hint="没有找到匹配的回复，可以调整筛选条件后再查。"
+        />
+      </template>
 
-          <tbody>
-            <tr v-for="reply in replies" :key="reply.id">
-              <td>{{ reply.id }}</td>
-              <td>{{ reply.postId }}</td>
-              <td>{{ reply.userId }}</td>
-              <td>{{ shortContent(reply.content) }}</td>
-              <td>{{ reply.anonymousName || '-' }}</td>
-              <td>
-                <BaseTag :variant="statusVariant(reply.status)">
-                  {{ statusText(reply.status) }}
-                </BaseTag>
-              </td>
-              <td>{{ formatTime(reply.createTime) }}</td>
-              <td>
-                <BaseButton
-                  size="sm"
-                  :variant="reply.status === 1 ? 'danger' : 'soft'"
-                  @click="handleToggleStatus(reply)"
-                >
-                  {{ reply.status === 1 ? '隐藏' : '恢复' }}
-                </BaseButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
+      <template #pagination>
         <BasePagination
-          class="admin-replies__pagination"
-          :page-num="replyPagination.pageNum"
-          :pages="replyPages"
-          :total="replyPagination.total"
-          :page-size="replyPagination.pageSize"
+          :page-num="Number(replyPagination.pageNum)"
+          :pages="Number(replyPages)"
+          :total="Number(replyPagination.total)"
+          :page-size="Number(replyPagination.pageSize)"
           @change="handlePageChange"
         />
-      </div>
-
-      <EmptyState
-        v-else
-        title="暂无回复"
-        hint="没有找到匹配的回复，可以调整筛选条件后再查。"
-      />
-    </BaseCard>
+      </template>
+    </AdminDataTable>
   </div>
 </template>
 
@@ -203,68 +231,6 @@ async function handleToggleStatus(reply) {
 .admin-replies {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.admin-replies__toolbar {
-  display: grid;
-  grid-template-columns: minmax(240px, 1.5fr) minmax(150px, 0.8fr) minmax(170px, 0.9fr) 180px auto;
-  gap: 12px;
-  align-items: end;
-  margin-bottom: 18px;
-}
-
-.admin-replies__loading {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.admin-replies__table-wrap {
-  overflow-x: auto;
-}
-
-.admin-replies__table {
-  width: 100%;
-  min-width: 1040px;
-  border-collapse: collapse;
-}
-
-.admin-replies__table th,
-.admin-replies__table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  font-size: var(--fs-sm);
-}
-
-.admin-replies__table th {
-  color: var(--ink-3);
-  font-weight: 700;
-  background: var(--bg-soft);
-}
-
-.admin-replies__table td {
-  color: var(--ink-1);
-}
-
-.admin-replies__pagination {
-  margin-top: 18px;
-}
-
-@media (max-width: 768px) {
-  .admin-replies__toolbar {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1100px) {
-  .admin-replies__toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  :deep(.admin-filter-actions) {
-    grid-column: 1 / -1;
-  }
+  gap: 14px;
 }
 </style>
