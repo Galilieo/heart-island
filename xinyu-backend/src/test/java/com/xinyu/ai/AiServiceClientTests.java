@@ -234,8 +234,8 @@ class AiServiceClientTests {
     void invalidRequestBoundariesNeverReachPeer(String kind) throws Exception {
         MoodAiRequest r = switch (kind) {
             case "blank" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "\u0085\u00a0\u3000", 40000);
-            case "long" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "文".repeat(501), 40000);
-            case "emoji-long" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "😀".repeat(251), 40000);
+            case "long" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "文".repeat(1001), 40000);
+            case "emoji-long" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "😀".repeat(501), 40000);
             case "bad-unicode" -> new MoodAiRequest("req-A", "10", 1, "7", "平静", "\ud800", 40000);
             case "zero-id" -> new MoodAiRequest("req-A", "0", 1, "7", "平静", "text", 40000);
             case "overflow-id" -> new MoodAiRequest("req-A", "9223372036854775808", 1, "7", "平静", "text", 40000);
@@ -248,6 +248,21 @@ class AiServiceClientTests {
              AiServiceClient client = new AiServiceClient(peer.url(), SECRET, 1)) {
             assertFailure(() -> client.generate(r, Duration.ofSeconds(2)), "invalid_request");
             assertThat(peer.connections.get()).isZero();
+        }
+    }
+
+    @Test
+    void max1000Utf16WithWorstCaseJsonEscapingFitsWellUnder16KiB() throws Exception {
+        String worst = "a" + "\u0001".repeat(999);
+        assertThat(worst.length()).isEqualTo(1000);
+        java.util.concurrent.atomic.AtomicInteger sentBytes = new java.util.concurrent.atomic.AtomicInteger();
+        try (Peer peer = new Peer((socket, input, wire) -> {
+            sentBytes.set(wire.body().length);
+            respond(socket, 200, GOOD);
+        }); AiServiceClient client = new AiServiceClient(peer.url(), SECRET, 1)) {
+            var res = client.generate(new MoodAiRequest("req-A", "10", 1, "7", "平静", worst, 40000), Duration.ofSeconds(2));
+            assertThat(res.resultKind()).isEqualTo("MODEL");
+            assertThat(sentBytes.get()).isLessThan(16 * 1024);
         }
     }
 

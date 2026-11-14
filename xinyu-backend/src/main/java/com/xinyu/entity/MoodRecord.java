@@ -18,7 +18,7 @@ public class MoodRecord {
     /** 心情类型，取值见 test-contracts/mood-types.json。 */
     private String moodType;
 
-    /** 用户原文，最多 500 个 UTF-16 单位。 */
+    /** 用户原文，最多 1000 个 UTF-16 单位。 */
     private String content;
 
     /** 当前版本的 AI 回复；未生成或已清空时为空。 */

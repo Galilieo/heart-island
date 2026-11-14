@@ -126,7 +126,7 @@ function close() {
         <BaseTextarea
           v-model="editContent"
           :rows="6"
-          :maxlength="500"
+          :maxlength="1000"
           :disabled="updating"
           placeholder="编辑心情内容"
         />

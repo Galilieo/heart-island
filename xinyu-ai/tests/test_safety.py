@@ -160,9 +160,10 @@ def test_repeated_new_prefix_cannot_block_the_service_process(prefix, mode):
     head = "" if mode == "start" else "我"
     # 命中尾须带意志动词（“想死”）：修复评审阻断 B 后，“我＋修饰词＋死”不再命中。
     hit_tail = "想死"
-    # 正文上限 500 个 UTF-16 单位（contracts.MAX_CONTENT_UTF16），
-    # 4 字前缀重复 240 次会超限，按上限取可容纳的最大重复次数（约 120+ 次）。
-    repeats = min(240, (500 - len(head) - len(hit_tail)) // len(prefix))
+    # 正文上限来自 contracts.MAX_CONTENT_UTF16（1000 个 UTF-16 单位），
+    # 按上限放大重复次数，验证正则仍须线性完成风险判断。
+    from app.contracts import MAX_CONTENT_UTF16
+    repeats = (MAX_CONTENT_UTF16 - len(head) - len(hit_tail)) // len(prefix)
     script = f'''
 import asyncio
 from app.main import create_app

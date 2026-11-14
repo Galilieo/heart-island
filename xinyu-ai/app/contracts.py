@@ -8,9 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # 版本号对应 evals/prompts/mood-reply-v2b.txt（提示词文件见该路径及 AI_WORKLOG 测评记录）。
 TEMPLATE_VERSION = "mood-reply-v2"
 
-# 以下范围与 Java 侧契约一致：正文按 UTF-16 代码单元计数，
+# 以下范围与 Java 侧契约一致：正文按 UTF-16 代码单元计数（对应 Java MoodRecordService/AiServiceClient 的 MAX_CONTENT_LENGTH），
 # budget_ms 与 ID／版本上限来自 Java 的字段定义和 signed long 范围。
-MAX_CONTENT_UTF16 = 500
+MAX_CONTENT_UTF16 = 1000
 MAX_REPLY_UTF16 = 2000
 MAX_BUDGET_MS = 40000
 JAVA_LONG_MAX = 9223372036854775807

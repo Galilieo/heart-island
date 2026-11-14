@@ -3,7 +3,7 @@ import json
 import re
 from typing import Literal
 from pydantic import Field, field_validator, model_validator
-from app.contracts import Contract, Correlation, MoodType, utf16_length
+from app.contracts import Contract, Correlation, MAX_CONTENT_UTF16, MoodType, utf16_length
 
 TEMPLATE_VERSION = 'mood-review-v1'
 REFERENCE = re.compile(r'\{\{(r[1-9][0-9]*)}}')
@@ -25,7 +25,7 @@ class ReviewEntry(Contract):
     @field_validator('content')
     @classmethod
     def limited_content(cls, value):
-        if utf16_length(value) > 300:
+        if utf16_length(value) > MAX_CONTENT_UTF16:
             raise ValueError('invalid_content')
         return value
 

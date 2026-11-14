@@ -15,9 +15,9 @@ def application(provider=None, **settings):
     return create_app(make_settings(**settings), provider or StubProvider())
 
 
-@pytest.mark.parametrize("content", ["文" * 500, "😀" * 250])
-async def test_model_reply_accepts_exactly_500_utf16_and_echoes_correlation(content):
-    """恰好 500 个 UTF-16 代码单元的输入应成功，并完整回传任务关联字段。"""
+@pytest.mark.parametrize("content", ["文" * 1000, "😀" * 500])
+async def test_model_reply_accepts_exactly_1000_utf16_and_echoes_correlation(content):
+    """恰好 1000 个 UTF-16 代码单元的输入应成功，并完整回传任务关联字段。"""
     provider = StubProvider()
     async with client_for(application(provider)) as client:
         response = await client.post("/internal/v1/mood-replies", json=payload(content=content), headers=AUTH)
@@ -50,7 +50,7 @@ async def test_unauthorized_requests_never_call_provider(headers):
     {"source_version": "0"}, {"request_id": ""}, {"request_id": "x" * 65},
     {"request_id": "raw\ntext"}, {"attempt": True}, {"attempt": 0},
     {"budget_ms": 0}, {"budget_ms": 40001}, {"budget_ms": "40"},
-    {"content": "文" * 501}, {"content": "😀" * 251}, {"content": ""},
+    {"content": "文" * 1001}, {"content": "😀" * 501}, {"content": ""},
     {"content": " \n"}, {"content": "\ud800"}, {"content": "\udfff"},
     {"mood_type": "unknown"}, {"extra": "private-original-sentinel"},
 ])

@@ -29,8 +29,8 @@ public class MoodRecordService {
     /** mood_record.status=1 表示有效，软删除写 0。 */
     private static final int STATUS_ACTIVE = 1;
 
-    /** 心情内容上限 500 个 UTF-16 单位，与 Python 协议及 500/501 验收边界一致。 */
-    private static final int MAX_CONTENT_LENGTH = 500;
+    /** 心情内容上限 1000 个 UTF-16 单位，与 Python xinyu-ai/app/contracts.py:MAX_CONTENT_UTF16 及 1000/1001 边界一致。 */
+    private static final int MAX_CONTENT_LENGTH = 1000;
 
     /** 与 Python str.strip 口径一致：U+0085 NEXT LINE 在 Java 中不算空白，需单独排除。 */
     private static final int NEXT_LINE = 0x85;
@@ -75,7 +75,7 @@ public class MoodRecordService {
         String text = request.getContent();
         // 空内容与超长共用同一条错误，长度按 UTF-16 单位计算而不是字符数。
         if (isBlankContent(text) || text.length() > MAX_CONTENT_LENGTH) {
-            throw new IllegalArgumentException("心情内容不能为空且不能超过500个UTF-16单位");
+            throw new IllegalArgumentException("心情内容不能为空且不能超过1000个UTF-16单位");
         }
         if (hasLoneSurrogate(text)) {
             throw new IllegalArgumentException("心情内容包含非法Unicode字符");

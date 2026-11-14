@@ -121,7 +121,8 @@ public final class AiServiceClient implements AutoCloseable {
     private static final int MAX_BUDGET_MS = 40_000;
     /** 给协议处理留的本地余量：剩余时间的 10%，最多 250ms。是本服务初值，不是供应商 SLA。 */
     private static final long LOCAL_MARGIN_CAP_MS = 250;
-    private static final int MAX_CONTENT_LENGTH = 500;
+    /** 心情内容上限 1000 个 UTF-16 单位，与 Python xinyu-ai/app/contracts.py:MAX_CONTENT_UTF16 保持同值。 */
+    private static final int MAX_CONTENT_LENGTH = 1000;
     private static final String REQUEST_ID_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,63}";
     private static final String POSITIVE_LONG_PATTERN = "[1-9][0-9]{0,18}";
     private static final Set<String> MOODS = Set.of(

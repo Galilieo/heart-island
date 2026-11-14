@@ -47,7 +47,7 @@ uv run --directory xinyu-ai --locked uvicorn app.main:app_from_env --factory \
 }
 ```
 
-ID／版本必须是正数的十进制字符串且在 Java signed long 范围内；attempt 为大于等于1的整数，不设三次业务上限，budget_ms 为 1—40000。心情类型与前端、Java统一为13项：开心、满足、期待、感动、平静、焦虑、难过、生气、委屈、孤独、迷茫、疲惫、其他；目前仍为单选字符串，旧六项继续合法。content 非空，最多 500 个 UTF-16 单位；250 个 emoji 合法，251 个越界；孤立代理字符拒绝。未知字段、错误类型和非法 JSON 均拒绝。关联字段仅回传，不代表服务替 Java 校验了来源归属。
+ID／版本必须是正数的十进制字符串且在 Java signed long 范围内；attempt 为大于等于1的整数，不设三次业务上限，budget_ms 为 1—40000。心情类型与前端、Java统一为13项：开心、满足、期待、感动、平静、焦虑、难过、生气、委屈、孤独、迷茫、疲惫、其他；目前仍为单选字符串，旧六项继续合法。content 非空，最多 1000 个 UTF-16 单位；500 个 emoji 合法，501 个越界；孤立代理字符拒绝。未知字段、错误类型和非法 JSON 均拒绝。关联字段仅回传，不代表服务替 Java 校验了来源归属。
 
 200 响应回传 request_id／job_id／attempt／source_version，并包含 reply_content、result_kind、model_called、template_version 和 model_name。回复去首尾空白后非空、最多 2000 个 UTF-16 单位。MODEL 必须 model_called=true 且模型名非空；SUPPORT 为 false／null。模板版本当前为 `mood-reply-v2`（Java 侧滚动升级期间同时接受 v1／v2，部署顺序先 Java 后 Python，见 1a 契约第 6 节）。model_called=true 只说明已发起本地供应商请求，不证明供应商执行或计费。
 

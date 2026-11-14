@@ -101,7 +101,7 @@ Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕�
 | GET /mood/ai-job/{id} | 无 | AiJobVO：id、targetId、targetVersion、status、attemptCount、resultKind、replyContent、errorCode、retryable、retryAfterSeconds |
 | POST /mood/ai-job/{id}/retry | 无 | 返回当前 AiJobVO；仅来源status=1且当前版本的failed可入队，其余按第4节处理 |
 
-先校验来源归属与status=1，再计算aiReplyState；来源status=0或不存在时拒绝读取任务/重试，不返回replyContent，不映射为unavailable，不创建新任务。aiReplyState包含任务状态，以及disabled / legacy / unavailable；没有 job 且历史非空回复为 legacy；没有 job 且 enabled=false 为 disabled，enabled=true 且无回复 / 无任务为 unavailable（历史或异常状态缺少任务，提示重新加载，不自动生成）。请求 content 必须非空，最大 500 个 UTF-16 code unit，与现有浏览器 maxlength 和 Java String.length 一致；心情类型单选，三端统一为13项：正向开心、满足、期待、感动、平静；负向焦虑、难过、生气、委屈、孤独、迷茫、疲惫；其他。前端用无标题间距分为5项与8项两组，其他并入末组；按钮暂用纯文字且等宽，不用重复图标或正向／负向标签，不生成情绪评分；接口继续传一个moodType字符串，历史六项兼容。情绪强度和多选留待后续单独设计，不在1a增加字段。客户端不能提交 version / jobId 决定服务端写入。
+先校验来源归属与status=1，再计算aiReplyState；来源status=0或不存在时拒绝读取任务/重试，不返回replyContent，不映射为unavailable，不创建新任务。aiReplyState包含任务状态，以及disabled / legacy / unavailable；没有 job 且历史非空回复为 legacy；没有 job 且 enabled=false 为 disabled，enabled=true 且无回复 / 无任务为 unavailable（历史或异常状态缺少任务，提示重新加载，不自动生成）。请求 content 必须非空，最大 1000 个 UTF-16 code unit（由 500 放宽，2026-11-14 修订，见 `AI_WORKLOG/plans/2026-11-14-content-limit-1000-plan.md`），与现有浏览器 maxlength 和 Java String.length 一致；心情类型单选，三端统一为13项：正向开心、满足、期待、感动、平静；负向焦虑、难过、生气、委屈、孤独、迷茫、疲惫；其他。前端用无标题间距分为5项与8项两组，其他并入末组；按钮暂用纯文字且等宽，不用重复图标或正向／负向标签，不生成情绪评分；接口继续传一个moodType字符串，历史六项兼容。情绪强度和多选留待后续单独设计，不在1a增加字段。客户端不能提交 version / jobId 决定服务端写入。
 
 管理端当前只有全站ADMIN角色（未设计社区版主）：有效ADMIN可跨用户、跨业务类型查询全部AI调用记录。现有分页返回 `AdminAiReplyVO`：id、userId、targetType、targetId、prompt、replyContent、modelName、status、errorMessage、createTime；keyword可搜索这些已存字段，包括提示词、回复正文和原始错误详情，使用绑定参数并保留分页。该接口经/admin/**服务端鉴权，未登录401、普通用户及禁用管理员403，不因查询参数改变角色。已有前端详情弹窗使用分页记录，不新增详情接口。新社区失败保留异常类型／消息与上游错误内容供管理员排查，配置API密钥在写入前遮蔽，详情上限8192个UTF-16单元；应用日志、普通用户接口及ai_job仍只使用安全分类。新日志仍不复制prompt，历史已存prompt可查看；此前未保存或Python协议未返回的错误原文不能补回。此条为用户2026-11-10明确修订，替代此前后台最小VO及隐藏正文搜索规则。
 
@@ -147,7 +147,7 @@ Task3D／3E已接入单进程有界worker，默认Java执行槽与Python生成�
 
 | 验收组 | 必须证明 |
 | --- | --- |
-| 保存与选择 | 无 AI 零任务；服务不可用仍保存；重复列表刷新无模型调用；500 / 501 UTF-16 边界 |
+| 保存与选择 | 无 AI 零任务；服务不可用仍保存；重复列表刷新无模型调用；1000 / 1001 UTF-16 边界 |
 | 状态与恢复 | claim 竞争只有一个成功；失败重试一次入队；启动恢复；迟到 attempt 隔离 |
 | 来源竞态 | update/delete/complete先FOR UPDATE再指定列条件更新，update不能复活来源；retry只靠job CAS与删除覆盖各未完成状态，测两种先后；deleted_at首次写入且重复删除不变；锁保持至提交；软删除status=0、版本+1、未完成job失效；删除与提交两种先后、重复删除、历史status=0但版本相同均不能回写；先删后返回不新增日志；先提交后删除的既有日志待清理；回复与终态原子提交 |
 | 协议与失败 | 内部无 token / 错 token、40 / 50 秒总界限、空正文、错误 JSON、关联字段错、供应商错误均无伪成功 |

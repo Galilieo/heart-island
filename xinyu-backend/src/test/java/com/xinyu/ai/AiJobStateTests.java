@@ -206,12 +206,27 @@ class AiJobStateTests {
     @Test
     void exactUtf16LimitAcceptedAndOverflowRejected() {
         MoodRecord value = input();
-        value.setContent("😀".repeat(250));
+        value.setContent("文".repeat(1000));
         assertThat(service.add(value)).isNotNull();
         clearInvocations(moods, jobs, manager);
-        value.setContent("😀".repeat(251));
+        value.setContent("😀".repeat(500));
+        assertThat(service.add(value)).isNotNull();
+        clearInvocations(moods, jobs, manager);
+        value.setContent("文".repeat(1001));
+        assertThatThrownBy(() -> service.add(value)).isInstanceOf(IllegalArgumentException.class);
+        value.setContent("😀".repeat(501));
         assertThatThrownBy(() -> service.add(value)).isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(moods, jobs, manager);
+
+        MoodRecord existing = stored();
+        when(moods.selectOwnedForUpdate(9L, 2L)).thenReturn(existing);
+        when(moods.updateContentAtVersion(anyLong(), anyLong(), anyLong(), anyString(), anyString(), anyBoolean()))
+                .thenReturn(1);
+        MoodRecord edit = input();
+        edit.setContent("😀".repeat(500));
+        assertThat(service.update(9L, 2L, edit)).isNotNull();
+        edit.setContent("😀".repeat(501));
+        assertThatThrownBy(() -> service.update(9L, 2L, edit)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

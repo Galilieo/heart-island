@@ -56,7 +56,7 @@ const headerHint = computed(
       variant="paper"
       :model-value="content"
       :rows="4"
-      :maxlength="500"
+      :maxlength="1000"
       :disabled="adding"
       placeholder="今天发生了什么？你现在是什么感受？"
       @update:model-value="(v) => $emit('update:content', v)"
