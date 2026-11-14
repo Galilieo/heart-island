@@ -68,6 +68,49 @@ async def test_medical_advice_and_diagnosis_are_rejected(body):
     assert response.json()['code'] == 'invalid_model_response'
 
 
+def contact_review(content: str, body: str, ps: str | None = None):
+    """构造只有一条记录的回顾请求，以及模型返回的信。"""
+    import json
+    data = review_payload()
+    data['records'][0]['content'] = content
+    return data, StubProvider(json.dumps({'body': body, 'ps': ps}, ensure_ascii=False))
+
+
+@pytest.mark.parametrize('content,body', [
+    ('下班遇到走丢的橘猫，给保安大叔留了电话', '给保安大叔留了电话{{r1}}。'),
+    ('保安大叔发微信说猫被抱回去了', '保安大叔发微信说猫回家了{{r1}}。'),
+    ('晚上和老同学开QQ语音聊到很晚', '和老同学开qq语音聊到很晚{{r1}}。'),
+])
+async def test_contact_word_echoed_from_records_is_allowed(content, body):
+    data, provider = contact_review(content, body)
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post('/internal/v1/mood-reviews', json=data, headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()['body'] == body
+
+
+@pytest.mark.parametrize('body,ps', [
+    ('散步之后可以给朋友打个电话{{r1}}。', None),
+    ('散步了{{r1}}。', '加个微信和朋友聊聊。'),
+    ('散步了{{r1}}，回来记得上QQ。', None),
+])
+async def test_contact_word_introduced_by_model_is_rejected(body, ps):
+    data, provider = contact_review('散步', body, ps)
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post('/internal/v1/mood-reviews', json=data, headers=AUTH)
+    assert response.status_code == 502
+    assert response.json()['code'] == 'invalid_model_response'
+
+
+@pytest.mark.parametrize('body', ['看到了那条热线{{r1}}。', '记下了 400-123-4567{{r1}}。', '可以拨打这个号码{{r1}}。'])
+async def test_hotline_and_numbers_are_rejected_even_when_in_records(body):
+    data, provider = contact_review('地铁里看到求助热线 400-123-4567，可以拨打这个号码', body)
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post('/internal/v1/mood-reviews', json=data, headers=AUTH)
+    assert response.status_code == 502
+    assert response.json()['code'] == 'invalid_model_response'
+
+
 def test_shared_safety_corpus_matches_java_contract():
     import json
     from pathlib import Path
