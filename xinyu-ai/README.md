@@ -62,7 +62,7 @@ ID／版本必须是正数的十进制字符串且在 Java signed long 范围内
 | 504 | provider_timeout | 本地阶段等待或总 deadline 到期 |
 | 503 | overloaded | 生成名额已满，默认3个，不额外排队 |
 
-请求头合计上限 8 KiB，正文上限 16 KiB（包括流式接收的累计字节）；供应商响应最多读取 64 KiB。应用限制不能替代网关／HTTP 服务器的接入层限制。错误日志只记录安全追踪 ID 与分类，不输出原文或 traceback。
+请求头合计上限 8 KiB，`/internal/v1/mood-replies` 正文上限 16 KiB，`/internal/v1/mood-reviews` 正文上限 128 KiB（均按流式接收的累计字节计算）；供应商响应最多读取 64 KiB。应用限制不能替代网关／HTTP 服务器的接入层限制。错误日志只记录安全追踪 ID 与分类，不输出原文或 traceback。
 
 请求处理总时限默认 40 秒；验证请求后按 budget_ms 缩短，同样从请求开始计时。供应商连接最多 2 秒、单次读等待最多 35 秒，均受剩余总时限约束。`asyncio.timeout_at` 包住可取消的异步网络 I/O，超时退出上下文关闭连接；不承诺远端停止计算／计费。单进程生成并发默认 3，可通过 `AI_SERVICE_CONCURRENCY` 调整；超出名额立即返回 overloaded，不在 Python 内存排队。Java 数据库 worker 通过 `AI_WORKER_ENABLED=true` 条件接入，默认 3 个执行槽位，由 `AI_WORKER_CONCURRENCY` 配置；数据库仍是唯一持久待办队列。
 

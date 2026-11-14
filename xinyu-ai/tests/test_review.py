@@ -44,6 +44,10 @@ async def test_crisis_never_calls_provider():
     '{"body":"' + '文' * 221 + '","ps":null}',
     '{"body":"散步","ps":"' + '文' * 61 + '"}',
     '{"body":"散步","ps":null,"total":999}',
+    '{"body":"这里写了〔中间省略〕","ps":null}',
+    '{"body":"这里提到中间省略了","ps":null}',
+    '{"body":"散步","ps":"附注含〔中间省略〕"}',
+    '{"body":"散步","ps":"附注含中间省略"}',
 ])
 async def test_invalid_review_is_classified_without_retry(text):
     provider = StubProvider(text)
@@ -73,6 +77,7 @@ def test_shared_safety_corpus_matches_java_contract():
     for case in corpus['cases']:
         assert (build_support_reply(case['content']) is not None) == case['support'], case['content']
 
+
 def test_messages_use_review_prompt_for_reviews_and_preserve_mood_reply_prompt():
     import json
     from pathlib import Path
@@ -98,3 +103,82 @@ def test_messages_use_review_prompt_for_reviews_and_preserve_mood_reply_prompt()
     assert [m['role'] for m in reply_msgs] == ['system', 'user']
     assert reply_msgs[0]['content'] == SYSTEM_PROMPT
     assert json.loads(reply_msgs[1]['content']) == {'mood_type': '平静', 'content': '散步'}
+
+
+async def test_review_accepts_full_12000_utf16_payload_with_escapable_chars():
+    import json
+    records = [
+        {
+            'ref': f'r{i + 1}',
+            'date': f'2026-10-{(i % 28) + 1:02d}',
+            'weekday': '周一',
+            'mood_type': '平静',
+            'content': '\x01' * 199 + '记',
+        }
+        for i in range(60)
+    ]
+    data = review_payload(review_type='RECENT_30', ai_enabled_total=60, records=records)
+    data['stats']['total'] = 60
+    raw = json.dumps(data, ensure_ascii=True).encode('utf-8')
+    assert 16384 < len(raw) < 131072
+    provider = StubProvider('{"body":"满载测试通过{{r1}}", "ps":null}')
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post(
+            '/internal/v1/mood-reviews',
+            content=raw,
+            headers={**AUTH, 'Content-Type': 'application/json'},
+        )
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+
+
+async def test_review_rejects_total_content_above_12000_utf16():
+    records = [
+        {
+            'ref': f'r{i + 1}',
+            'date': f'2026-10-{(i % 28) + 1:02d}',
+            'weekday': '周一',
+            'mood_type': '平静',
+            'content': 'a' * (300 if i < 40 else 1),
+        }
+        for i in range(41)
+    ]
+    data = review_payload(review_type='RECENT_30', ai_enabled_total=41, records=records)
+    data['stats']['total'] = 41
+    provider = StubProvider('{"body":"散步了{{r1}}", "ps":null}')
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post('/internal/v1/mood-reviews', json=data, headers=AUTH)
+    assert response.status_code == 400
+    assert response.json()['code'] == 'invalid_request'
+    assert provider.calls == []
+
+
+async def test_review_allows_128_kib_limit_while_mood_reply_keeps_16_kib():
+    import json
+    from tests.stub_provider import payload
+    provider = StubProvider('{"body":"散步了{{r1}}", "ps":null}')
+    async with client_for(create_app(make_settings(), provider)) as client:
+        oversized_review = b' ' * (131072 - len(b'{}')) + b'{' + b'}'  # 131072 bytes; +1 below
+        too_big_review = b' ' * 131073
+        r_big = await client.post('/internal/v1/mood-reviews', content=too_big_review, headers=AUTH)
+        assert r_big.status_code == 400
+        assert r_big.json()['code'] == 'invalid_request'
+
+        padded_valid_review = json.dumps(review_payload()).encode('utf-8')
+        padded_valid_review = b' ' * (131072 - len(padded_valid_review)) + padded_valid_review
+        r_ok = await client.post(
+            '/internal/v1/mood-reviews',
+            content=padded_valid_review,
+            headers={**AUTH, 'Content-Type': 'application/json'},
+        )
+        assert r_ok.status_code == 200
+
+        reply_ok_payload = json.dumps(payload()).encode('utf-8')
+        reply_over = b' ' * (16385 - len(reply_ok_payload)) + reply_ok_payload
+        r_reply_over = await client.post(
+            '/internal/v1/mood-replies',
+            content=reply_over,
+            headers={**AUTH, 'Content-Type': 'application/json'},
+        )
+        assert r_reply_over.status_code == 400
+        assert r_reply_over.json()['code'] == 'invalid_request'

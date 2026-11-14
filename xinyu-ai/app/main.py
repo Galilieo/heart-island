@@ -18,9 +18,11 @@ from app.settings import Settings
 
 logger = logging.getLogger("xinyu_ai")
 
-# 接入层限制：请求头合计 8 KiB、正文累计 16 KiB，与 README「请求与结果」记录一致。
+# 接入层限制：请求头合计 8 KiB；心情回复正文累计 16 KiB，与 README「请求与结果」记录一致。
 MAX_HEADER_BYTES = 8192
 MAX_BODY_BYTES = 16384
+# 回顾正文累计 128 KiB：12000 UTF-16 单位 × 最坏 JSON 转义 6 字节 ≈ 72 KB，加 60 条字段开销与 30 天统计留余量。
+MAX_REVIEW_BODY_BYTES = 131072
 # 请求头字节数按“名称 + 值 + 分隔与行结束开销”计算。
 HEADER_ENTRY_OVERHEAD_BYTES = 4
 
@@ -47,12 +49,12 @@ def _authenticate(headers: list[tuple[bytes, bytes]], settings: Settings) -> boo
     return len(auth) == 1 and hmac.compare_digest(auth[0], expected)
 
 
-async def _read_limited_body(request: Request) -> bytes | None:
+async def _read_limited_body(request: Request, limit: int = MAX_BODY_BYTES) -> bytes | None:
     """累计读取请求正文；超过上限时返回 None，由调用方按参数错误处理。"""
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
-        if len(body) > MAX_BODY_BYTES:
+        if len(body) > limit:
             return None
     return bytes(body)
 
@@ -110,10 +112,11 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                     return error("invalid_request")
                 if not _authenticate(headers, settings):
                     return error("unauthorized")
-                body = await _read_limited_body(request)
+                is_review = request.url.path == "/internal/v1/mood-reviews"
+                body_limit = MAX_REVIEW_BODY_BYTES if is_review else MAX_BODY_BYTES
+                body = await _read_limited_body(request, body_limit)
                 if body is None:
                     return error("invalid_request")
-                is_review = request.url.path == "/internal/v1/mood-reviews"
                 data = _parse_request(body, is_review)
                 if data is None:
                     return error("invalid_request")

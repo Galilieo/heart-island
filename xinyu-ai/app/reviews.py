@@ -6,6 +6,14 @@ from pydantic import Field, field_validator, model_validator
 from app.contracts import Contract, Correlation, MAX_CONTENT_UTF16, MoodType, utf16_length
 
 TEMPLATE_VERSION = 'mood-review-v1'
+# 与 Java MoodReviewService.MAX_TOTAL_CONTENT_UTF16 保持同值。
+MAX_TOTAL_CONTENT_UTF16 = 12000
+MAX_WEEK_BODY_UTF16 = 220
+MAX_RECENT_BODY_UTF16 = 260
+MAX_PS_UTF16 = 60
+# 与 Java MoodReviewService.TRUNCATION_MARKER 及 evals/run_review_eval.py 同值。
+TRUNCATION_MARKER = '〔中间省略〕'
+TRUNCATION_MARKER_WORD = '中间省略'
 REFERENCE = re.compile(r'\{\{(r[1-9][0-9]*)}}')
 # 第6节的输出门禁，不能替代后续文字质量评测。
 UNSAFE = re.compile(
@@ -61,6 +69,9 @@ class ReviewRequest(Correlation):
         refs = [record.ref for record in self.records]
         if len(set(refs)) != len(refs) or len(refs) > self.ai_enabled_total or self.ai_enabled_total > self.stats.total:
             raise ValueError('invalid_records')
+        total_content_utf16 = sum(utf16_length(record.content) for record in self.records)
+        if total_content_utf16 > MAX_TOTAL_CONTENT_UTF16:
+            raise ValueError('invalid_total_content')
         return self
 
 
@@ -72,13 +83,15 @@ class ReviewText(Contract):
 def validate_output(raw: str, request: ReviewRequest) -> ReviewText:
     """校验完整 JSON、引用、长度和禁用内容；不自动重试，不接受多余字段。"""
     text = ReviewText.model_validate(json.loads(raw))
-    limit = 220 if request.review_type == 'WEEK' else 260
+    limit = MAX_WEEK_BODY_UTF16 if request.review_type == 'WEEK' else MAX_RECENT_BODY_UTF16
     if not text.body.strip() or utf16_length(text.body) > limit:
         raise ValueError('invalid_body')
-    if text.ps is not None and (not text.ps.strip() or utf16_length(text.ps) > 60):
+    if text.ps is not None and (not text.ps.strip() or utf16_length(text.ps) > MAX_PS_UTF16):
         raise ValueError('invalid_ps')
     allowed = {record.ref for record in request.records}
     for value in (text.body, text.ps or ''):
+        if TRUNCATION_MARKER in value or TRUNCATION_MARKER_WORD in value:
+            raise ValueError('invalid_output')
         if UNSAFE.search(value) or any(ref not in allowed for ref in REFERENCE.findall(value)):
             raise ValueError('invalid_output')
         stripped = REFERENCE.sub('', value)

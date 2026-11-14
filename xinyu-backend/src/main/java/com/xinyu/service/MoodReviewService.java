@@ -37,9 +37,12 @@ public class MoodReviewService {
     private static final int MAX_QUEUED = 100;
     private static final int MAX_USER_ACTIVE = 3;
     private static final int HISTORY_PAGE_SIZE = 20;
-    /** 实施方案5.3节与既有生成预算：60条、每条300 UTF-16单元、Python最多40秒。 */
+    /** 实施方案5.3节与2026-11-14预算修订：最多60条、正文合计12000 UTF-16单元、Python最多40秒。 */
     private static final int MAX_SENT_RECORDS = 60;
-    private static final int MAX_RECORD_UTF16 = 300;
+    /** 与 Python xinyu-ai/app/reviews.py 的 MAX_TOTAL_CONTENT_UTF16 保持同值。 */
+    private static final int MAX_TOTAL_CONTENT_UTF16 = 12_000;
+    /** 与 Python app/reviews.py 及 evals/run_review_eval.py 同值；避免与用户正文省略号混淆。 */
+    private static final String TRUNCATION_MARKER = "〔中间省略〕";
     private static final int PROVIDER_BUDGET_MS = 40_000;
     /** 与 Python 回顾提示词示例约定一致的中文星期映射，不依赖系统 Locale。 */
     private static final Map<DayOfWeek, String> WEEKDAYS = Map.of(
@@ -223,9 +226,13 @@ public class MoodReviewService {
     private com.xinyu.dto.ReviewAiRequest buildRequest(MoodReview row, AiJob job, List<MoodRecord> records, boolean crisis) {
         List<com.xinyu.dto.ReviewAiRequest.Entry> entries = new ArrayList<>();
         if (!crisis) {
-            for (MoodRecord record : sampled(records)) {
-                String content = truncate(record.getContent());
-                entries.add(new com.xinyu.dto.ReviewAiRequest.Entry("r" + (entries.size() + 1),
+            List<MoodRecord> selected = sampled(records);
+            List<Integer> lengths = selected.stream().map(record -> record.getContent().length()).toList();
+            List<Integer> budgets = allocateBudgets(lengths, MAX_TOTAL_CONTENT_UTF16);
+            for (int index = 0; index < selected.size(); index++) {
+                MoodRecord record = selected.get(index);
+                String content = clip(record.getContent(), budgets.get(index));
+                entries.add(new com.xinyu.dto.ReviewAiRequest.Entry("r" + (index + 1),
                         record.getCreateTime().toLocalDate().toString(), weekday(record.getCreateTime().getDayOfWeek()),
                         record.getMoodType(), content));
             }
@@ -239,7 +246,7 @@ public class MoodReviewService {
         return WEEKDAYS.get(day);
     }
 
-    /** 阶段2第5.3节：最多60条，超过时等距取样，含首尾；300 UTF-16单元避免切断代理对。 */
+    /** 阶段2第5.3节：最多60条，超过时等距取样，含首尾。 */
     private static List<MoodRecord> sampled(List<MoodRecord> records) {
         List<MoodRecord> enabled = records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).toList();
         if (enabled.size() <= MAX_SENT_RECORDS) {
@@ -252,12 +259,56 @@ public class MoodReviewService {
         return sample;
     }
 
-    private static String truncate(String content) {
-        if (content.length() <= MAX_RECORD_UTF16) {
+    /**
+     * 水位分配（与 evals/run_review_eval.py 保持零偏差）：
+     * 按 (UTF-16 长度, 原下标) 稳定升序逐条分派 floor(剩余预算 / 剩余条数)，短记录留余量顺延。
+     * 在最多 60 条且总预算 12000 下，单条最小份额 >= 12000/60 = 200 > 标记长度 6，不会出现 <= 6 的份额。
+     */
+    static List<Integer> allocateBudgets(List<Integer> lengths, int totalBudget) {
+        int count = lengths.size();
+        Integer[] order = new Integer[count];
+        for (int i = 0; i < count; i++) {
+            order[i] = i;
+        }
+        java.util.Arrays.sort(order, java.util.Comparator.<Integer>comparingInt(lengths::get).thenComparingInt(i -> i));
+
+        int[] allocated = new int[count];
+        int remainingBudget = totalBudget;
+        for (int rank = 0; rank < count; rank++) {
+            int idx = order[rank];
+            int share = remainingBudget / (count - rank);
+            int granted = Math.min(lengths.get(idx), share);
+            allocated[idx] = granted;
+            remainingBudget -= granted;
+        }
+        List<Integer> result = new ArrayList<>(count);
+        for (int value : allocated) {
+            result.add(value);
+        }
+        return result;
+    }
+
+    /**
+     * 保留首尾（前约 2/3 + 标记 + 后约 1/3，标记计入份额），两端都不切断 UTF-16 代理对。
+     */
+    static String clip(String content, int budget) {
+        if (content.length() <= budget) {
             return content;
         }
-        int end = Character.isHighSurrogate(content.charAt(MAX_RECORD_UTF16 - 1)) ? MAX_RECORD_UTF16 - 1 : MAX_RECORD_UTF16;
-        return content.substring(0, end);
+        if (budget <= TRUNCATION_MARKER.length()) {
+            return TRUNCATION_MARKER.substring(0, Math.max(0, budget));
+        }
+        int keep = budget - TRUNCATION_MARKER.length();
+        int headLimit = (keep * 2) / 3;
+        int tailLimit = keep - headLimit;
+        int headEnd = (headLimit > 0 && Character.isHighSurrogate(content.charAt(headLimit - 1)))
+                ? headLimit - 1
+                : headLimit;
+        int tailStart = content.length() - tailLimit;
+        if (tailStart < content.length() && Character.isLowSurrogate(content.charAt(tailStart))) {
+            tailStart++;
+        }
+        return content.substring(0, headEnd) + TRUNCATION_MARKER + content.substring(tailStart);
     }
 
     /** 仅在 worker 的领取短事务中调用；领取后同步报告状态。 */

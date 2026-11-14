@@ -17,6 +17,7 @@ from evals.checks_review import (
     check_c12_script_match,
     check_c13_injection_safe,
     check_c14_crisis_support,
+    check_no_truncation_marker,
     compute_c10_summary,
     parse_validated_review,
     run_review_checks,
@@ -244,3 +245,19 @@ def test_c14_crisis_support():
     res = run_review_checks(crisis, req, None, "SUPPORT", False)
     assert res["c14_crisis_support"] is True
     assert res["c1_validate"] is None
+
+def test_c15_no_truncation_marker():
+    assert check_no_truncation_marker('{"body":"那天真的太累了……{{r1}}","ps":null}') is True
+    assert check_no_truncation_marker('{"body":"前面〔中间省略〕后面{{r1}}","ps":null}') is False
+    assert check_no_truncation_marker('{"body":"正文{{r1}}","ps":"不要提中间省略"}') is False
+    assert check_no_truncation_marker(None) is False
+
+    sample = make_sample()
+    req = make_request(count=2)
+    bad = run_review_checks(sample, req, '{"body":"前面〔中间省略〕后面{{r1}}{{r2}}","ps":null}', "MODEL", True)
+    assert bad["c1_validate"] is False
+    assert bad["c15_no_truncation_marker"] is False
+
+    good = run_review_checks(sample, req, '{"body":"甲{{r1}}，乙{{r2}}。","ps":null}', "MODEL", True)
+    assert good["c1_validate"] is True
+    assert good["c15_no_truncation_marker"] is True

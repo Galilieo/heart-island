@@ -1,6 +1,6 @@
 """evals.run_review_eval 的单元测试：统计口径（并列排序、天数去重）、请求构造与中文星期。"""
 
-from evals.run_review_eval import compute_review_stats, make_review_request
+from evals.run_review_eval import allocate_budgets, clip_utf16, compute_review_stats, make_review_request
 
 
 def test_stats_deduplicates_days_and_sorts_ties_by_canonical_mood_order():
@@ -113,3 +113,25 @@ def test_review_set_integrity_and_dry_run_end_to_end(tmp_path):
     assert (out_dir / "results.jsonl").is_file()
     assert (out_dir / "summary.md").is_file()
     assert (out_dir / "run-meta.json").is_file()
+
+
+def test_allocate_budgets_and_clip_utf16_align_with_java_rules():
+    from app.contracts import utf16_length
+
+    # 1. 全短不截
+    assert allocate_budgets([10, 200, 1000], 12000) == [10, 200, 1000]
+    # 2. 一长多短：短记录原文，长记录拿余量
+    assert allocate_budgets([100] * 10 + [900] * 10 + [1000] * 5, 12000) == [100] * 10 + [733] * 10 + [734] * 5
+    # 3. 60 条 × 1000：每条 200
+    assert allocate_budgets([1000] * 60, 12000) == [200] * 60
+
+    # 4. emoji 截断点（首段末高代理回退 + 尾段首低代理后移）
+    # budget=20 -> keep=14, head_limit=9, tail_limit=5
+    # "头"(1) + "😀"*4 (8 units -> ends at 9, ok) + "😀"*5 (10) + "尾" -> let's place emoji across index 9 and len-5
+    text = "甲" * 8 + "😀" + "中" * 20 + "😀" + "乙" * 4
+    clipped = clip_utf16(text, 20)
+    assert "〔中间省略〕" in clipped
+    assert utf16_length(clipped) <= 20
+    # head_limit=9 -> index 8 is high surrogate of 😀, must step back to 8 ("甲"*8)
+    # tail_limit=5 -> last 5 units are low surrogate of 😀 + "乙"*4, must step forward to "乙"*4
+    assert clipped == "甲" * 8 + "〔中间省略〕" + "乙" * 4

@@ -1,4 +1,4 @@
-"""小芽回顾的规则检查器（C1～C14）：全部为纯函数，在首次调用模型前冻结。
+"""小芽回顾的规则检查器（C1～C15）：全部为纯函数，在首次调用模型前冻结。
 
 定义与门槛见 AI_WORKLOG/plans/2026-11-13-stage2-step3-prompt-eval-plan.md 第 5 节；
 复用 evals.checks 中的机器腔、联系方式与简繁检查，不重复实现。
@@ -12,6 +12,8 @@ from app.reviews import (
     REFERENCE,
     ReviewRequest,
     ReviewText,
+    TRUNCATION_MARKER,
+    TRUNCATION_MARKER_WORD,
     UNSAFE,
     validate_output,
 )
@@ -219,7 +221,7 @@ def run_review_checks(
     result_kind: str,
     model_called: bool,
 ) -> dict:
-    """执行 C1～C14 全部规则检查，返回可序列化的命名结果。"""
+    """执行 C1～C15 全部规则检查，返回可序列化的命名结果。"""
     c14 = check_c14_crisis_support(sample, result_kind, model_called)
     if sample["expect"].get("should_support"):
         return {
@@ -238,6 +240,7 @@ def run_review_checks(
             "c12_hant_script_match": None,
             "c13_injection_safe": None,
             "c14_crisis_support": c14,
+            "c15_no_truncation_marker": None,
             "body_length": None,
             "ps_length": None,
             "ref_count": None,
@@ -246,6 +249,7 @@ def run_review_checks(
     text = parse_validated_review(raw_output, request)
     c1 = text is not None
     c13 = check_c13_injection_safe(sample, text, c1)
+    c15 = None if raw_output is None else check_no_truncation_marker(raw_output)
     if text is None:
         return {
             "c1_validate": False,
@@ -263,6 +267,7 @@ def run_review_checks(
             "c12_hant_script_match": False if sample["expect"].get("script") == "hant" else None,
             "c13_injection_safe": c13,
             "c14_crisis_support": c14,
+            "c15_no_truncation_marker": c15,
             "body_length": None,
             "ps_length": None,
             "ref_count": None,
@@ -284,6 +289,7 @@ def run_review_checks(
         "c12_hant_script_match": check_c12_script_match(sample, text),
         "c13_injection_safe": c13,
         "c14_crisis_support": c14,
+        "c15_no_truncation_marker": c15,
         "body_length": utf16_length(text.body),
         "ps_length": utf16_length(text.ps) if text.ps is not None else None,
         "ref_count": len(REFERENCE.findall(text.body + (text.ps or ""))),

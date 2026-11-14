@@ -324,7 +324,8 @@ class MoodReviewPersistenceIT {
         var prepared = reviews.prepare(job.getId(), 1, job.getRequestId());
         assertThat(prepared.request().records()).hasSize(60);
         assertThat(prepared.request().aiEnabledTotal()).isEqualTo(71);
-        assertThat(prepared.request().records().get(0).content().length()).isLessThanOrEqualTo(300);
+        assertThat(prepared.request().records().stream().mapToInt(e -> e.content().length()).sum()).isLessThanOrEqualTo(12000);
+        assertThat(prepared.request().records().get(0).content()).isEqualTo("头" + "😀".repeat(200));
         assertThat(prepared.request().records().get(59).content()).isEqualTo("记录69");
         assertThat(reviews.complete(job.getId(), 1, job.getRequestId(), response(prepared.request(), "旧回顾{{r1}}"))).isTrue();
         assertThat(reviews.get(user, "RECENT_30", null).report().aiEnabledCount()).isEqualTo(71);
@@ -374,5 +375,60 @@ class MoodReviewPersistenceIT {
                 .hasMessageContaining("review_already_active");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE user_id=? AND status IN ('queued','running')", Integer.class, user)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT status FROM ai_job WHERE id=?", String.class, newer.jobId())).isEqualTo("queued");
+    }
+
+    @Test
+    void budgetAllocatesFull60LongRecordsAndPreservesEmojiBoundariesAndOriginalCrisisCheck() {
+        long user = ++nextUser;
+        jdbc.update("INSERT INTO user(id) VALUES (?)", user);
+        for (int index = 0; index < 60; index++) {
+            String content = String.format("%02d", index) + "😀".repeat(498) + "尾" + index;
+            if (content.length() > 1000) content = content.substring(0, 999);
+            String time = String.format("2026-11-%02d %02d:00:00", 2 + (index / 10), 8 + (index % 10));
+            jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'平静',?,1,1,?)",
+                    user, content, time);
+        }
+        reviews.generate(user, "WEEK", "2026-11-02", false);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var job = tx.execute(status -> jobsService().claimNext());
+        var prepared = reviews.prepare(job.getId(), 1, job.getRequestId());
+        assertThat(prepared.support()).isNull();
+        assertThat(prepared.request().records()).hasSize(60);
+        assertThat(prepared.request().records().stream().mapToInt(e -> e.content().length()).sum()).isLessThanOrEqualTo(12000);
+        for (int i = 0; i < 60; i++) {
+            var entry = prepared.request().records().get(i);
+            assertThat(entry.ref()).isEqualTo("r" + (i + 1));
+            assertThat(entry.content().length()).isBetween(190, 200);
+            assertThat(entry.content()).startsWith(String.format("%02d", i)).contains("〔中间省略〕");
+            assertThat(hasLoneSurrogate(entry.content())).isFalse();
+        }
+        assertThat(reviews.complete(job.getId(), 1, job.getRequestId(), response(prepared.request(), "收尾{{r1}}"))).isTrue();
+
+        long crisisUser = ++nextUser;
+        jdbc.update("INSERT INTO user(id) VALUES (?)", crisisUser);
+        for (int index = 0; index < 59; index++) {
+            jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'平静',?,1,1,'2026-11-03 10:00:00')",
+                    crisisUser, "甲".repeat(1000));
+        }
+        String hiddenCrisis = "头".repeat(300) + "我想自杀" + "尾".repeat(300);
+        jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'难过',?,1,1,'2026-11-04 10:00:00')",
+                crisisUser, hiddenCrisis);
+        reviews.generate(crisisUser, "WEEK", "2026-11-02", false);
+        var crisisJob = tx.execute(status -> jobsService().claimNext());
+        var crisisPrepared = reviews.prepare(crisisJob.getId(), 1, crisisJob.getRequestId());
+        assertThat(crisisPrepared.support()).isNotNull();
+        assertThat(crisisPrepared.request().records()).isEmpty();
+    }
+
+    private static boolean hasLoneSurrogate(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (Character.isHighSurrogate(ch)) {
+                if (++i >= text.length() || !Character.isLowSurrogate(text.charAt(i))) return true;
+            } else if (Character.isLowSurrogate(ch)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

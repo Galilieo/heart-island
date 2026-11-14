@@ -114,4 +114,32 @@ class MoodReviewServiceTests {
         record.setStatus(1);
         return record;
     }
+
+    @Test
+    void allocateBudgetsCoversAllShortOneLongAndAllLong() {
+        assertThat(MoodReviewService.allocateBudgets(List.of(10, 200, 1000), 12000))
+                .containsExactly(10, 200, 1000);
+
+        List<Integer> mixed = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) mixed.add(100);
+        for (int i = 0; i < 10; i++) mixed.add(900);
+        for (int i = 0; i < 5; i++) mixed.add(1000);
+        List<Integer> expectedMixed = new java.util.ArrayList<>();
+        for (int i = 0; i < 10; i++) expectedMixed.add(100);
+        for (int i = 0; i < 10; i++) expectedMixed.add(733);
+        for (int i = 0; i < 5; i++) expectedMixed.add(734);
+        assertThat(MoodReviewService.allocateBudgets(mixed, 12000)).isEqualTo(expectedMixed);
+
+        List<Integer> allLong = java.util.Collections.nCopies(60, 1000);
+        assertThat(MoodReviewService.allocateBudgets(allLong, 12000))
+                .isEqualTo(java.util.Collections.nCopies(60, 200));
+    }
+
+    @Test
+    void clipPreservesHeadTailWithMarkerAndAvoidsSplittingSurrogates() {
+        String text = "甲".repeat(8) + "😀" + "中".repeat(20) + "😀" + "乙".repeat(4);
+        String clipped = MoodReviewService.clip(text, 20);
+        assertThat(clipped).isEqualTo("甲".repeat(8) + "〔中间省略〕" + "乙".repeat(4));
+        assertThat(clipped.length()).isLessThanOrEqualTo(20);
+    }
 }
