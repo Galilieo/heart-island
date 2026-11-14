@@ -72,3 +72,29 @@ def test_shared_safety_corpus_matches_java_contract():
     assert support_text() == corpus['supportText']
     for case in corpus['cases']:
         assert (build_support_reply(case['content']) is not None) == case['support'], case['content']
+
+def test_messages_use_review_prompt_for_reviews_and_preserve_mood_reply_prompt():
+    import json
+    from pathlib import Path
+    from app.contracts import MoodReplyRequest
+    from app.provider import SYSTEM_PROMPT, messages
+    from app.review_prompt import REVIEW_SYSTEM_PROMPT
+    from app.reviews import ReviewRequest
+
+    prompt_file = Path(__file__).resolve().parents[1] / 'evals/prompts/mood-review-v1.txt'
+    assert REVIEW_SYSTEM_PROMPT == prompt_file.read_text(encoding='utf-8').strip()
+
+    review_req = ReviewRequest.model_validate(review_payload())
+    review_msgs = messages(review_req)
+    assert [m['role'] for m in review_msgs] == ['system', 'user']
+    assert review_msgs[0]['content'] == REVIEW_SYSTEM_PROMPT
+    assert set(json.loads(review_msgs[1]['content']).keys()) == {'review_type', 'records', 'ai_enabled_total', 'stats'}
+
+    reply_req = MoodReplyRequest(
+        request_id='reply-test', job_id='1', attempt=1, source_version='1',
+        mood_type='平静', content='散步', budget_ms=40000,
+    )
+    reply_msgs = messages(reply_req)
+    assert [m['role'] for m in reply_msgs] == ['system', 'user']
+    assert reply_msgs[0]['content'] == SYSTEM_PROMPT
+    assert json.loads(reply_msgs[1]['content']) == {'mood_type': '平静', 'content': '散步'}

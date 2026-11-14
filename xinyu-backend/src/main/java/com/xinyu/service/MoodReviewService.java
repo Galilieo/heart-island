@@ -17,10 +17,12 @@ import org.springframework.web.server.ResponseStatusException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -39,6 +41,15 @@ public class MoodReviewService {
     private static final int MAX_SENT_RECORDS = 60;
     private static final int MAX_RECORD_UTF16 = 300;
     private static final int PROVIDER_BUDGET_MS = 40_000;
+    /** 与 Python 回顾提示词示例约定一致的中文星期映射，不依赖系统 Locale。 */
+    private static final Map<DayOfWeek, String> WEEKDAYS = Map.of(
+            DayOfWeek.MONDAY, "周一",
+            DayOfWeek.TUESDAY, "周二",
+            DayOfWeek.WEDNESDAY, "周三",
+            DayOfWeek.THURSDAY, "周四",
+            DayOfWeek.FRIDAY, "周五",
+            DayOfWeek.SATURDAY, "周六",
+            DayOfWeek.SUNDAY, "周日");
     private final MoodReviewMapper reports;
     private final MoodReviewStatsService stats;
     private final Clock clock;
@@ -215,13 +226,17 @@ public class MoodReviewService {
             for (MoodRecord record : sampled(records)) {
                 String content = truncate(record.getContent());
                 entries.add(new com.xinyu.dto.ReviewAiRequest.Entry("r" + (entries.size() + 1),
-                        record.getCreateTime().toLocalDate().toString(), record.getCreateTime().getDayOfWeek().name(),
+                        record.getCreateTime().toLocalDate().toString(), weekday(record.getCreateTime().getDayOfWeek()),
                         record.getMoodType(), content));
             }
         }
         int enabled = (int) records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).count();
         return new com.xinyu.dto.ReviewAiRequest(job.getRequestId(), job.getId().toString(), job.getAttemptCount(),
                 job.getTargetVersion().toString(), row.type(), List.copyOf(entries), enabled, decodeStats(row.statsJson()), PROVIDER_BUDGET_MS);
+    }
+
+    static String weekday(DayOfWeek day) {
+        return WEEKDAYS.get(day);
     }
 
     /** 阶段2第5.3节：最多60条，超过时等距取样，含首尾；300 UTF-16单元避免切断代理对。 */

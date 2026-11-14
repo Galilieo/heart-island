@@ -257,6 +257,7 @@ class MoodReviewPersistenceIT {
             var sent = calls.get(before);
             assertThat(sent.get("records").size()).isEqualTo(1);
             assertThat(sent.get("records").get(0).get("content").asText()).isEqualTo("实际HTTP授权正文");
+            assertThat(sent.get("records").get(0).get("weekday").asText()).isEqualTo("周二");
             assertThat(sent.toString()).doesNotContain("关闭AI的正文不能发送", "user_id", "record_id");
             assertThat(sent.get("stats").get("total").asInt()).isEqualTo(2);
             assertThat(jobsService().getOwned(user, report.jobId()).status()).isEqualTo("succeeded");
