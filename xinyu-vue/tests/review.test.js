@@ -9,6 +9,8 @@ import {
   groupDaysIntoWeeks,
   mondayOf,
   parseDateKey,
+  parseLetterSegments,
+  resolveReviewViewState,
   shiftWeek,
   toDateKey
 } from '../src/utils/review.js'
@@ -92,3 +94,126 @@ test('只有下一周仍是完整周时可以点下一周', () => {
   assert.equal(canGoNextWeek('2026-11-09', '2026-11-13'), false)
   assert.equal(canGoNextWeek('2026-11-16', '2026-11-13'), false)
 })
+
+const SAMPLE_SOURCES = [
+  { ref: 'r1', recordId: '101', date: '2026-11-02', weekday: '周一', moodType: '疲惫', content: '加班' },
+  { ref: 'r2', recordId: '102', date: '2026-11-03', weekday: '周二', moodType: '平静', content: '散步' }
+]
+
+test('parseLetterSegments 处理普通文本、句首标记、相邻标记、标点绑定、未知引用与残缺括号', () => {
+  assert.deepEqual(parseLetterSegments('普通的一周。', SAMPLE_SOURCES), [
+    { type: 'text', text: '普通的一周。' }
+  ])
+
+  assert.deepEqual(parseLetterSegments('加班到十点{{r1}}{{r2}}，后来松下来了', SAMPLE_SOURCES), [
+    { type: 'text', text: '加班到十' },
+    {
+      type: 'refGroup',
+      prefix: '点',
+      refs: [
+        { ref: 'r1', recordId: '101', label: '11/2' },
+        { ref: 'r2', recordId: '102', label: '11/3' }
+      ],
+      punctuation: '，'
+    },
+    { type: 'text', text: '后来松下来了' }
+  ])
+
+  assert.deepEqual(parseLetterSegments('{{r1}}，那天刚起步', SAMPLE_SOURCES), [
+    {
+      type: 'refGroup',
+      prefix: '',
+      refs: [{ ref: 'r1', recordId: '101', label: '11/2' }],
+      punctuation: '，'
+    },
+    { type: 'text', text: '那天刚起步' }
+  ])
+
+  const warnings = []
+  assert.deepEqual(
+    parseLetterSegments('这天{{r99}}，还有{{r1}}和{{r99}}以及 {{ 没写完', SAMPLE_SOURCES, {
+      onWarn: (msg) => warnings.push(msg)
+    }),
+    [
+      { type: 'text', text: '这天，还' },
+      {
+        type: 'refGroup',
+        prefix: '有',
+        refs: [{ ref: 'r1', recordId: '101', label: '11/2' }],
+        punctuation: ''
+      },
+      { type: 'text', text: '和以及 {{ 没写完' }
+    ]
+  )
+  assert.equal(warnings.length, 2)
+})
+
+test('resolveReviewViewState 覆盖状态表每一行', () => {
+  const baseStats = { total: 3, aiEnabledCount: 3, report: null, active: null, failed: null }
+
+  assert.equal(resolveReviewViewState(baseStats, { mode: 'week', isCurrentWeek: true }), 'week_not_finished')
+  assert.equal(resolveReviewViewState({ ...baseStats, total: 0, aiEnabledCount: 0 }, { mode: 'week' }), 'empty')
+  assert.equal(resolveReviewViewState({ ...baseStats, aiEnabledCount: 0 }, { mode: 'week' }), 'no_ai_enabled')
+  assert.equal(resolveReviewViewState(baseStats, { mode: 'week' }), 'not_generated')
+
+  assert.equal(
+    resolveReviewViewState({ ...baseStats, active: { id: '1', status: 'queued', jobId: '9' } }, { mode: 'week' }),
+    'generating'
+  )
+  assert.equal(
+    resolveReviewViewState({ ...baseStats, active: { id: '1', status: 'running', jobId: '9' } }, { mode: 'week' }),
+    'generating'
+  )
+  assert.equal(
+    resolveReviewViewState(
+      { ...baseStats, active: { id: '1', status: 'running', jobId: '9' } },
+      { mode: 'week', pollingTimedOut: true }
+    ),
+    'polling_timeout'
+  )
+
+  assert.equal(
+    resolveReviewViewState(
+      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: 'ok', stale: false } },
+      { mode: 'week' }
+    ),
+    'ready'
+  )
+  assert.equal(
+    resolveReviewViewState(
+      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'SUPPORT', body: '支持文案', stale: false } },
+      { mode: 'week' }
+    ),
+    'crisis'
+  )
+  assert.equal(
+    resolveReviewViewState(
+      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: '旧信', stale: true } },
+      { mode: 'week' }
+    ),
+    'stale_edited'
+  )
+  assert.equal(
+    resolveReviewViewState(
+      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: null, stale: true } },
+      { mode: 'week' }
+    ),
+    'stale_deleted'
+  )
+  assert.equal(
+    resolveReviewViewState(
+      {
+        ...baseStats,
+        report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: '旧信', stale: false },
+        failed: { id: '2', status: 'failed', jobId: '10' }
+      },
+      { mode: 'week' }
+    ),
+    'failed_with_report'
+  )
+  assert.equal(
+    resolveReviewViewState({ ...baseStats, failed: { id: '2', status: 'failed', jobId: '10' } }, { mode: 'week' }),
+    'failed_empty'
+  )
+})
+

@@ -43,5 +43,23 @@ export const moodApi = {
 
   reviewRecent30() {
     return unwrap(request.get('/mood/analysis', { params: { range: '30d' } }))
+  },
+
+  generateWeekReview(start) {
+    const body = start ? { start } : {}
+    return unwrap(request.post('/mood/report/week/generate', body))
+  },
+
+  regenerateWeekReview(start) {
+    const body = start ? { start } : {}
+    return unwrap(request.post('/mood/report/week/regenerate', body))
+  },
+
+  generateRecent30Review() {
+    return unwrap(request.post('/mood/analysis/generate'))
+  },
+
+  reviewWeekHistory(page = 1) {
+    return unwrap(request.get('/mood/report/week/history', { params: { page } }))
   }
 }

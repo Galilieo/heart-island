@@ -1,15 +1,19 @@
 <script setup>
-// 回顾页（阶段 2 第 1 步）：只读统计 + 尚未生成时的空信纸。
-// 数字由 Java 统计；打开页面不调用模型，生成按钮在后续步骤接入。
-import { computed, onMounted, ref } from 'vue'
+// 回顾页：周报/近 30 天统计、小芽来信（12 种状态）、引用来源卡片、过往周报与任务轮询。
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
-import Xiaoya from '../components/ui/Xiaoya.vue'
 import WeekGrid from '../components/review/WeekGrid.vue'
 import MoodCountBars from '../components/review/MoodCountBars.vue'
+import ReviewLetter from '../components/review/ReviewLetter.vue'
+import ReviewSourceCards from '../components/review/ReviewSourceCards.vue'
+import ReviewHistory from '../components/review/ReviewHistory.vue'
 import { useReviewStore } from '../stores/review'
+import { useUserStore } from '../stores/user'
 import { useToast } from '../composables/useToast'
+import { createAiJobPoller } from '../utils/ai-job-polling'
 import { moodTone } from '../utils/mood'
 import {
   canGoNextWeek,
@@ -17,22 +21,66 @@ import {
   formatRangeShort,
   groupDaysIntoWeeks,
   mondayOf,
+  resolveReviewViewState,
   shiftWeek,
   toDateKey
 } from '../utils/review'
 
+const route = useRoute()
+const router = useRouter()
 const reviewStore = useReviewStore()
+const userStore = useUserStore()
 const toast = useToast()
 
-const { weekStats, recent30Stats, weekLoading, recent30Loading } = storeToRefs(reviewStore)
+const {
+  weekStats,
+  recent30Stats,
+  weekLoading,
+  recent30Loading,
+  submitting,
+  pollingTimedOut,
+  historyItems,
+  historyPage,
+  historyHasMore,
+  historyLoading
+} = storeToRefs(reviewStore)
 
 const todayKey = toDateKey(new Date())
 const currentMonday = mondayOf(todayKey)
 
 const mode = ref('week')
-// 空字符串表示由后端取上一个完整周；拿到响应后记录实际范围，供上一周/下一周使用。
 const weekStart = ref('')
 const loadError = ref('')
+const pageVisible = ref(typeof document === 'undefined' ? true : !document.hidden)
+
+let activePollKey = ''
+let pollingMode = 'week'
+let pollingWeekStart = ''
+
+const poller = createAiJobPoller({
+  fetchJob: (jobId, options) => reviewStore.fetchAiJob(jobId, options),
+  onUpdate: () => {},
+  onStop: (reason) => {
+    activePollKey = ''
+    if (reason === 'complete') {
+      if (pollingMode === 'week') {
+        loadWeek(pollingWeekStart)
+        reviewStore.fetchHistory(1).catch(() => {})
+      } else {
+        loadRecent30()
+      }
+      return
+    }
+    if (reason === 'limit') {
+      reviewStore.setPollingTimedOut(true)
+      return
+    }
+    if (reason === 'network') {
+      reviewStore.setPollingTimedOut(true)
+      toast.error('查询状态失败，请稍后刷新看看')
+    }
+  }
+})
 
 const activeStats = computed(() =>
   mode.value === 'week' ? weekStats.value : recent30Stats.value
@@ -42,42 +90,46 @@ const activeLoading = computed(() =>
 )
 const hasRecords = computed(() => (activeStats.value?.total || 0) > 0)
 const moodCounts = computed(() => activeStats.value?.moodCounts || [])
+const isCurrentWeek = computed(
+  () => Boolean(weekStart.value) && weekStart.value === currentMonday
+)
 const isLastWeek = computed(() => weekStart.value === shiftWeek(currentMonday, -1))
 const canNextWeek = computed(
   () => Boolean(weekStart.value) && canGoNextWeek(weekStart.value, todayKey)
 )
 
+const viewState = computed(() =>
+  resolveReviewViewState(activeStats.value, {
+    mode: mode.value,
+    isCurrentWeek: mode.value === 'week' && isCurrentWeek.value,
+    pollingTimedOut: pollingTimedOut.value
+  })
+)
+
+const visibleSources = computed(() => {
+  if (viewState.value === 'crisis' || !activeStats.value?.report?.body) {
+    return []
+  }
+  return activeStats.value.report.sources || []
+})
+
 const pageTitle = computed(() => {
-  if (mode.value === 'recent30') return '近 30 天'
+  if (mode.value === 'recent30') {
+    return '近 30 天'
+  }
   return isLastWeek.value ? '上周回顾' : '周回顾'
 })
 
 const subtitle = computed(() => {
-  if (!activeStats.value) return ''
+  if (!activeStats.value) {
+    return ''
+  }
   if (mode.value === 'recent30') {
     return `${formatRangeLong(activeStats.value.rangeStart, activeStats.value.rangeEnd)}，按今天往前数 30 天`
   }
   const range = formatRangeLong(activeStats.value.rangeStart, activeStats.value.rangeEnd)
-  return isLastWeek.value ? `${range} · 本周还在进行中，周日之后可以生成` : range
+  return isCurrentWeek.value ? `${range} · 本周还在进行中，周日之后可以生成` : range
 })
-
-// 默认展示上一个完整周时叫「上周」，翻到更早的完整周时叫「这一周」。
-const weekLabel = computed(() => (isLastWeek.value ? '上周' : '这一周'))
-
-const stubText = computed(() => {
-  if (!hasRecords.value) {
-    return mode.value === 'week'
-      ? `${weekLabel.value}没有记录，所以没有回顾。随时可以回首页写一句。`
-      : '这段时间没有记录，所以没有回顾。随时可以回首页写一句。'
-  }
-  return mode.value === 'week'
-    ? `${weekLabel.value}的回顾还没写。要的话，让小芽看一遍你这周的记录。`
-    : '近 30 天的文字回顾还没写。要的话，让小芽看一遍你这段时间的记录。'
-})
-
-const generateLabel = computed(() =>
-  mode.value === 'week' ? '让小芽写周报' : '让小芽写回顾'
-)
 
 const weekGroups = computed(() =>
   recent30Stats.value ? groupDaysIntoWeeks(recent30Stats.value.days, todayKey) : []
@@ -94,10 +146,106 @@ const recentRangeShort = computed(() =>
     : ''
 )
 
-onMounted(() => loadWeek())
+function parseQueryStart(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
+}
+
+function stopPolling() {
+  activePollKey = ''
+  poller.stop()
+}
+
+function syncPoller() {
+  const active = activeStats.value?.active
+  const shouldPoll =
+    pageVisible.value &&
+    userStore.isLoggedIn &&
+    Boolean(active?.jobId) &&
+    !pollingTimedOut.value
+
+  if (!shouldPoll) {
+    stopPolling()
+    return
+  }
+
+  const nextKey = `${mode.value}:${active.id}:${active.revision}:${active.jobId}`
+  if (nextKey === activePollKey) {
+    return
+  }
+
+  activePollKey = nextKey
+  pollingMode = mode.value
+  pollingWeekStart = weekStart.value
+  poller.start({
+    jobId: active.jobId,
+    recordId: active.id,
+    contentVersion: active.revision
+  })
+}
+
+function handleVisibilityChange() {
+  pageVisible.value = !document.hidden
+  syncPoller()
+}
+
+onMounted(() => {
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+  }
+  const initialStart = parseQueryStart(route.query.start)
+  loadWeek(initialStart)
+  reviewStore.fetchHistory(1).catch(() => {})
+})
+
+onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }
+  stopPolling()
+})
+
+watch(
+  () => [
+    mode.value,
+    weekStart.value,
+    activeStats.value?.active?.jobId,
+    activeStats.value?.active?.revision,
+    pollingTimedOut.value,
+    userStore.isLoggedIn
+  ],
+  () => syncPoller()
+)
+
+watch(
+  () => userStore.token,
+  (next, prev) => {
+    if (next !== prev) {
+      stopPolling()
+      reviewStore.reset()
+    }
+  }
+)
+
+watch(
+  () => route.query.start,
+  (nextStart, prevStart) => {
+    if (nextStart === prevStart || mode.value !== 'week') {
+      return
+    }
+    const parsed = parseQueryStart(nextStart)
+    if (!parsed) {
+      loadWeek('')
+      return
+    }
+    if (parsed !== weekStart.value) {
+      loadWeek(parsed)
+    }
+  }
+)
 
 async function loadWeek(start = '') {
   loadError.value = ''
+  reviewStore.setPollingTimedOut(false)
   const res = await reviewStore.fetchWeek(start)
   if (!res.ok) {
     loadError.value = res.message || '统计加载失败'
@@ -109,6 +257,7 @@ async function loadWeek(start = '') {
 
 async function loadRecent30() {
   loadError.value = ''
+  reviewStore.setPollingTimedOut(false)
   const res = await reviewStore.fetchRecent30()
   if (!res.ok) {
     loadError.value = res.message || '统计加载失败'
@@ -116,8 +265,21 @@ async function loadRecent30() {
   }
 }
 
+function navigateToWeek(start) {
+  if (!start || start === weekStart.value) {
+    return
+  }
+  stopPolling()
+  loadWeek(start)
+  router.replace({ query: { ...route.query, start } })
+}
+
 function switchMode(next) {
-  if (mode.value === next) return
+  if (mode.value === next) {
+    return
+  }
+  stopPolling()
+  reviewStore.setPollingTimedOut(false)
   mode.value = next
   loadError.value = ''
   if (next === 'recent30' && !recent30Stats.value) {
@@ -126,22 +288,66 @@ function switchMode(next) {
 }
 
 function goPreviousWeek() {
-  if (!weekStart.value) return
-  loadWeek(shiftWeek(weekStart.value, -1))
+  if (!weekStart.value) {
+    return
+  }
+  navigateToWeek(shiftWeek(weekStart.value, -1))
 }
 
 function goNextWeek() {
-  if (!canNextWeek.value) return
-  loadWeek(shiftWeek(weekStart.value, 1))
+  if (!canNextWeek.value) {
+    return
+  }
+  navigateToWeek(shiftWeek(weekStart.value, 1))
 }
 
-function retry() {
-  if (mode.value === 'week') loadWeek(weekStart.value)
-  else loadRecent30()
+function retryLoad() {
+  if (mode.value === 'week') {
+    loadWeek(weekStart.value)
+    return
+  }
+  loadRecent30()
 }
 
-function handleGenerate() {
-  toast.info('生成功能会在下一步接入，这一步只展示统计。')
+async function handleGenerate(regenerate = false) {
+  const res =
+    mode.value === 'week'
+      ? await reviewStore.generateWeek(weekStart.value, { regenerate })
+      : await reviewStore.generateRecent30()
+
+  if (!res.ok) {
+    if (!res.skipped) {
+      toast.error(res.userMessage || '生成失败，请稍后再试')
+    }
+    return
+  }
+
+  if (mode.value === 'week') {
+    reviewStore.fetchHistory(1).catch(() => {})
+  }
+}
+
+async function handleJobRetry() {
+  const jobId = activeStats.value?.failed?.jobId
+  if (!jobId) {
+    return
+  }
+  const res = await reviewStore.retryJob(jobId, mode.value, weekStart.value)
+  if (!res.ok && !res.skipped) {
+    toast.error(res.userMessage || '再试一次没成功')
+  }
+}
+
+function handleTimeoutRefresh() {
+  retryLoad()
+}
+
+
+function handleHistoryMore() {
+  if (historyLoading.value || !historyHasMore.value) {
+    return
+  }
+  reviewStore.fetchHistory(historyPage.value + 1).catch(() => {})
 }
 
 // 「按周看」把每组的心情摊平成圆点；只做展示，不据此判断哪种最多。
@@ -214,7 +420,7 @@ function groupMoods(week) {
         <div v-else-if="loadError && !activeStats" class="review__layout">
           <article class="review-card review-error">
             <p>{{ loadError }}</p>
-            <button type="button" class="review-btn review-btn--secondary" @click="retry">
+            <button type="button" class="review-btn review-btn--secondary" @click="retryLoad">
               重试
             </button>
           </article>
@@ -223,20 +429,29 @@ function groupMoods(week) {
 
         <div v-else class="review__layout">
           <section class="review__main">
-            <article class="review-stub">
-              <div class="review-stub__state">
-                <Xiaoya expression="calm" :size="48" />
-                <p class="review-stub__copy">{{ stubText }}</p>
-                <button
-                  v-if="hasRecords"
-                  type="button"
-                  class="review-btn review-btn--primary"
-                  @click="handleGenerate"
-                >
-                  {{ generateLabel }}
-                </button>
-              </div>
-            </article>
+            <ReviewLetter
+              :view-state="viewState"
+              :mode="mode"
+              :page-data="activeStats"
+              :submitting="submitting"
+              @generate="handleGenerate(false)"
+              @regenerate="handleGenerate(true)"
+              @retry="handleJobRetry"
+              @refresh="handleTimeoutRefresh"
+              @open-record="handleOpenRecord"
+            />
+
+            <ReviewSourceCards :sources="visibleSources" />
+
+            <ReviewHistory
+              v-if="mode === 'week'"
+              :items="historyItems"
+              :active-start="weekStart"
+              :has-more="historyHasMore"
+              :loading="historyLoading"
+              @select="navigateToWeek"
+              @load-more="handleHistoryMore"
+            />
           </section>
 
           <aside class="review__side">
@@ -417,6 +632,13 @@ function groupMoods(week) {
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 20px;
   align-items: start;
+}
+
+.review__main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
 }
 
 .review__side {

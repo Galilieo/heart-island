@@ -99,3 +99,161 @@ export function groupDaysIntoWeeks(days, todayKey) {
 export function canGoNextWeek(startKey, todayKey) {
   return shiftWeek(startKey, 1) < mondayOf(todayKey)
 }
+
+const REF_TOKEN_PATTERN = /\{\{(r\d+)\}\}/g
+const REF_RUN_PATTERN = /(?:\{\{(r\d+)\}\})+/g
+const TRAILING_PUNCTUATION_PATTERN = /^[，。！？、；：,.!?;:]/
+
+function stripUnknownRefs(text, sourceMap, warn) {
+  let result = ''
+  let lastIndex = 0
+
+  for (const match of text.matchAll(REF_TOKEN_PATTERN)) {
+    const start = match.index
+    const ref = match[1]
+    result += text.slice(lastIndex, start)
+    if (sourceMap.has(ref)) {
+      result += match[0]
+    } else {
+      warn(`回信引用了未知编号 {{${ref}}}`)
+    }
+    lastIndex = start + match[0].length
+  }
+
+  result += text.slice(lastIndex)
+  return result
+}
+
+function splitLeadingPrefix(text) {
+  const chars = Array.from(text)
+  if (chars.length === 0) {
+    return { head: '', prefix: '' }
+  }
+
+  const lastChar = chars[chars.length - 1]
+  if (lastChar === '\n' || lastChar === '\r') {
+    return { head: text, prefix: '' }
+  }
+
+  return {
+    head: chars.slice(0, -1).join(''),
+    prefix: lastChar
+  }
+}
+
+function appendTextSegment(segments, text) {
+  if (!text) {
+    return
+  }
+
+  const previous = segments[segments.length - 1]
+  if (previous && previous.type === 'text') {
+    previous.text += text
+    return
+  }
+
+  segments.push({ type: 'text', text })
+}
+
+/**
+ * 解析回信正文或 P.S. 中的 {{rN}} 引用标记，
+ * 把前置单个字符、相邻引用与后接单个标点打包成 refGroup 避免行尾悬空。
+ */
+export function parseLetterSegments(text, sources = [], options = {}) {
+  const rawText = String(text || '')
+  if (!rawText) {
+    return []
+  }
+
+  const sourceMap = new Map()
+  for (const source of sources || []) {
+    if (source && source.ref) {
+      sourceMap.set(source.ref, source)
+    }
+  }
+
+  const warn = options.onWarn || console.warn
+  const cleaned = stripUnknownRefs(rawText, sourceMap, warn)
+  const segments = []
+  let cursor = 0
+
+  for (const match of cleaned.matchAll(REF_RUN_PATTERN)) {
+    const runStart = match.index
+    const runEnd = runStart + match[0].length
+    const beforeRun = cleaned.slice(cursor, runStart)
+    const { head, prefix } = splitLeadingPrefix(beforeRun)
+
+    appendTextSegment(segments, head)
+
+    const refs = []
+    for (const token of match[0].matchAll(REF_TOKEN_PATTERN)) {
+      const source = sourceMap.get(token[1])
+      if (source) {
+        refs.push({
+          ref: source.ref,
+          recordId: String(source.recordId),
+          label: formatShortDate(source.date)
+        })
+      }
+    }
+
+    const afterRun = cleaned.slice(runEnd)
+    const punctuationMatch = afterRun.match(TRAILING_PUNCTUATION_PATTERN)
+    const punctuation = punctuationMatch ? punctuationMatch[0] : ''
+
+    segments.push({
+      type: 'refGroup',
+      prefix,
+      refs,
+      punctuation
+    })
+
+    cursor = runEnd + punctuation.length
+  }
+
+  appendTextSegment(segments, cleaned.slice(cursor))
+  return segments
+}
+
+/** 根据后端返回的统计与任务状态，映射为前端回信区单一视图状态。 */
+export function resolveReviewViewState(pageData, options = {}) {
+  const mode = options.mode ?? 'week'
+  const isCurrentWeek = Boolean(options.isCurrentWeek)
+  const pollingTimedOut = Boolean(options.pollingTimedOut)
+
+  if (mode === 'week' && isCurrentWeek) {
+    return 'week_not_finished'
+  }
+  if (!pageData) {
+    return 'empty'
+  }
+  if (pageData.active) {
+    return pollingTimedOut ? 'polling_timeout' : 'generating'
+  }
+
+  const total = Number(pageData.total || 0)
+  if (total === 0) {
+    return 'empty'
+  }
+  if (pageData.failed) {
+    return pageData.report && pageData.report.body ? 'failed_with_report' : 'failed_empty'
+  }
+
+  if (pageData.report) {
+    if (pageData.report.stale) {
+      return pageData.report.body ? 'stale_edited' : 'stale_deleted'
+    }
+    if (pageData.report.resultKind === 'SUPPORT') {
+      return 'crisis'
+    }
+    return 'ready'
+  }
+
+  const aiEnabledCount = Number(pageData.aiEnabledCount ?? total)
+  if (aiEnabledCount === 0) {
+    return 'no_ai_enabled'
+  }
+
+  return 'not_generated'
+}
+
