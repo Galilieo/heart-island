@@ -158,4 +158,83 @@ class MoodReviewServiceTests {
         assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(601), null, "MODEL", true, "mood-review-v1", "m").validate(recentReq))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void getReconstructsCitedSourcesInRefOrderAndExposesLatestFailedAttempt() {
+        MoodReviewMapper reports = mock(MoodReviewMapper.class);
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(mock(TransactionStatus.class));
+
+        MoodRecordMapper recordMapper = mock(MoodRecordMapper.class);
+        MoodReviewService service = new MoodReviewService(
+                reports,
+                new MoodReviewStatsService(recordMapper, CLOCK),
+                CLOCK,
+                manager,
+                new AiJobAdmission(manager));
+
+        LocalDate start = LocalDate.of(2026, 11, 2);
+        LocalDate end = LocalDate.of(2026, 11, 9);
+        MoodRecord first = record(101L, LocalDateTime.of(2026, 11, 2, 10, 0));
+        first.setContent("第一条记录完整全文".repeat(60));
+        MoodRecord second = record(102L, LocalDateTime.of(2026, 11, 4, 15, 0));
+        second.setContent("第二条未被引用的记录");
+        MoodRecord third = record(103L, LocalDateTime.of(2026, 11, 6, 20, 0));
+        third.setMoodType("开心");
+        third.setContent("第三条记录全文");
+        MoodRecord disabled = record(104L, LocalDateTime.of(2026, 11, 7, 9, 0));
+        disabled.setAiReplyEnabled(false);
+
+        List<MoodRecord> allRecords = List.of(first, second, third, disabled);
+        MoodReviewStatsVO snapshot = MoodReviewStatsService.aggregate(allRecords, start, end);
+        String statsJson;
+        try {
+            statsJson = new ObjectMapper().findAndRegisterModules()
+                    .writeValueAsString(snapshot)
+                    .replace("}", ",\"aiEnabledTotal\":3}");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+        String fingerprint = MoodReviewService.fingerprint(allRecords);
+
+        MoodReview succeeded = new MoodReview(
+                20L, 1L, "WEEK", start, end, 1, fingerprint, "succeeded", statsJson,
+                "周初提到{{r3}}，还有{{r1}}。", null, "MODEL", "2026-11-09 08:00:00");
+        MoodReview failed = new MoodReview(
+                21L, 1L, "WEEK", start, end, 2, fingerprint, "failed", statsJson,
+                null, null, null, null);
+
+        when(recordMapper.selectList(any())).thenReturn(allRecords);
+        when(reports.latest(1L, "WEEK", start, false)).thenReturn(succeeded);
+        when(reports.latest(1L, "WEEK", start, true)).thenReturn(null);
+        when(reports.latestAttempt(1L, "WEEK", start)).thenReturn(failed);
+        when(reports.sources(1L, start, end, false)).thenReturn(allRecords);
+        when(reports.deletedSourceCount(1L, 20L)).thenReturn(0);
+        when(reports.deletedSourceCount(1L, 21L)).thenReturn(0);
+        when(reports.jobId(20L, 1)).thenReturn(30L);
+        when(reports.jobId(21L, 2)).thenReturn(31L);
+        when(reports.jobStatus(21L, 2)).thenReturn("failed");
+        when(reports.sentSources(1L, 20L)).thenReturn(List.of(first, second, third));
+
+        MoodReviewService.Page page = service.get(1L, "WEEK", "2026-11-02");
+
+        assertThat(page.aiEnabledCount()).isEqualTo(3);
+        assertThat(page.failed()).isNotNull();
+        assertThat(page.failed().jobId()).isEqualTo(31L);
+        assertThat(page.report().sources()).containsExactly(
+                new MoodReviewService.Source("r1", 101L, LocalDate.of(2026, 11, 2), "周一", "平静", first.getContent()),
+                new MoodReviewService.Source("r3", 103L, LocalDate.of(2026, 11, 6), "周五", "开心", "第三条记录全文"));
+    }
+
+    @Test
+    void reportSerializationIncludesSourcesField() throws Exception {
+        var source = new MoodReviewService.Source("r1", 101L, LocalDate.of(2026, 11, 2), "周一", "平静", "散步");
+        var report = new MoodReviewService.Report(
+                20L, 1, "succeeded", "散步{{r1}}", null, "MODEL", false, 30L,
+                LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 9), 1, "2026-11-09 08:00:00", List.of(source));
+
+        String serialized = new ObjectMapper().findAndRegisterModules().writeValueAsString(report);
+        assertThat(serialized).contains("\"sources\":[", "\"ref\":\"r1\"", "\"recordId\":101");
+    }
+
 }

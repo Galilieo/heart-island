@@ -44,6 +44,7 @@ class AuthHttpTests {
     @Autowired JwtUtil jwtUtil;
     @Autowired AiJobService jobs;
     @Autowired MoodRecordService moods;
+    @Autowired MoodReviewService reviews;
     @Autowired AiReplyLogService aiLogs;
     @MockitoBean UserService userService;
 
@@ -291,6 +292,29 @@ class AuthHttpTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value("1"))
                 .andExpect(jsonPath("$.data.records[0].jobId").value("10"))
                 .andExpect(jsonPath("$.data.records[0].moodType").value("平静"));
+    }
+
+    @Test
+    void reviewWeekExposesSourcesFailedAndAiEnabledCount() throws Exception {
+        var start = java.time.LocalDate.of(2026, 11, 2);
+        var end = java.time.LocalDate.of(2026, 11, 9);
+        var stats = new com.xinyu.vo.MoodReviewStatsVO(start, end, 2, 2, List.of(), List.of());
+        var source = new MoodReviewService.Source("r1", 9001L, start, "周一", "平静", "完整原文");
+        var report = new MoodReviewService.Report(
+                20L, 1, "succeeded", "散步{{r1}}", null, "MODEL", false, 30L,
+                start, end, 1, "2026-11-09 08:00:00", List.of(source));
+        var failed = new MoodReviewService.Report(
+                21L, 2, "failed", null, null, null, false, 31L,
+                start, end, 1, null, List.of());
+        when(reviews.get(11L, "WEEK", null)).thenReturn(new MoodReviewService.Page(stats, report, null, failed, 1));
+
+        mvc.perform(get("/mood/report/week").header("token", memberToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.aiEnabledCount").value(1))
+                .andExpect(jsonPath("$.data.failed.jobId").value("31"))
+                .andExpect(jsonPath("$.data.report.sources[0].ref").value("r1"))
+                .andExpect(jsonPath("$.data.report.sources[0].recordId").value("9001"))
+                .andExpect(jsonPath("$.data.report.sources[0].content").value("完整原文"));
     }
 
     private static User user(Long id, String role, int status) {

@@ -89,6 +89,8 @@ public class MoodReviewController {
         result.put("moodCounts", stats.moodCounts());
         result.put("report", value.report());
         result.put("active", value.active());
+        result.put("failed", value.failed());
+        result.put("aiEnabledCount", value.aiEnabledCount());
         return result;
     }
 

@@ -20,10 +20,13 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 本人回顾的保存与版本入口。创建时用户行锁跨实例去重；来源集合在短事务内读取。
@@ -53,6 +56,8 @@ public class MoodReviewService {
             DayOfWeek.FRIDAY, "周五",
             DayOfWeek.SATURDAY, "周六",
             DayOfWeek.SUNDAY, "周日");
+    /** 与 ReviewAiResponse.REFERENCE 同口径，从已保存正文中识别引用标记。 */
+    private static final Pattern CITED_REF = Pattern.compile("\\{\\{(r[1-9][0-9]*)}}");
     private final MoodReviewMapper reports;
     private final MoodReviewStatsService stats;
     private final Clock clock;
@@ -62,11 +67,13 @@ public class MoodReviewService {
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
             .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
-    /** 对外报告不暴露用户或来源正文；删除任何来源时隐藏旧信。 */
+    /** 报告引用的本人有效记录对照；content 返回当前全文且不截断。 */
+    public record Source(String ref, long recordId, LocalDate date, String weekday, String moodType, String content) { }
+    /** 对外报告仅返回正文实际引用到的有效本人来源；删除任何来源时隐藏旧信并清空 sources。 */
     public record Report(long id, int revision, String status, String body, String ps, String resultKind,
                          boolean stale, long jobId, LocalDate rangeStart, LocalDate rangeEnd,
-                         int aiEnabledCount, String generatedAt) { }
-    public record Page(MoodReviewStatsVO stats, Report report, Report active) { }
+                         int aiEnabledCount, String generatedAt, List<Source> sources) { }
+    public record Page(MoodReviewStatsVO stats, Report report, Report active, Report failed, int aiEnabledCount) { }
     public record History(long id, LocalDate rangeStart, LocalDate rangeEnd, int revision, String status, int total) { }
     public MoodReviewService(MoodReviewMapper reports, MoodReviewStatsService stats,
                              @Qualifier("reviewClock") Clock clock, PlatformTransactionManager manager,
@@ -127,10 +134,24 @@ public class MoodReviewService {
             MoodReview success = latest(userId, type, "WEEK".equals(type) ? snapshot.rangeStart() : null, false);
             MoodReview active = latest(userId, type, snapshot.rangeStart(), true);
             List<MoodRecord> records = sources(userId, snapshot.rangeStart(), snapshot.rangeEnd(), false);
+            int aiEnabledCount = (int) records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).count();
             boolean rangeChanged = success != null && (!success.start().equals(snapshot.rangeStart()) || !success.end().equals(snapshot.rangeEnd()));
+            Report failed = latestFailed(userId, type, snapshot.rangeStart(), records);
             return new Page(snapshot, success == null ? null : view(success, records, rangeChanged),
-                    active == null ? null : view(active, records, false));
+                    active == null ? null : view(active, records, false), failed, aiEnabledCount);
         });
+    }
+
+    private Report latestFailed(long userId, String type, LocalDate start, List<MoodRecord> records) {
+        MoodReview latestAttempt = reports.latestAttempt(userId, type, start);
+        if (latestAttempt == null || !"failed".equals(latestAttempt.status())) {
+            return null;
+        }
+        if (!"failed".equals(reports.jobStatus(latestAttempt.id(), latestAttempt.revision()))) {
+            return null;
+        }
+        Report candidate = view(latestAttempt, records, false);
+        return candidate.stale() ? null : candidate;
     }
 
     /** 周报历史仅返回元信息与快照条数，不含正文。 */
@@ -488,9 +509,44 @@ public class MoodReviewService {
         int deleted = reports.deletedSourceCount(row.userId(), row.id());
         long jobId = reports.jobId(row.id(), row.revision());
         int enabled = enabledTotal(row.statsJson());
-        return new Report(row.id(), row.revision(), row.status(), deleted > 0 ? null : row.body(),
-                deleted > 0 ? null : row.ps(), row.kind(), stale || deleted > 0, jobId,
-                row.start(), row.end(), enabled, row.finishedAt());
+        boolean hidden = deleted > 0;
+        List<Source> citedSources = hidden ? List.of() : citedSources(row);
+        return new Report(row.id(), row.revision(), row.status(), hidden ? null : row.body(),
+                hidden ? null : row.ps(), row.kind(), stale || hidden, jobId,
+                row.start(), row.end(), enabled, row.finishedAt(), citedSources);
+    }
+
+    private List<Source> citedSources(MoodReview row) {
+        if (!"succeeded".equals(row.status()) || !"MODEL".equals(row.kind()) || row.body() == null) {
+            return List.of();
+        }
+        Set<String> cited = extractCitedRefs(row.body(), row.ps());
+        if (cited.isEmpty()) {
+            return List.of();
+        }
+        List<MoodRecord> sent = reports.sentSources(row.userId(), row.id());
+        List<Source> result = new ArrayList<>();
+        for (int index = 0; index < sent.size(); index++) {
+            String ref = "r" + (index + 1);
+            if (!cited.contains(ref)) {
+                continue;
+            }
+            MoodRecord record = sent.get(index);
+            result.add(new Source(ref, record.getId(), record.getCreateTime().toLocalDate(),
+                    weekday(record.getCreateTime().getDayOfWeek()), record.getMoodType(), record.getContent()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static Set<String> extractCitedRefs(String body, String ps) {
+        Set<String> refs = new HashSet<>();
+        for (String text : new String[]{body, ps == null ? "" : ps}) {
+            var matcher = CITED_REF.matcher(text);
+            while (matcher.find()) {
+                refs.add(matcher.group(1));
+            }
+        }
+        return refs;
     }
 
     private String encodeSnapshot(MoodReviewStatsVO snapshot, List<MoodRecord> records) {

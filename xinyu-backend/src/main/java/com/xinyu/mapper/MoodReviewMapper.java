@@ -21,6 +21,19 @@ public class MoodReviewMapper {
             row.getString("stats_json"), row.getString("body"), row.getString("ps"),
             row.getString("result_kind"), row.getString("finished_at"));
 
+    private static final RowMapper<MoodRecord> RECORD_ROW = (row, index) -> {
+        MoodRecord record = new MoodRecord();
+        record.setId(row.getLong("id"));
+        record.setUserId(row.getLong("user_id"));
+        record.setContentVersion(row.getLong("content_version"));
+        record.setAiReplyEnabled(row.getBoolean("ai_reply_enabled"));
+        record.setContent(row.getString("content"));
+        record.setMoodType(row.getString("mood_type"));
+        record.setCreateTime(row.getTimestamp("create_time").toLocalDateTime());
+        record.setStatus(1);
+        return record;
+    };
+
     public MoodReviewMapper(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
@@ -79,18 +92,29 @@ public class MoodReviewMapper {
     /** 按 user/status/time 索引查询范围；当前读锁保护来源，禁止把锁带到 HTTP 等待阶段。 */
     public List<MoodRecord> sources(long userId, LocalDate start, LocalDate end, boolean lock) {
         String sql = "SELECT * FROM mood_record WHERE user_id=? AND status=1 AND create_time>=? AND create_time<? ORDER BY create_time,id";
-        return jdbc.query(sql + (lock ? " FOR UPDATE" : ""), (row, index) -> {
-            MoodRecord record = new MoodRecord();
-            record.setId(row.getLong("id"));
-            record.setUserId(row.getLong("user_id"));
-            record.setContentVersion(row.getLong("content_version"));
-            record.setAiReplyEnabled(row.getBoolean("ai_reply_enabled"));
-            record.setContent(row.getString("content"));
-            record.setMoodType(row.getString("mood_type"));
-            record.setCreateTime(row.getTimestamp("create_time").toLocalDateTime());
-            record.setStatus(1);
-            return record;
-        }, userId, start.atStartOfDay(), end.atStartOfDay());
+        return jdbc.query(sql + (lock ? " FOR UPDATE" : ""), RECORD_ROW, userId, start.atStartOfDay(), end.atStartOfDay());
+    }
+
+    /** 按生成时发往模型的同一顺序返回当前仍有效的记录全文，供读取报告时重建 r1..rN 对照。 */
+    public List<MoodRecord> sentSources(long userId, long reviewId) {
+        String sql = "SELECT m.* FROM mood_review_source s JOIN mood_record m ON m.id=s.record_id AND m.user_id=? "
+                + "WHERE s.review_id=? AND s.sent_to_model=1 AND m.status=1 ORDER BY m.create_time,m.id";
+        return jdbc.query(sql, RECORD_ROW, userId, reviewId);
+    }
+
+    /** 返回当前范围修订号最高的一次尝试，用于判断最新任务是否处于 failed。 */
+    public MoodReview latestAttempt(long userId, String type, LocalDate start) {
+        List<MoodReview> rows = jdbc.query(
+                "SELECT * FROM mood_review WHERE user_id=? AND review_type=? AND range_start=? ORDER BY revision DESC LIMIT 1",
+                ROW, userId, type, start);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public String jobStatus(long reviewId, int revision) {
+        List<String> rows = jdbc.queryForList(
+                "SELECT status FROM ai_job WHERE task_type='MOOD_REVIEW' AND target_id=? AND target_version=? LIMIT 1",
+                String.class, reviewId, revision);
+        return rows.isEmpty() ? null : rows.get(0);
     }
 
     public void resetSentSources(long id) {

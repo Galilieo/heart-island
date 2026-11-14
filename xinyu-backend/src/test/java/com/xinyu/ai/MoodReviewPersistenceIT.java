@@ -420,6 +420,69 @@ class MoodReviewPersistenceIT {
         assertThat(crisisPrepared.request().records()).isEmpty();
     }
 
+    @Test
+    void reconstructedSourcesMatchSentRequestAcrossSamplingAndDisabledRecords() throws Exception {
+        startPython();
+        long user = ++nextUser;
+        jdbc.update("INSERT INTO user(id) VALUES (?)", user);
+        for (int index = 0; index < 75; index++) {
+            String time = String.format("2026-11-%02d %02d:00:00", 2 + (index / 15), 8 + (index % 15));
+            String content = index == 0 ? "长首段" + "甲".repeat(900) + "长尾段" : "授权正文-" + index;
+            jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'平静',?,1,1,?)",
+                    user, content, time);
+        }
+        for (int index = 0; index < 10; index++) {
+            jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'难过',?,0,1,'2026-11-05 12:30:00')",
+                    user, "关闭AI-" + index);
+        }
+
+        reviews.generate(user, "WEEK", "2026-11-02", false);
+        int before = httpGet("/test/state").get("calls").size();
+        try (var client = new com.xinyu.service.AiServiceClient(pythonUrl, "test-internal-secret", 3)) {
+            var worker = new com.xinyu.service.AiJobWorker(jobsService(), client, manager, Runnable::run, System::nanoTime);
+            assertThat(worker.runOne().get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(com.xinyu.service.AiJobWorker.Outcome.SUCCEEDED);
+        }
+
+        var sentRecords = httpGet("/test/state").get("calls").get(before).get("records");
+        assertThat(sentRecords.size()).isEqualTo(60);
+
+        var firstPage = reviews.get(user, "WEEK", "2026-11-02");
+        assertThat(firstPage.report().sources()).hasSize(1);
+        var firstSource = firstPage.report().sources().get(0);
+        assertThat(firstSource.ref()).isEqualTo(sentRecords.get(0).get("ref").asText());
+        assertThat(firstSource.date().toString()).isEqualTo(sentRecords.get(0).get("date").asText());
+        assertThat(firstSource.weekday()).isEqualTo(sentRecords.get(0).get("weekday").asText());
+        assertThat(firstSource.moodType()).isEqualTo(sentRecords.get(0).get("mood_type").asText());
+        assertThat(firstSource.content()).isEqualTo("长首段" + "甲".repeat(900) + "长尾段");
+
+        var regen = reviews.generate(user, "WEEK", "2026-11-02", true);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var claimed = tx.execute(status -> jobsService().claimNext());
+        assertThat(claimed.getId()).isEqualTo(regen.jobId());
+        var prepared = reviews.prepare(claimed.getId(), 1, claimed.getRequestId());
+        assertThat(prepared.request().records()).hasSize(60);
+        assertThat(reviews.complete(claimed.getId(), 1, claimed.getRequestId(),
+                response(prepared.request(), "提到{{r60}}、{{r1}}和{{r30}}。"))).isTrue();
+
+        var reloaded = reviews.get(user, "WEEK", "2026-11-02");
+        var sources = reloaded.report().sources();
+        assertThat(sources).extracting(com.xinyu.service.MoodReviewService.Source::ref).containsExactly("r1", "r30", "r60");
+        for (var source : sources) {
+            int idx = Integer.parseInt(source.ref().substring(1)) - 1;
+            var sent = prepared.request().records().get(idx);
+            assertThat(source.date().toString()).isEqualTo(sent.date());
+            assertThat(source.weekday()).isEqualTo(sent.weekday());
+            assertThat(source.moodType()).isEqualTo(sent.moodType());
+            assertThat(source.content()).doesNotContain("关闭AI-");
+        }
+        assertThat(sources.get(2).content()).isEqualTo(prepared.request().records().get(59).content());
+        assertThat(sources.get(0).content()).isEqualTo("长首段" + "甲".repeat(900) + "长尾段");
+
+        jdbc.update("UPDATE mood_record SET status=0,content_version=2 WHERE user_id=? AND content LIKE '关闭AI-%' LIMIT 1", user);
+        assertThat(reviews.get(user, "WEEK", "2026-11-02").report().sources()).isEmpty();
+    }
+
+
     private static boolean hasLoneSurrogate(String text) {
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
