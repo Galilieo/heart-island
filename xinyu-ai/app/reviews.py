@@ -8,8 +8,9 @@ from app.contracts import Contract, Correlation, MAX_CONTENT_UTF16, MoodType, ut
 TEMPLATE_VERSION = 'mood-review-v1'
 # 与 Java MoodReviewService.MAX_TOTAL_CONTENT_UTF16 保持同值。
 MAX_TOTAL_CONTENT_UTF16 = 12000
-MAX_WEEK_BODY_UTF16 = 220
-MAX_RECENT_BODY_UTF16 = 260
+# 2026-11-14 任务书第 3.7 节硬上限，与 Java ReviewAiResponse 同值。
+MAX_WEEK_BODY_UTF16 = 500
+MAX_RECENT_BODY_UTF16 = 600
 MAX_PS_UTF16 = 60
 # 与 Java MoodReviewService.TRUNCATION_MARKER 及 evals/run_review_eval.py 同值。
 TRUNCATION_MARKER = '〔中间省略〕'

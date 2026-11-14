@@ -273,7 +273,7 @@ def render_review_summary(label: str, results: list[dict], meta: dict) -> str:
 
     add_pass_row("C1", "`validate_output` 通过", "100%", "c1_validate", 1.0)
     add_pass_row("C2", "引用数量（一般 2～4 / sparse 1～2）", "≥ 90%", "c2_ref_count", 0.90)
-    add_pass_row("C3", "正文长度（周报 ≤150 / 近30天 ≤180）", "≥ 90%", "c3_body_length", 0.90)
+    add_pass_row("C3", "正文长度（按发送条数分档）", "≥ 90%", "c3_body_length", 0.90)
     add_pass_row("C4", "正文无统计数字", "≥ 90%", "c4_no_stat_numbers", 0.90)
     add_pass_row("C5", "`tie` 类无最高频说法", "100%", "c5_tie_no_most", 1.0)
     add_pass_row("C6", "`partial` 类无概括全部说法", "≥ 90%", "c6_partial_no_overgeneralize", 0.90)

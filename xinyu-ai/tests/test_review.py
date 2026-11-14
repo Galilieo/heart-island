@@ -41,7 +41,7 @@ async def test_crisis_never_calls_provider():
 @pytest.mark.parametrize('text', [
     'not json', '{"body":"引用{{r2}}","ps":null}', '{"body":"坏标记{{12}}","ps":null}',
     '{"body":"你患有抑郁症","ps":null}', '{"body":"联系13800138000","ps":null}',
-    '{"body":"' + '文' * 221 + '","ps":null}',
+    '{"body":"' + '文' * 501 + '","ps":null}',
     '{"body":"散步","ps":"' + '文' * 61 + '"}',
     '{"body":"散步","ps":null,"total":999}',
     '{"body":"这里写了〔中间省略〕","ps":null}',
@@ -103,6 +103,22 @@ def test_messages_use_review_prompt_for_reviews_and_preserve_mood_reply_prompt()
     assert [m['role'] for m in reply_msgs] == ['system', 'user']
     assert reply_msgs[0]['content'] == SYSTEM_PROMPT
     assert json.loads(reply_msgs[1]['content']) == {'mood_type': '平静', 'content': '散步'}
+
+
+@pytest.mark.parametrize('review_type,ok_len,bad_len', [
+    ('WEEK', 500, 501),
+    ('RECENT_30', 600, 601),
+])
+async def test_review_body_hard_limit_boundaries(review_type, ok_len, bad_len):
+    ok_provider = StubProvider('{"body":"' + '文' * ok_len + '","ps":null}')
+    bad_provider = StubProvider('{"body":"' + '文' * bad_len + '","ps":null}')
+    async with client_for(create_app(make_settings(), ok_provider)) as client:
+        ok_resp = await client.post('/internal/v1/mood-reviews', json=review_payload(review_type=review_type), headers=AUTH)
+    async with client_for(create_app(make_settings(), bad_provider)) as client:
+        bad_resp = await client.post('/internal/v1/mood-reviews', json=review_payload(review_type=review_type), headers=AUTH)
+    assert ok_resp.status_code == 200
+    assert bad_resp.status_code == 502
+    assert bad_resp.json()['code'] == 'invalid_model_response'
 
 
 async def test_review_accepts_full_12000_utf16_payload_with_escapable_chars():

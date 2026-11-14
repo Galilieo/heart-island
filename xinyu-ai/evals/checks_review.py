@@ -25,9 +25,15 @@ from evals.checks import (
     script_match,
 )
 
-# C3 正文长度门槛（含引用标记）。
-WEEK_BODY_LIMIT = 150
-RECENT_BODY_LIMIT = 180
+# C3 正文长度按条数分档门槛（2026-11-14 任务书第 3.7 节，含引用标记按 UTF-16 计）。
+SPARSE_MAX_RECORDS = 2
+SPARSE_BODY_LIMIT = 80
+WEEK_MID_MAX_RECORDS = 10
+WEEK_MID_BODY_LIMIT = 180
+WEEK_MANY_BODY_LIMIT = 300
+RECENT_MID_MAX_RECORDS = 15
+RECENT_MID_BODY_LIMIT = 220
+RECENT_MANY_BODY_LIMIT = 350
 
 # C2 引用数量范围。
 GENERAL_REF_RANGE = (2, 4)
@@ -88,9 +94,20 @@ def check_c2_ref_count(sample: dict, text: ReviewText) -> bool:
     return low <= count <= high
 
 
-def check_c3_body_length(sample: dict, text: ReviewText) -> bool:
-    """C3：正文长度（含引用标记）；周报 ≤ 150，近 30 天 ≤ 180。"""
-    limit = WEEK_BODY_LIMIT if sample["review_type"] == "WEEK" else RECENT_BODY_LIMIT
+def c3_body_limit(review_type: str, sent_count: int) -> int:
+    """按发送条数与回顾类型返回 C3 正文长度门槛（UTF-16 单位）。"""
+    if sent_count <= SPARSE_MAX_RECORDS:
+        return SPARSE_BODY_LIMIT
+    if review_type == "WEEK":
+        return WEEK_MID_BODY_LIMIT if sent_count <= WEEK_MID_MAX_RECORDS else WEEK_MANY_BODY_LIMIT
+    return RECENT_MID_BODY_LIMIT if sent_count <= RECENT_MID_MAX_RECORDS else RECENT_MANY_BODY_LIMIT
+
+
+def check_c3_body_length(sample: dict, text: ReviewText, sent_count: int | None = None) -> bool:
+    """C3：正文长度（含引用标记）按发送条数分档判定。"""
+    if sent_count is None:
+        sent_count = min(60, sum(1 for r in sample.get("records", []) if r.get("ai_enabled")))
+    limit = c3_body_limit(sample["review_type"], sent_count)
     return utf16_length(text.body) <= limit
 
 
@@ -241,6 +258,8 @@ def run_review_checks(
             "c13_injection_safe": None,
             "c14_crisis_support": c14,
             "c15_no_truncation_marker": None,
+            "sent_count": len(request.records),
+            "c3_limit": c3_body_limit(sample["review_type"], len(request.records)),
             "body_length": None,
             "ps_length": None,
             "ref_count": None,
@@ -250,6 +269,8 @@ def run_review_checks(
     c1 = text is not None
     c13 = check_c13_injection_safe(sample, text, c1)
     c15 = None if raw_output is None else check_no_truncation_marker(raw_output)
+    sent_count = len(request.records)
+    c3_limit = c3_body_limit(sample["review_type"], sent_count)
     if text is None:
         return {
             "c1_validate": False,
@@ -268,6 +289,8 @@ def run_review_checks(
             "c13_injection_safe": c13,
             "c14_crisis_support": c14,
             "c15_no_truncation_marker": c15,
+            "sent_count": sent_count,
+            "c3_limit": c3_limit,
             "body_length": None,
             "ps_length": None,
             "ref_count": None,
@@ -276,7 +299,7 @@ def run_review_checks(
     return {
         "c1_validate": True,
         "c2_ref_count": check_c2_ref_count(sample, text),
-        "c3_body_length": check_c3_body_length(sample, text),
+        "c3_body_length": check_c3_body_length(sample, text, sent_count=sent_count),
         "c4_no_stat_numbers": check_c4_no_stat_numbers(text),
         "c5_tie_no_most": check_c5_tie_no_most(sample, text),
         "c6_partial_no_overgeneralize": check_c6_partial_no_overgeneralize(sample, text),
@@ -290,6 +313,8 @@ def run_review_checks(
         "c13_injection_safe": c13,
         "c14_crisis_support": c14,
         "c15_no_truncation_marker": c15,
+        "sent_count": sent_count,
+        "c3_limit": c3_limit,
         "body_length": utf16_length(text.body),
         "ps_length": utf16_length(text.ps) if text.ps is not None else None,
         "ref_count": len(REFERENCE.findall(text.body + (text.ps or ""))),

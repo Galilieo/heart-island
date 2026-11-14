@@ -16,9 +16,9 @@ public record ReviewAiResponse(
         @JsonProperty("model_called") boolean modelCalled,
         @JsonProperty("template_version") String templateVersion,
         @JsonProperty("model_name") String modelName) {
-    /** 阶段2方案第6节的正文/P.S.上限，模型名沿用内部响应契约。 */
-    private static final int MAX_WEEK_BODY_UTF16 = 220;
-    private static final int MAX_RECENT_BODY_UTF16 = 260;
+    /** 2026-11-14 任务书第3.7节硬上限（与 Python xinyu-ai/app/reviews.py 同值），P.S. 与模型名上限不变。 */
+    private static final int MAX_WEEK_BODY_UTF16 = 500;
+    private static final int MAX_RECENT_BODY_UTF16 = 600;
     private static final int MAX_PS_UTF16 = 60;
     private static final int MAX_MODEL_NAME_UTF16 = 128;
     private static final String INVALID_MODEL_RESPONSE = "invalid_model_response";

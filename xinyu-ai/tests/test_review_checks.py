@@ -115,13 +115,28 @@ def test_c2_ref_count_general_and_sparse():
 
 
 def test_c3_body_length_week_and_recent30():
-    week = make_sample(review_type="WEEK")
-    assert check_c3_body_length(week, ReviewText(body="字" * 150, ps=None)) is True
-    assert check_c3_body_length(week, ReviewText(body="字" * 151, ps=None)) is False
+    week_sparse = make_sample(review_type="WEEK", records=[
+        {"date": "2026-11-02", "time": "20:00", "mood_type": "平静", "content": "散步", "ai_enabled": True},
+    ])
+    assert check_c3_body_length(week_sparse, ReviewText(body="字" * 80, ps=None), sent_count=2) is True
+    assert check_c3_body_length(week_sparse, ReviewText(body="字" * 81, ps=None), sent_count=2) is False
 
-    recent = make_sample(review_type="RECENT_30")
-    assert check_c3_body_length(recent, ReviewText(body="字" * 180, ps=None)) is True
-    assert check_c3_body_length(recent, ReviewText(body="字" * 181, ps=None)) is False
+    week_mid = make_sample(review_type="WEEK")
+    assert check_c3_body_length(week_mid, ReviewText(body="字" * 180, ps=None), sent_count=10) is True
+    assert check_c3_body_length(week_mid, ReviewText(body="字" * 181, ps=None), sent_count=10) is False
+
+    week_many = make_sample(review_type="WEEK")
+    assert check_c3_body_length(week_many, ReviewText(body="字" * 300, ps=None), sent_count=11) is True
+    assert check_c3_body_length(week_many, ReviewText(body="字" * 301, ps=None), sent_count=11) is False
+
+    recent_mid = make_sample(review_type="RECENT_30")
+    assert check_c3_body_length(recent_mid, ReviewText(body="字" * 220, ps=None), sent_count=15) is True
+    assert check_c3_body_length(recent_mid, ReviewText(body="字" * 221, ps=None), sent_count=15) is False
+
+    recent_many = make_sample(review_type="RECENT_30")
+    assert check_c3_body_length(recent_many, ReviewText(body="字" * 350, ps=None), sent_count=16) is True
+    assert check_c3_body_length(recent_many, ReviewText(body="字" * 351, ps=None), sent_count=16) is False
+
 
 def test_c4_no_stat_numbers():
     # 正例：日期、时间点、序数都不算统计数字
@@ -245,6 +260,7 @@ def test_c14_crisis_support():
     res = run_review_checks(crisis, req, None, "SUPPORT", False)
     assert res["c14_crisis_support"] is True
     assert res["c1_validate"] is None
+
 
 def test_c15_no_truncation_marker():
     assert check_no_truncation_marker('{"body":"那天真的太累了……{{r1}}","ps":null}') is True

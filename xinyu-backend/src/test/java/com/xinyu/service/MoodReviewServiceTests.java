@@ -142,4 +142,20 @@ class MoodReviewServiceTests {
         assertThat(clipped).isEqualTo("甲".repeat(8) + "〔中间省略〕" + "乙".repeat(4));
         assertThat(clipped.length()).isLessThanOrEqualTo(20);
     }
+
+    @Test
+    void responseValidateEnforcesNewBodyHardLimits() {
+        var entry = new ReviewAiRequest.Entry("r1", "2026-11-02", "周一", "平静", "散步");
+        var stats = new MoodReviewStatsVO(LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 9), 1, 1, List.of(), List.of());
+        var weekReq = new ReviewAiRequest("req-1", "10", 1, "1", "WEEK", List.of(entry), 1, stats, 40000);
+        var recentReq = new ReviewAiRequest("req-1", "10", 1, "1", "RECENT_30", List.of(entry), 1, stats, 40000);
+
+        new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(500), null, "MODEL", true, "mood-review-v1", "m").validate(weekReq);
+        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(501), null, "MODEL", true, "mood-review-v1", "m").validate(weekReq))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(600), null, "MODEL", true, "mood-review-v1", "m").validate(recentReq);
+        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(601), null, "MODEL", true, "mood-review-v1", "m").validate(recentReq))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
