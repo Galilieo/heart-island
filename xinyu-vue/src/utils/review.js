@@ -257,3 +257,43 @@ export function resolveReviewViewState(pageData, options = {}) {
   return 'not_generated'
 }
 
+/** YYYY-MM-DD 转为中文“M 月 D 日”日期文本，供引用按钮无障碍标签与原文浮层共用。 */
+export function formatChineseDate(dateKey) {
+  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) {
+    return ''
+  }
+  const [, month, day] = String(dateKey).split('-').map(Number)
+  return `${month} 月 ${day} 日`
+}
+
+/** 计算桌面端引用原文浮层相对于信纸容器的位置，并在贴近视口底边时翻转到上方。 */
+export function computeCitationPopoverLayout({ letterRect, tagRect, popWidth, popHeight, viewportHeight }) {
+  const tagCenter = tagRect.left + tagRect.width / 2
+  const minLeft = letterRect.left + 16
+  const maxLeft = Math.max(minLeft, letterRect.right - popWidth - 16)
+  const left = Math.min(Math.max(tagCenter - 30, minLeft), maxLeft)
+  const roomBelow = viewportHeight - tagRect.bottom
+  const above = roomBelow < popHeight + 24 && tagRect.top > popHeight + 24
+
+  return {
+    left: left - letterRect.left,
+    top: above ? tagRect.top - letterRect.top - popHeight - 12 : tagRect.bottom - letterRect.top + 12,
+    above,
+    arrowX: tagCenter - left - 6
+  }
+}
+
+/** 从路由 query.record 中提取正整数记录 ID，非法值返回 null。 */
+export function parseRecordQueryParam(value) {
+  const raw = Array.isArray(value) ? value[0] : value
+  const text = String(raw || '').trim()
+  return /^[1-9]\d*$/.test(text) ? text : null
+}
+
+/** 生成去掉 record 参数的 query 浅拷贝，用于首页打开详情后清理 URL。 */
+export function stripRecordQuery(query = {}) {
+  const next = { ...query }
+  delete next.record
+  return next
+}
+

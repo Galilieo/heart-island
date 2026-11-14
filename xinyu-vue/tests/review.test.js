@@ -10,9 +10,13 @@ import {
   mondayOf,
   parseDateKey,
   parseLetterSegments,
+  parseRecordQueryParam,
   resolveReviewViewState,
   shiftWeek,
-  toDateKey
+  stripRecordQuery,
+  toDateKey,
+  computeCitationPopoverLayout,
+  formatChineseDate
 } from '../src/utils/review.js'
 
 test('日期键按本地日历解析，不经过 UTC 偏移', () => {
@@ -217,3 +221,38 @@ test('resolveReviewViewState 覆盖状态表每一行', () => {
   )
 })
 
+test('引用浮层定位：常规在下方、贴近视口底边翻转到上方、水平夹在信纸内部', () => {
+  assert.equal(formatChineseDate('2026-11-04'), '11 月 4 日')
+
+  const below = computeCitationPopoverLayout({
+    letterRect: { left: 100, right: 780, top: 200 },
+    tagRect: { left: 260, width: 40, top: 320, bottom: 340 },
+    popWidth: 320,
+    popHeight: 160,
+    viewportHeight: 800
+  })
+  assert.equal(below.above, false)
+  assert.equal(below.left, 150)
+  assert.equal(below.top, 152)
+  assert.equal(below.arrowX, 24)
+
+  const flipped = computeCitationPopoverLayout({
+    letterRect: { left: 100, right: 780, top: 100 },
+    tagRect: { left: 700, width: 40, top: 680, bottom: 700 },
+    popWidth: 320,
+    popHeight: 180,
+    viewportHeight: 760
+  })
+  assert.equal(flipped.above, true)
+  assert.equal(flipped.left, 344)
+  assert.equal(flipped.top, 388)
+  assert.equal(flipped.arrowX, 270)
+})
+
+test('首页 record 深链解析与过期横幅/近30天重生成展示条件', () => {
+  assert.equal(parseRecordQueryParam('123'), '123')
+  assert.equal(parseRecordQueryParam(['456']), '456')
+  assert.equal(parseRecordQueryParam('0'), null)
+  assert.equal(parseRecordQueryParam('abc'), null)
+  assert.deepEqual(stripRecordQuery({ record: '123', start: '2026-11-02' }), { start: '2026-11-02' })
+})

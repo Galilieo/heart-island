@@ -1,9 +1,10 @@
 <script setup>
 // 回顾回信区：统一承载 12 种页面状态、横线信纸、虚线日期引用浮层与危机纯文字支持卡。
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import Xiaoya from '../ui/Xiaoya.vue'
 import BaseButton from '../ui/BaseButton.vue'
-import { formatRangeShort, parseLetterSegments } from '../../utils/review'
+import ReviewCitationPopover from './ReviewCitationPopover.vue'
+import { formatChineseDate, formatRangeShort, parseLetterSegments } from '../../utils/review'
 
 const props = defineProps({
   viewState: {
@@ -24,12 +25,16 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['generate', 'regenerate', 'retry', 'refresh'])
+const emit = defineEmits(['generate', 'regenerate', 'retry', 'refresh', 'openRecord'])
 
 const SHOWS_LETTER_STATES = new Set(['ready', 'stale_edited', 'failed_with_report'])
 
+const paperRef = ref(null)
+const activeCitation = ref(null)
+
 const report = computed(() => props.pageData?.report || null)
 const sources = computed(() => report.value?.sources || [])
+const sourceByRef = computed(() => new Map(sources.value.map((item) => [item.ref, item])))
 const showLetter = computed(() => Boolean(report.value?.body && SHOWS_LETTER_STATES.has(props.viewState)))
 
 const bodyParagraphs = computed(() => {
@@ -90,6 +95,47 @@ const headerMeta = computed(() => {
   return parts.join(' · ')
 })
 
+function citationAriaLabel(refItem) {
+  const source = sourceByRef.value.get(refItem.ref)
+  const dateText = formatChineseDate(source?.date) || refItem.label
+  return `查看 ${dateText} 的记录`
+}
+
+function toggleCitation(event, citeKey, refCode) {
+  if (activeCitation.value?.citeKey === citeKey) {
+    closeCitation(true)
+    return
+  }
+  const source = sourceByRef.value.get(refCode)
+  if (!source) {
+    return
+  }
+  activeCitation.value = {
+    citeKey,
+    source,
+    anchorEl: event.currentTarget
+  }
+}
+
+function closeCitation(returnFocus = false) {
+  const previousAnchor = activeCitation.value?.anchorEl
+  activeCitation.value = null
+  if (returnFocus && previousAnchor) {
+    nextTick(() => previousAnchor.focus({ preventScroll: true }))
+  }
+}
+
+function handleOpenRecord(recordId) {
+  activeCitation.value = null
+  emit('openRecord', recordId)
+}
+
+watch(
+  () => [props.viewState, report.value?.id, report.value?.revision],
+  () => {
+    activeCitation.value = null
+  }
+)
 </script>
 
 <template>
@@ -171,7 +217,7 @@ const headerMeta = computed(() => {
         <BaseButton variant="soft" size="sm" :loading="submitting" @click="emit('retry')">再试一次</BaseButton>
       </div>
 
-      <article class="review-letter__paper">
+      <article ref="paperRef" class="review-letter__paper">
         <header class="review-letter__header">
           <div class="review-letter__sender">
             <Xiaoya expression="reply" :size="36" />
@@ -224,6 +270,13 @@ const headerMeta = computed(() => {
 
         <footer class="review-letter__sig">—— 小芽</footer>
 
+        <ReviewCitationPopover
+          :source="activeCitation?.source || null"
+          :anchor-el="activeCitation?.anchorEl || null"
+          :paper-el="paperRef"
+          @close="closeCitation"
+          @open-record="handleOpenRecord"
+        />
       </article>
     </div>
   </section>

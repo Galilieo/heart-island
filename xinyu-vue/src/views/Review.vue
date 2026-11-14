@@ -342,6 +342,12 @@ function handleTimeoutRefresh() {
   retryLoad()
 }
 
+function handleOpenRecord(recordId) {
+  if (!recordId) {
+    return
+  }
+  router.push({ path: '/home', query: { record: String(recordId) } })
+}
 
 function handleHistoryMore() {
   if (historyLoading.value || !historyHasMore.value) {

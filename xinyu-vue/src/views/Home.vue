@@ -8,6 +8,7 @@
 // 所有数据/请求逻辑都在 moodStore，本文件不直接调 api 或读 localStorage。
 import { ref, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
@@ -19,6 +20,7 @@ import MoodFilterBar from '../components/mood/MoodFilterBar.vue'
 import MoodTrendPanel from '../components/mood/MoodTrendPanel.vue'
 import MoodMonthCalendar from '../components/mood/MoodMonthCalendar.vue'
 import MoodDetailDialog from '../components/mood/MoodDetailDialog.vue'
+import { parseRecordQueryParam, stripRecordQuery } from '../utils/review'
 import { useMoodStore } from '../stores/mood'
 import { useUserStore } from '../stores/user'
 import { useToast } from '../composables/useToast'
@@ -26,6 +28,8 @@ import { useConfirm } from '../composables/useConfirm'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useMoodPolling } from '../composables/useMoodPolling.js'
 
+const route = useRoute()
+const router = useRouter()
 const moodStore = useMoodStore()
 const userStore = useUserStore()
 const { now } = useMoodPolling(moodStore, userStore)
@@ -188,11 +192,24 @@ async function handleDelete(id) {
   }
 }
 
+async function handleRecordDeepLink() {
+  const recordId = parseRecordQueryParam(route.query.record)
+  if (!recordId) return
+  try {
+    await openDetail(recordId)
+  } finally {
+    if (route.query.record !== undefined) {
+      await router.replace({ path: route.path, query: stripRecordQuery(route.query) }).catch(() => {})
+    }
+  }
+}
+
 onMounted(() => {
   doFetchList()
   doFetchTrend()
   // 月历只影响侧栏展示，失败由 store 静默处理，不阻塞列表与趋势加载。
   moodStore.fetchMonth(month.value.year, month.value.month)
+  handleRecordDeepLink()
 })
 </script>
 
