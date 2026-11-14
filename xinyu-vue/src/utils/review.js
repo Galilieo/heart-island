@@ -297,3 +297,10 @@ export function stripRecordQuery(query = {}) {
   return next
 }
 
+/** 统一周报与近 30 天的过期 UI 分支：周报显示黄色提醒条，近 30 天仅在过期时显示信头重生成按钮。 */
+export function resolveLetterStaleUI({ mode, viewState }) {
+  return {
+    showWeekStaleBanner: mode === 'week' && viewState === 'stale_edited',
+    showRecentRegenerate: mode === 'recent30' && viewState === 'stale_edited'
+  }
+}

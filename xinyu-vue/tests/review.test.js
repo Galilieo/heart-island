@@ -11,6 +11,7 @@ import {
   parseDateKey,
   parseLetterSegments,
   parseRecordQueryParam,
+  resolveLetterStaleUI,
   resolveReviewViewState,
   shiftWeek,
   stripRecordQuery,
@@ -255,4 +256,17 @@ test('首页 record 深链解析与过期横幅/近30天重生成展示条件', 
   assert.equal(parseRecordQueryParam('0'), null)
   assert.equal(parseRecordQueryParam('abc'), null)
   assert.deepEqual(stripRecordQuery({ record: '123', start: '2026-11-02' }), { start: '2026-11-02' })
+
+  assert.deepEqual(resolveLetterStaleUI({ mode: 'week', viewState: 'stale_edited' }), {
+    showWeekStaleBanner: true,
+    showRecentRegenerate: false
+  })
+  assert.deepEqual(resolveLetterStaleUI({ mode: 'recent30', viewState: 'stale_edited' }), {
+    showWeekStaleBanner: false,
+    showRecentRegenerate: true
+  })
+  assert.deepEqual(resolveLetterStaleUI({ mode: 'recent30', viewState: 'ready' }), {
+    showWeekStaleBanner: false,
+    showRecentRegenerate: false
+  })
 })

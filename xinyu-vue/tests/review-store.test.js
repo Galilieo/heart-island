@@ -175,3 +175,41 @@ test('fetchHistory 支持首页替换、翻页追加和 reset 清空', async () 
   assert.equal(store.weekStats, null)
 })
 
+test('切换周次后，先发后到的 generateWeek 响应与报错刷新不能串台覆盖新周', async () => {
+  const genDeferred = deferred()
+  const errDeferred = deferred()
+
+  request.defaults.adapter = async (config) => {
+    if (config.url === '/mood/report/week/generate') {
+      return genDeferred.promise
+    }
+    if (config.url === '/mood/ai-job/77/retry') {
+      return errDeferred.promise
+    }
+    if (config.url === '/mood/report/week') {
+      const start = config.params?.start || '2026-11-02'
+      return ok(config, samplePage({ rangeStart: start, failed: { id: '7', status: 'failed', jobId: '77' } }))
+    }
+    return ok(config, samplePage())
+  }
+
+  const store = useReviewStore()
+  await store.fetchWeek('2026-11-02')
+
+  const pendingGen = store.generateWeek('2026-11-02')
+  await store.fetchWeek('2026-10-26')
+  assert.equal(store.weekStats.rangeStart, '2026-10-26')
+
+  genDeferred.resolve(
+    ok({ url: '/mood/report/week/generate' }, { id: '10', status: 'queued', jobId: '88', rangeStart: '2026-11-02' })
+  )
+  await pendingGen
+  assert.equal(store.weekStats.rangeStart, '2026-10-26')
+  assert.equal(store.weekStats.active, null)
+
+  const pendingRetry = store.retryJob('77', 'week', '2026-10-26')
+  await store.fetchWeek('2026-10-19')
+  errDeferred.reject(new Error('network fail'))
+  await pendingRetry
+  assert.equal(store.weekStats.rangeStart, '2026-10-19')
+})

@@ -234,10 +234,12 @@ watch(
     }
     const parsed = parseQueryStart(nextStart)
     if (!parsed) {
+      stopPolling()
       loadWeek('')
       return
     }
     if (parsed !== weekStart.value) {
+      stopPolling()
       loadWeek(parsed)
     }
   }
@@ -316,13 +318,13 @@ async function handleGenerate(regenerate = false) {
       : await reviewStore.generateRecent30()
 
   if (!res.ok) {
-    if (!res.skipped) {
+    if (!res.skipped && !res.stale) {
       toast.error(res.userMessage || '生成失败，请稍后再试')
     }
     return
   }
 
-  if (mode.value === 'week') {
+  if (mode.value === 'week' && !res.stale) {
     reviewStore.fetchHistory(1).catch(() => {})
   }
 }
@@ -333,7 +335,7 @@ async function handleJobRetry() {
     return
   }
   const res = await reviewStore.retryJob(jobId, mode.value, weekStart.value)
-  if (!res.ok && !res.skipped) {
+  if (!res.ok && !res.skipped && !res.stale) {
     toast.error(res.userMessage || '再试一次没成功')
   }
 }

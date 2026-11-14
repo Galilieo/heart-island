@@ -4,7 +4,12 @@ import { computed, nextTick, ref, watch } from 'vue'
 import Xiaoya from '../ui/Xiaoya.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import ReviewCitationPopover from './ReviewCitationPopover.vue'
-import { formatChineseDate, formatRangeShort, parseLetterSegments } from '../../utils/review'
+import {
+  formatChineseDate,
+  formatRangeShort,
+  parseLetterSegments,
+  resolveLetterStaleUI
+} from '../../utils/review'
 
 const props = defineProps({
   viewState: {
@@ -35,6 +40,7 @@ const activeCitation = ref(null)
 const report = computed(() => props.pageData?.report || null)
 const sources = computed(() => report.value?.sources || [])
 const sourceByRef = computed(() => new Map(sources.value.map((item) => [item.ref, item])))
+const staleUi = computed(() => resolveLetterStaleUI({ mode: props.mode, viewState: props.viewState }))
 const showLetter = computed(() => Boolean(report.value?.body && SHOWS_LETTER_STATES.has(props.viewState)))
 
 const bodyParagraphs = computed(() => {
@@ -207,7 +213,7 @@ watch(
 
     <!-- 已有信件正文（含周报过期与 failed_with_report 顶部温和提醒条） -->
     <div v-else class="review-letter__paper-wrap">
-      <div v-if="viewState === 'stale_edited'" class="review-letter__banner review-letter__banner--warn">
+      <div v-if="staleUi.showWeekStaleBanner" class="review-letter__banner review-letter__banner--warn">
         <span>记录有修改或新增，这封信写在那之前</span>
         <BaseButton variant="soft" size="sm" :loading="submitting" @click="emit('regenerate')">重新生成</BaseButton>
       </div>
@@ -228,7 +234,7 @@ watch(
           </div>
 
           <BaseButton
-            v-if="mode === 'recent30'"
+            v-if="staleUi.showRecentRegenerate"
             variant="ghost"
             size="sm"
             :loading="submitting"

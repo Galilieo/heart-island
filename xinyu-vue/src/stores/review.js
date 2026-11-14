@@ -134,22 +134,49 @@ export const useReviewStore = defineStore('review', () => {
     await fetchWeek(weekStart)
   }
 
+  function snapshotTarget(mode, weekStart) {
+    return {
+      mode,
+      weekStart,
+      seq: mode === 'recent30' ? recent30RequestSeq : weekRequestSeq
+    }
+  }
+
+  function isSameTarget(target) {
+    if (target.mode === 'recent30') {
+      return target.seq === recent30RequestSeq
+    }
+    if (target.seq !== weekRequestSeq) {
+      return false
+    }
+    if (!target.weekStart || !weekStats.value?.rangeStart) {
+      return true
+    }
+    return weekStats.value.rangeStart === target.weekStart
+  }
 
   async function runGenerateAction(mode, weekStart, requestFn) {
     if (submitting.value) {
       return { ok: false, skipped: true }
     }
+    const target = snapshotTarget(mode, weekStart)
     submitting.value = true
     actionError.value = ''
     pollingTimedOut.value = false
     try {
       const res = await requestFn()
+      if (!isSameTarget(target)) {
+        return { ...res, stale: true }
+      }
       if (res.ok && res.data) {
         applyReportToPage(mode === 'recent30' ? recent30Stats : weekStats, res.data)
       }
       return res
     } catch (error) {
       const message = formatReviewError(error)
+      if (!isSameTarget(target)) {
+        return { ok: false, stale: true, error, userMessage: message }
+      }
       actionError.value = message
       await refreshMode(mode, weekStart).catch(() => {})
       return { ok: false, error, userMessage: message }
@@ -172,11 +199,15 @@ export const useReviewStore = defineStore('review', () => {
     if (submitting.value || !jobId) {
       return { ok: false, skipped: true }
     }
+    const target = snapshotTarget(mode, weekStart)
     submitting.value = true
     actionError.value = ''
     pollingTimedOut.value = false
     try {
       const res = await moodApi.retryAiJob(jobId)
+      if (!isSameTarget(target)) {
+        return { ...res, stale: true }
+      }
       if (res.ok) {
         const targetRef = mode === 'recent30' ? recent30Stats : weekStats
         const currentFailed = targetRef.value?.failed
@@ -196,6 +227,9 @@ export const useReviewStore = defineStore('review', () => {
       return res
     } catch (error) {
       const message = formatReviewError(error)
+      if (!isSameTarget(target)) {
+        return { ok: false, stale: true, error, userMessage: message }
+      }
       actionError.value = message
       await refreshMode(mode, weekStart).catch(() => {})
       return { ok: false, error, userMessage: message }
