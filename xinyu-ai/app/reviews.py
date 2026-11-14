@@ -100,7 +100,8 @@ def validate_output(raw: str, request: ReviewRequest) -> ReviewText:
     if text.ps is not None and (not text.ps.strip() or utf16_length(text.ps) > MAX_PS_UTF16):
         raise ValueError('invalid_ps')
     allowed = {record.ref for record in request.records}
-    record_text = ''.join(record.content for record in request.records).casefold()
+    # 用换行分隔，避免上一条结尾和下一条开头拼出原文没有的词，例如“停电”+“话剧”。
+    record_text = '\n'.join(record.content for record in request.records).casefold()
     for value in (text.body, text.ps or ''):
         if TRUNCATION_MARKER in value or TRUNCATION_MARKER_WORD in value:
             raise ValueError('invalid_output')

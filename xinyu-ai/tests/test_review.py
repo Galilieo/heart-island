@@ -102,6 +102,20 @@ async def test_contact_word_introduced_by_model_is_rejected(body, ps):
     assert response.json()['code'] == 'invalid_model_response'
 
 
+async def test_contact_word_spliced_across_records_is_rejected():
+    import json
+    data = review_payload(ai_enabled_total=2, records=[
+        {"ref": "r1", "date": "2026-11-03", "weekday": "TUESDAY", "mood_type": "平静", "content": "晚上楼下停电"},
+        {"ref": "r2", "date": "2026-11-04", "weekday": "WEDNESDAY", "mood_type": "开心", "content": "话剧票抢到了"},
+    ])
+    data['stats']['total'] = 2
+    provider = StubProvider(json.dumps({'body': '停电时给朋友打了电话{{r1}}。', 'ps': None}, ensure_ascii=False))
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post('/internal/v1/mood-reviews', json=data, headers=AUTH)
+    assert response.status_code == 502
+    assert response.json()['code'] == 'invalid_model_response'
+
+
 @pytest.mark.parametrize('body', ['看到了那条热线{{r1}}。', '记下了 400-123-4567{{r1}}。', '可以拨打这个号码{{r1}}。'])
 async def test_hotline_and_numbers_are_rejected_even_when_in_records(body):
     data, provider = contact_review('地铁里看到求助热线 400-123-4567，可以拨打这个号码', body)
