@@ -34,14 +34,15 @@ const observationMessage = computed(() => {
   return ''
 })
 
-// 仅用于展示：排队 / 生成中的状态配一个小芽“思考”表情；不参与任何状态判断
+// 仅用于展示：排队 / 生成中的状态配一个小芽“思考”表情；不参与任何状态判断。
+// 小于 36px 时头顶的“…”气泡和挑眉看不清，会被看成普通笑脸。
 const isThinking = computed(() => ['queued', 'running'].includes(props.mood.aiReplyState))
 </script>
 
 <template>
   <div class="ai-status" role="status" aria-live="polite">
     <p class="ai-status__message">
-      <Xiaoya v-if="isThinking" expression="thinking" animated :size="24" />
+      <Xiaoya v-if="isThinking" expression="thinking" animated :size="36" />
       <span>{{ messages[mood.aiReplyState] || '暂无 AI 回复。' }}</span>
     </p>
     <p v-if="observationMessage">{{ observationMessage }}</p>
