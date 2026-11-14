@@ -39,7 +39,7 @@ public class MoodReviewService {
     public static final String TASK_TYPE = "MOOD_REVIEW";
     private static final int MAX_QUEUED = 100;
     private static final int MAX_USER_ACTIVE = 3;
-    private static final int HISTORY_PAGE_SIZE = 20;
+    private static final int HISTORY_PAGE_SIZE = 5;
     /** 实施方案5.3节与2026-11-14预算修订：最多60条、正文合计12000 UTF-16单元、Python最多40秒。 */
     private static final int MAX_SENT_RECORDS = 60;
     /** 与 Python xinyu-ai/app/reviews.py 的 MAX_TOTAL_CONTENT_UTF16 保持同值。 */

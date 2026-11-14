@@ -482,6 +482,37 @@ class MoodReviewPersistenceIT {
         assertThat(reviews.get(user, "WEEK", "2026-11-02").report().sources()).isEmpty();
     }
 
+    @Test
+    void historyDeduplicatesRevisionsPerWeekAndPaginatesByFive() {
+        long user = ++nextUser;
+        jdbc.update("INSERT INTO user(id) VALUES (?)", user);
+        java.time.LocalDate baseMonday = java.time.LocalDate.of(2026, 9, 28);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        for (int week = 0; week < 6; week++) {
+            java.time.LocalDate weekStart = baseMonday.plusWeeks(week);
+            jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'平静',?,1,1,?)",
+                    user, "第" + week + "周记录", weekStart.atTime(10, 0));
+            var generated = reviews.generate(user, "WEEK", weekStart.toString(), false);
+            var claimed = tx.execute(status -> jobsService().claimNext());
+            assertThat(claimed.getId()).isEqualTo(generated.jobId());
+            var prepared = reviews.prepare(claimed.getId(), 1, claimed.getRequestId());
+            assertThat(reviews.complete(claimed.getId(), 1, claimed.getRequestId(),
+                    response(prepared.request(), "第" + week + "周{{r1}}。"))).isTrue();
+        }
+        String newestWeek = baseMonday.plusWeeks(5).toString();
+        var regen = reviews.generate(user, "WEEK", newestWeek, true);
+        assertThat(regen.revision()).isEqualTo(2);
+
+        var page1 = reviews.history(user, 1);
+        var page2 = reviews.history(user, 2);
+
+        assertThat(page1).hasSize(5);
+        assertThat(page1.get(0).rangeStart()).isEqualTo(baseMonday.plusWeeks(5));
+        assertThat(page1.get(0).revision()).isEqualTo(2);
+        assertThat(page1.stream().map(com.xinyu.service.MoodReviewService.History::rangeStart).distinct()).hasSize(5);
+        assertThat(page2).hasSize(1);
+        assertThat(page2.get(0).rangeStart()).isEqualTo(baseMonday);
+    }
 
     private static boolean hasLoneSurrogate(String text) {
         for (int i = 0; i < text.length(); i++) {

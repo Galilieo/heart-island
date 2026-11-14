@@ -72,7 +72,13 @@ public class MoodReviewMapper {
     }
 
     public List<MoodReview> history(long userId, int limit, int offset) {
-        return jdbc.query("SELECT * FROM mood_review WHERE user_id=? AND review_type='WEEK' ORDER BY range_start DESC,revision DESC LIMIT ? OFFSET ?", ROW, userId, limit, offset);
+        // 每周只展示最新版本号的一条记录，避免重生成或失败重试产生同周重复信封。
+        String sql = "SELECT r.* FROM mood_review r "
+                + "JOIN (SELECT range_start, MAX(revision) AS max_revision FROM mood_review "
+                + "WHERE user_id=? AND review_type='WEEK' GROUP BY range_start) latest "
+                + "ON r.user_id=? AND r.review_type='WEEK' AND r.range_start=latest.range_start AND r.revision=latest.max_revision "
+                + "ORDER BY r.range_start DESC LIMIT ? OFFSET ?";
+        return jdbc.query(sql, ROW, userId, userId, limit, offset);
     }
 
     /** 状态条件由固定布尔参数选择，不接受任意 SQL 输入。 */

@@ -237,4 +237,22 @@ class MoodReviewServiceTests {
         assertThat(serialized).contains("\"sources\":[", "\"ref\":\"r1\"", "\"recordId\":101");
     }
 
+    @Test
+    void historyUsesPageSizeFiveForBothLimitAndOffset() {
+        MoodReviewMapper reports = mock(MoodReviewMapper.class);
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        MoodReviewService service = new MoodReviewService(
+                reports,
+                new MoodReviewStatsService(mock(MoodRecordMapper.class), CLOCK),
+                CLOCK,
+                manager,
+                new AiJobAdmission(manager));
+        when(reports.history(1L, 5, 0)).thenReturn(List.of());
+        when(reports.history(1L, 5, 5)).thenReturn(List.of());
+
+        assertThat(service.history(1L, 1)).isEmpty();
+        assertThat(service.history(1L, 2)).isEmpty();
+        org.mockito.Mockito.verify(reports).history(1L, 5, 0);
+        org.mockito.Mockito.verify(reports).history(1L, 5, 5);
+    }
 }
