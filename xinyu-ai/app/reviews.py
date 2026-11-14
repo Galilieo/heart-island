@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from app.contracts import Contract, Correlation, MAX_CONTENT_UTF16, MoodType, utf16_length
 
+# mood-review-v1 对应的提示词文件是 evals/prompts/mood-review-v1a.txt
 TEMPLATE_VERSION = 'mood-review-v1'
 # 与 Java MoodReviewService.MAX_TOTAL_CONTENT_UTF16 保持同值。
 MAX_TOTAL_CONTENT_UTF16 = 12000

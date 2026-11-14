@@ -181,9 +181,36 @@ def test_c7_no_leak():
 
 def test_c8_machine_tone_hit():
     assert check_c8_machine_tone_hit(ReviewText(body="加班到十点是真的累{{r1}}。", ps=None)) is False
+    assert check_c8_machine_tone_hit(ReviewText(body="周一改方案到半夜{{r1}}，周五去吃了火锅{{r2}}。", ps=None)) is False
     assert check_c8_machine_tone_hit(ReviewText(body="这样的一周本身就挺好的{{r1}}。", ps=None)) is True
     assert check_c8_machine_tone_hit(ReviewText(body="累了就慢慢来{{r1}}。", ps=None)) is True
     assert check_c8_machine_tone_hit(ReviewText(body="抱抱你{{r1}}。", ps=None)) is True
+    # v1a 新增机器腔句式覆盖
+    assert check_c8_machine_tone_hit(ReviewText(body="听起来你很累{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="看得出来你很喜欢这盆花{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="买了向日葵{{r1}}，这个心思挺好的。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="周五吃桂花糕，这个开心我懂{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="剪了短发{{r1}}，听着就很清爽。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="煮了热汤面{{r1}}，挺好。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="这份坚持不容易{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="都是些小开心{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="这些小事你都记下来了{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="感觉这个月就是在忙和歇之间来回{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="能连着这么多天都这样过，真的很稳{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="也算把前面的累找补回来一点{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="这不是运气，而是你撑下来的{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="周六散步——其实挺松快{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="记住“风吹过树梢就是答案”{{r1}}。", ps=None)) is True
+    assert check_c8_machine_tone_hit(ReviewText(body="有亮的时候：周一煮蛋{{r1}}，周四看霞{{r2}}，周六吃草莓。", ps=None)) is True
+
+
+def test_ref_count_le_4_recorded():
+    sample = make_sample()
+    req = make_request(count=5)
+    ok = run_review_checks(sample, req, '{"body":"甲{{r1}}乙{{r2}}丙{{r3}}丁{{r4}}。","ps":null}', "MODEL", True)
+    over = run_review_checks(sample, req, '{"body":"甲{{r1}}乙{{r2}}丙{{r3}}丁{{r4}}戊{{r5}}。","ps":null}', "MODEL", True)
+    assert ok["ref_count"] == 4 and ok["ref_count_le_4"] is True
+    assert over["ref_count"] == 5 and over["ref_count_le_4"] is False
 
 
 def test_c9_fabricated_causality_hit():

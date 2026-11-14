@@ -129,7 +129,7 @@ def test_messages_use_review_prompt_for_reviews_and_preserve_mood_reply_prompt()
     from app.review_prompt import REVIEW_SYSTEM_PROMPT
     from app.reviews import ReviewRequest
 
-    prompt_file = Path(__file__).resolve().parents[1] / 'evals/prompts/mood-review-v1.txt'
+    prompt_file = Path(__file__).resolve().parents[1] / 'evals/prompts/mood-review-v1a.txt'
     assert REVIEW_SYSTEM_PROMPT == prompt_file.read_text(encoding='utf-8').strip()
 
     review_req = ReviewRequest.model_validate(review_payload())

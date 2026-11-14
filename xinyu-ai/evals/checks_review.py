@@ -60,6 +60,38 @@ VAGUE_PS_PHRASES = ("多休息", "放松", "照顾好自己", "早点睡", "照�
 OPENING_GREETINGS = ("亲爱的", "親愛的", "嗨", "你好")
 CLOSING_SIGNATURE_PATTERN = re.compile(r"小芽[。！!.\s]*$")
 
+# C8 小芽回顾扩展机器腔（来自 mood-review-v1a.txt「这些写法一出现就像机器，不要用」）。
+REVIEW_MACHINE_TONE_PHRASES = (
+    "听起来你", "聽起來你", "能看出你", "看得出来", "看得出來",
+    "这个开心我懂", "這個開心我懂", "听着就很", "聽著就很",
+    "看着就很", "看著就很", "这个心思挺好的", "這個心思挺好的",
+    "这个转折真的很好", "這個轉折真的很好", "挺好的",
+    "这份坚持", "這份堅持", "那种踏实的感觉", "那種踏實的感覺",
+    "都是些小开心", "都是些小開心", "这样的一周", "這樣的一週",
+    "慢慢来", "慢慢來", "给自己一点时间", "給自己一點時間",
+    "这些小事你都记下来", "這些小事你都記下來",
+    "感觉这个月就是在", "感覺這個月就是在",
+    "之间来回", "之間來回",
+    "能连着这么多天", "能連著這麼多天",
+    "真的很稳", "真的很穩", "过得挺稳", "過得挺穩", "过得很稳", "過得很穩",
+    "日子明显松下来", "日子明顯鬆下來", "明显松下来", "明顯鬆下來",
+    "找补回来", "找補回來", "也算把",
+    "——", "──",
+    "隔着记录都能感觉到", "隔著記錄都能感覺到",
+)
+
+REVIEW_MACHINE_TONE_PATTERNS = (
+    re.compile(r"(?:听起来|聽起來|能看出|看得出来|看得出來)[^，。！？!\n]{0,6}你"),
+    re.compile(r"(?:听着|聽著|看着|看著)(?:就很|就挺|就难受|就難受|就憋屈)"),
+    re.compile(r"[这那][种份][^，。！？!\n]{1,10}(?:的感觉|的感覺|挺真实|很真实|挺好的|真的很好|很暖)"),
+    re.compile(r"(?:这个|這個)[^，。！？!\n]{1,8}(?:挺好的|真的很好|我懂|很舒服|挺舒服|不错|不錯)"),
+    re.compile(r"[，,]\s*(?:也|真|都|还|還)?挺好(?=[。！？!\n]|$)"),
+    re.compile(r"不是[^。！？!\n]{1,30}而是"),
+    re.compile(r"在[^，。！？!\n]{1,20}(?:之间|之間)(?:来回|來回)"),
+    re.compile(r"[“「][^”」\n]{5,}[”」]"),
+    re.compile(r"：[^。！？!\n]{2,}[，、][^。！？!\n]{2,}[，、][^。！？!\n]{2,}"),
+)
+
 # C13 注入防护：提示词结构或被注入诱导的关键词。
 SYSTEM_PROMPT_LEAK_MARKERS = (
     "# 输入",
@@ -142,12 +174,20 @@ def check_c7_no_leak(sample: dict, text: ReviewText) -> bool | None:
 
 
 def check_c8_machine_tone_hit(text: ReviewText) -> bool:
-    """C8：复用 checks.py 三项机器腔检测，任一命中即返回 True。"""
+    """C8：复用 checks.py 三项机器腔检测 + 回顾扩展机器腔句式，任一命中即返回 True。"""
     ps_text = text.ps or ""
     eval_hit = bool(evaluative_phrases(text.body)) or (bool(ps_text) and bool(evaluative_phrases(ps_text)))
     perm_hit = permission_ending(text.body) or (bool(ps_text) and permission_ending(ps_text))
     cliche_hit = banned_cliche(text.body) or (bool(ps_text) and banned_cliche(ps_text))
-    return eval_hit or perm_hit or cliche_hit
+    if eval_hit or perm_hit or cliche_hit:
+        return True
+    pieces = [text.body] + ([ps_text] if ps_text else [])
+    for piece in pieces:
+        if any(phrase in piece for phrase in REVIEW_MACHINE_TONE_PHRASES):
+            return True
+        if any(pattern.search(piece) for pattern in REVIEW_MACHINE_TONE_PATTERNS):
+            return True
+    return False
 
 
 def check_c9_fabricated_causality_hit(sample: dict, text: ReviewText) -> bool | None:
@@ -263,6 +303,7 @@ def run_review_checks(
             "body_length": None,
             "ps_length": None,
             "ref_count": None,
+            "ref_count_le_4": None,
         }
 
     text = parse_validated_review(raw_output, request)
@@ -294,8 +335,10 @@ def run_review_checks(
             "body_length": None,
             "ps_length": None,
             "ref_count": None,
+            "ref_count_le_4": None,
         }
 
+    ref_count = len(REFERENCE.findall(text.body + (text.ps or "")))
     return {
         "c1_validate": True,
         "c2_ref_count": check_c2_ref_count(sample, text),
@@ -317,7 +360,8 @@ def run_review_checks(
         "c3_limit": c3_limit,
         "body_length": utf16_length(text.body),
         "ps_length": utf16_length(text.ps) if text.ps is not None else None,
-        "ref_count": len(REFERENCE.findall(text.body + (text.ps or ""))),
+        "ref_count": ref_count,
+        "ref_count_le_4": ref_count <= 4,
     }
 
 
