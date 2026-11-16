@@ -161,6 +161,22 @@ class MoodReviewServiceTests {
     }
 
     @Test
+    void responseValidateRejectsBlankPs() {
+        var entry = new ReviewAiRequest.Entry("r1", "2026-11-02", "周一", "平静", "散步");
+        var stats = new MoodReviewStatsVO(LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 9), 1, 1, List.of(), List.of());
+        var req = new ReviewAiRequest("req-1", "10", 1, "1", "WEEK", List.of(entry), 1, stats, 40000);
+
+        new ReviewAiResponse("req-1", "10", 1, "1", "温柔回顾", "好好休息", "MODEL", true, "mood-review-v1", "m")
+                .validate(req);
+        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "温柔回顾", "", "MODEL", true, "mood-review-v1", "m")
+                .validate(req))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "温柔回顾", "   ", "MODEL", true, "mood-review-v1", "m")
+                .validate(req))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void getReconstructsCitedSourcesInRefOrderAndExposesLatestFailedAttempt() throws Exception {
         MoodReviewMapper reports = mock(MoodReviewMapper.class);
         MoodRecordMapper recordMapper = mock(MoodRecordMapper.class);

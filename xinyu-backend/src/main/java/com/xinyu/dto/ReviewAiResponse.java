@@ -33,7 +33,8 @@ public record ReviewAiResponse(
         boolean support = "SUPPORT".equals(resultKind) && !modelCalled && modelName == null && ps == null;
         int limit = "WEEK".equals(request.reviewType()) ? MAX_WEEK_BODY_UTF16 : MAX_RECENT_BODY_UTF16;
         if (!correlation || !"mood-review-v1".equals(templateVersion) || (!model && !support)
-                || body == null || body.isBlank() || body.length() > limit || (ps != null && ps.length() > MAX_PS_UTF16)) {
+                || body == null || body.isBlank() || body.length() > limit
+                || (ps != null && (ps.isBlank() || ps.length() > MAX_PS_UTF16))) {
             throw new IllegalArgumentException(INVALID_MODEL_RESPONSE);
         }
         Set<String> allowed = request.records().stream().map(ReviewAiRequest.Entry::ref).collect(java.util.stream.Collectors.toSet());
