@@ -74,10 +74,14 @@ public class CommunityPostController {
 
         Long userId = jwtUtil.getUserId(token);
 
-        Boolean success = communityPostService.add(dto,userId);
+        CommunityPostService.PostSaveResult result = communityPostService.add(dto, userId);
 
-        if(success){
-            return Result.success("发布成功");
+        // 额度不足时帖子已保存、只是没生成小芽回复，提示里带一句说明（契约 2.4）。
+        // 用两参 success 把文案放进 message：单参重载会把它当 data，前端拿到的 message 恒为默认值。
+        if (result.saved()) {
+            return Result.success(result.aiReplyLimited()
+                    ? "发布成功，小芽这会儿回复不过来，稍后可以编辑重新生成"
+                    : "发布成功", null);
         }
         return Result.error("发布失败");
     }
@@ -158,10 +162,12 @@ public class CommunityPostController {
         }
 
         Long userId = jwtUtil.getUserId(token);
-        Boolean success = communityPostService.update(dto, userId);
+        CommunityPostService.PostSaveResult result = communityPostService.update(dto, userId);
 
-        if (success) {
-            return Result.success("修改成功");
+        if (result.saved()) {
+            return Result.success(result.aiReplyLimited()
+                    ? "修改成功，小芽这会儿回复不过来，稍后可以再次编辑重新生成"
+                    : "修改成功", null);
         }
 
         return Result.error("修改失败");

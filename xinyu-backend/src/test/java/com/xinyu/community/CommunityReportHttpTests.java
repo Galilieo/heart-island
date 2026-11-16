@@ -65,6 +65,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class CommunityReportHttpTests {
 
+    @MockitoBean com.xinyu.ratelimit.RateLimiter rateLimiter;
+
     private static final long AUTHOR_ID = 101L;
     private static final long OTHER_USER_ID = 202L;
     private static final long ADMIN_ID = 303L;

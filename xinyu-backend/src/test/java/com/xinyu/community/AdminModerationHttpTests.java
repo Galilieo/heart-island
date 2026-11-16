@@ -51,6 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class AdminModerationHttpTests {
 
+    @MockitoBean com.xinyu.ratelimit.RateLimiter rateLimiter;
+
     private static final long ADMIN_ID = 303L;
     private static final long POST_ID = 11L;
     private static final long REPLY_ID = 21L;

@@ -105,7 +105,7 @@ class CommunityVisibilityTests {
         editDto.setTopicId(1L);
         editDto.setMoodType("平静");
         editDto.setContent("试图修改被隐藏帖子");
-        assertThat(postService.update(editDto, AUTHOR_ID)).isFalse();
+        assertThat(postService.update(editDto, AUTHOR_ID).saved()).isFalse();
     }
 
     @Test

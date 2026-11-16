@@ -24,6 +24,8 @@ import com.xinyu.vo.AdminPostVO;
 import com.xinyu.entity.Topic;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.dto.AiReplyResult;
+import com.xinyu.ratelimit.RateLimiter;
+import com.xinyu.ratelimit.RateLimitType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -31,6 +33,18 @@ import org.springframework.dao.DataAccessException;
 @Service
 public class CommunityPostService {
     private static final Logger logger = LoggerFactory.getLogger(CommunityPostService.class);
+
+    /** 发布 / 编辑结果：帖子一律照常保存；aiReplyLimited 表示本次因额度不足未发起生成。 */
+    public record PostSaveResult(boolean saved, boolean aiReplyLimited) {
+
+        public static PostSaveResult saved(boolean aiReplyLimited) {
+            return new PostSaveResult(true, aiReplyLimited);
+        }
+
+        public static PostSaveResult failed() {
+            return new PostSaveResult(false, false);
+        }
+    }
 
     @Autowired
     private CommunityPostMapper communityPostMapper;
@@ -52,6 +66,9 @@ public class CommunityPostService {
 
     @Autowired(required = false)
     private ContentReportMapper contentReportMapper;
+
+    @Autowired
+    private RateLimiter rateLimiter;
 
     public List<CommunityPost> listByTopicId(Long topicId, Long userId, Boolean mine, String sort) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
@@ -251,9 +268,9 @@ public class CommunityPostService {
         return topic.getStatus() != null && topic.getStatus() == 1;
     }
 
-    public Boolean add(CommunityPostAddDTO dto, Long userId) {
+    public PostSaveResult add(CommunityPostAddDTO dto, Long userId) {
         if (!isTopicAvailable(dto.getTopicId())) {
-            return false;
+            return PostSaveResult.failed();
         }
         CommunityPost post = new CommunityPost();
 
@@ -270,16 +287,20 @@ public class CommunityPostService {
         post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
         int rows = communityPostMapper.insert(post);
         if (rows <= 0) {
-            return false;
+            return PostSaveResult.failed();
         }
 
         // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
         // 用户选择不要 AI 回复时跳过生成（也不写调用日志）。
-        if (needAiReply) {
+        boolean quotaAllowed = needAiReply && reserveAiReplyQuota(userId);
+
+        // 额度不足时帖子照常保存、不发起生成（契约 2.4）：ai_reply 保持 NULL，
+        // 不写失败兜底文案，也不记成生成失败。
+        if (quotaAllowed) {
             attachAiReply(post);
         }
 
-        return true;
+        return PostSaveResult.saved(needAiReply && !quotaAllowed);
     }
 
     @Transactional
@@ -307,19 +328,19 @@ public class CommunityPostService {
         return communityPostMapper.update(null, removal) > 0;
     }
 
-    public Boolean update(CommunityPostUpdateDTO dto, Long userId) {
+    public PostSaveResult update(CommunityPostUpdateDTO dto, Long userId) {
         if(!isTopicAvailable(dto.getTopicId())){
-            return false;
+            return PostSaveResult.failed();
         }
 
         CommunityPost post = communityPostMapper.selectById(dto.getId());
 
         if (post == null || !post.isVisible()) {
-            return false;
+            return PostSaveResult.failed();
         }
 
         if (!post.getUserId().equals(userId)) {
-            return false;
+            return PostSaveResult.failed();
         }
 
         post.setTopicId(dto.getTopicId());
@@ -341,18 +362,26 @@ public class CommunityPostService {
         edit.set("ai_generation_id", post.getAiGenerationId());
         int rows = communityPostMapper.update(null, edit);
         if (rows <= 0) {
-            return false;
+            return PostSaveResult.failed();
         }
 
         if (!needAiReply) {
             // 旧回复已经清除；不生成，也不写调用日志。
-            return true;
+            return PostSaveResult.saved(false);
         }
 
-        // 内容已落库，AI 回复同步重新生成
-        attachAiReply(post);
+        // 内容已落库，AI 回复同步重新生成；额度不足时不发起、旧回复已被编辑清掉。
+        boolean quotaAllowed = reserveAiReplyQuota(userId);
+        if (quotaAllowed) {
+            attachAiReply(post);
+        }
 
-        return true;
+        return PostSaveResult.saved(!quotaAllowed);
+    }
+
+    /** 社区同步生成的额度预扣；社区调用直连供应商、无危机分流，每次生成都消耗额度（契约 2.1）。 */
+    private boolean reserveAiReplyQuota(Long userId) {
+        return rateLimiter.check(RateLimitType.COMMUNITY_POST, userId).allowed();
     }
 
     @Transactional

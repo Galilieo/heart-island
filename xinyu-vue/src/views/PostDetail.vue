@@ -122,6 +122,8 @@ async function handleSavePost(payload) {
   if (res.ok) {
     editOpen.value = false
     if (res.refreshFailed) toast.warn('帖子已保存，页面刷新失败，请刷新查看')
+    // 额度不足时帖子已保存但没重新生成小芽回复；后端会把提示延长，成功 toast 后补一句。
+    if (res.message && res.message !== '修改成功') toast.info(res.message)
   }
 }
 
