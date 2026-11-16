@@ -34,6 +34,10 @@ defineProps({
     type: Boolean,
     default: false
   },
+  submittingAction: {
+    type: String,
+    default: ''
+  },
   selectedHideReason: {
     type: String,
     default: 'ILLEGAL'
@@ -158,7 +162,7 @@ const emit = defineEmits([
           <BaseButton
             variant="secondary"
             :disabled="submitting"
-            :loading="submitting"
+            :loading="submittingAction === 'DISMISS'"
             @click="emit('submit', 'DISMISS')"
           >
             {{ detail.currentStatus === 0 ? '关闭举报' : '不违规' }}
@@ -167,7 +171,7 @@ const emit = defineEmits([
             v-if="detail.currentStatus !== 0"
             variant="danger"
             :disabled="submitting"
-            :loading="submitting"
+            :loading="submittingAction === 'HIDE'"
             @click="emit('submit', 'HIDE')"
           >
             隐藏内容

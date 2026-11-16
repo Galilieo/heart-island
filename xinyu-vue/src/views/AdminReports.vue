@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminDataTable from '../components/admin/AdminDataTable.vue'
@@ -10,10 +10,10 @@ import BaseTag from '../components/ui/BaseTag.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
+import { useAdminReportHandle } from '../composables/useAdminReportHandle'
 import { useToast } from '../composables/useToast'
 import { useAdminStore } from '../stores/admin'
 import {
-  MAX_HANDLE_NOTE_LENGTH,
   reasonLabel,
   adminReportResultMeta,
   formatReportTime
@@ -31,12 +31,18 @@ const {
   pendingReportCount
 } = storeToRefs(adminStore)
 
-const detailVisible = ref(false)
-const detailLoading = ref(false)
-const currentDetail = ref(null)
-const selectedHideReason = ref('ILLEGAL')
-const handleNote = ref('')
-const submitting = ref(false)
+const {
+  detailVisible,
+  detailLoading,
+  currentDetail,
+  selectedHideReason,
+  handleNote,
+  submitting,
+  submittingAction,
+  openDetail,
+  closeDetail,
+  submitHandle
+} = useAdminReportHandle({ adminStore, toast })
 
 const isPendingTab = computed(() => reportFilters.value.status !== 'DONE')
 
@@ -143,62 +149,6 @@ function switchTab(tab) {
 function handlePageChange(pageNum) {
   adminStore.changeReportPage(pageNum)
 }
-
-async function openDetail(row) {
-  detailVisible.value = true
-  detailLoading.value = true
-  currentDetail.value = null
-  handleNote.value = ''
-  try {
-    const res = await adminStore.fetchReportDetail(row.targetType, row.targetId)
-    if (res.ok && res.data) {
-      currentDetail.value = res.data
-      selectedHideReason.value = res.data.suggestedHideReason || 'ILLEGAL'
-    } else {
-      detailVisible.value = false
-      toast.error(res.message || '加载举报详情失败')
-    }
-  } finally {
-    detailLoading.value = false
-  }
-}
-
-function closeDetail() {
-  if (submitting.value) return
-  detailVisible.value = false
-  currentDetail.value = null
-}
-
-async function submitHandle(action) {
-  if (!currentDetail.value || submitting.value) return
-  if (handleNote.value.trim().length > MAX_HANDLE_NOTE_LENGTH) {
-    toast.error(`内部备注不能超过 ${MAX_HANDLE_NOTE_LENGTH} 字`)
-    return
-  }
-  submitting.value = true
-  try {
-    const res = await adminStore.handleReport({
-      targetType: currentDetail.value.targetType,
-      targetId: Number(currentDetail.value.targetId),
-      action,
-      hideReason: action === 'HIDE' ? selectedHideReason.value : null,
-      note: handleNote.value.trim() || null
-    })
-    if (res.ok) {
-      toast.success(res.message || '处理完成')
-      detailVisible.value = false
-      currentDetail.value = null
-    } else if (res.conflict) {
-      toast.warn(res.message || '已被其他管理员处理')
-      detailVisible.value = false
-      currentDetail.value = null
-    } else {
-      toast.error(res.message || '处理失败')
-    }
-  } finally {
-    submitting.value = false
-  }
-}
 </script>
 
 <template>
@@ -294,6 +244,7 @@ async function submitHandle(action) {
       :detail="currentDetail"
       :is-pending-tab="isPendingTab"
       :submitting="submitting"
+      :submitting-action="submittingAction"
       @close="closeDetail"
       @submit="submitHandle"
     />

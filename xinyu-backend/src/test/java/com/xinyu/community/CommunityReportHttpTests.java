@@ -220,6 +220,13 @@ class CommunityReportHttpTests {
                         .content("{\"targetType\":\"POST\",\"targetId\":11,\"action\":\"DISMISS\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
+
+        mvc.perform(post("/admin/report/handle")
+                        .header("token", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetType\":\"POST\",\"targetId\":\"9007199254740993\",\"action\":\"DISMISS\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
     }
 
     private static User user(Long id, String role) {

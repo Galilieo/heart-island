@@ -15,11 +15,14 @@ const server = await createServer({
 let reportUtils
 let useCommunityStore
 let useAdminStore
+let useAdminReportHandle
 let request
 try {
   reportUtils = await server.ssrLoadModule('/src/utils/communityReport.js')
   useCommunityStore = (await server.ssrLoadModule('/src/stores/community.js')).useCommunityStore
   useAdminStore = (await server.ssrLoadModule('/src/stores/admin.js')).useAdminStore
+  useAdminReportHandle = (await server.ssrLoadModule('/src/composables/useAdminReportHandle.js'))
+    .useAdminReportHandle
   request = (await server.ssrLoadModule('/src/utils/request.js')).default
 } finally {
   await server.close()
@@ -159,4 +162,52 @@ test('切换查看已被隐藏或删除的帖子详情时清空上一篇 current
   assert.equal(hiddenRes.ok, false)
   assert.equal(store.currentPost, null)
   assert.equal(store.replies.length, 0)
+})
+
+test('useAdminReportHandle 提交裁决时保留 targetId 字符串并区分加载动作', async () => {
+  let sentPayload = null
+  let resolveRequest
+  const pendingPromise = new Promise((resolve) => {
+    resolveRequest = resolve
+  })
+
+  const mockAdminStore = {
+    async fetchReportDetail() {
+      return {
+        ok: true,
+        data: {
+          targetType: 'POST',
+          targetId: '9007199254740993',
+          suggestedHideReason: 'AD'
+        }
+      }
+    },
+    async handleReport(payload) {
+      sentPayload = payload
+      return pendingPromise
+    }
+  }
+  const toasts = []
+  const dialog = useAdminReportHandle({
+    adminStore: mockAdminStore,
+    toast: {
+      success: (m) => toasts.push(m),
+      warn: (m) => toasts.push(m),
+      error: (m) => toasts.push(m)
+    }
+  })
+
+  await dialog.openDetail({ targetType: 'POST', targetId: '9007199254740993' })
+  const submitPromise = dialog.submitHandle('DISMISS')
+
+  assert.equal(dialog.submitting.value, true)
+  assert.equal(dialog.submittingAction?.value, 'DISMISS')
+
+  resolveRequest({ ok: true, message: '已标记不违规，相关举报已关闭' })
+  await submitPromise
+
+  assert.equal(typeof sentPayload.targetId, 'string')
+  assert.equal(sentPayload.targetId, '9007199254740993')
+  assert.equal(dialog.submitting.value, false)
+  assert.equal(dialog.submittingAction?.value, '')
 })
