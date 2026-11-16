@@ -177,4 +177,10 @@ public class CommunityPost {
     public void setMine(Boolean mine) {
         this.mine = mine;
     }
+
+    /** 仅 status=1 视为对社区公开可见的正常内容。 */
+    @JsonIgnore
+    public boolean isVisible() {
+        return Integer.valueOf(1).equals(status);
+    }
 }

@@ -95,8 +95,12 @@ export const useCommunityStore = defineStore('community', () => {
   }
 
   async function fetchPostDetail(id) {
+    // 切换帖子或目标被隐藏/删除时立刻清空旧详情，避免残留上一篇内容
+    currentPost.value = null
     const res = await communityApi.postDetail(id)
-    if (res.ok) currentPost.value = res.data
+    if (res.ok) {
+      currentPost.value = res.data
+    }
     return res
   }
 
@@ -135,8 +139,11 @@ export const useCommunityStore = defineStore('community', () => {
   /* ───── replies ───── */
 
   async function fetchReplies(postId) {
+    replies.value = []
     const res = await communityApi.replyList({ postId })
-    if (res.ok) replies.value = res.data || []
+    if (res.ok) {
+      replies.value = res.data || []
+    }
     return res
   }
 

@@ -171,7 +171,7 @@ public class CommunityPostService {
         for (Favorite favorite : favorites) {
             CommunityPost post = communityPostMapper.selectById(favorite.getPostId());
 
-            if (post == null || post.getStatus() == null || post.getStatus() == 0) {
+            if (post == null || !post.isVisible()) {
                 continue;
             }
 
@@ -236,7 +236,7 @@ public class CommunityPostService {
             return false;
         }
 
-        if (post.getStatus() == null || post.getStatus() == 0) {
+        if (!post.isVisible()) {
             return false;
         }
 
@@ -262,7 +262,7 @@ public class CommunityPostService {
             return false;
         }
 
-        if (post.getStatus() == null || post.getStatus() == 0) {
+        if (!post.isVisible()) {
             return false;
         }
 
@@ -307,7 +307,7 @@ public class CommunityPostService {
     public Boolean like(Long postId, Long userId) {
         CommunityPost post = communityPostMapper.selectById(postId);
 
-        if (post == null || post.getStatus() == null || post.getStatus() == 0) {
+        if (post == null || !post.isVisible()) {
             return false;
         }
 
@@ -330,6 +330,11 @@ public class CommunityPostService {
 
     @Transactional
     public Boolean unlike(Long postId, Long userId) {
+        CommunityPost post = communityPostMapper.selectById(postId);
+        if (post == null || !post.isVisible()) {
+            return false;
+        }
+
         QueryWrapper<PostLike> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("post_id", postId);
         queryWrapper.eq("user_id", userId);
@@ -358,7 +363,7 @@ public class CommunityPostService {
     public Boolean favorite(Long postId, Long userId) {
         CommunityPost post = communityPostMapper.selectById(postId);
 
-        if (post == null || post.getStatus() == null || post.getStatus() == 0) {
+        if (post == null || !post.isVisible()) {
             return false;
         }
 
@@ -374,6 +379,11 @@ public class CommunityPostService {
     }
 
     public Boolean unfavorite(Long postId, Long userId) {
+        CommunityPost post = communityPostMapper.selectById(postId);
+        if (post == null || !post.isVisible()) {
+            return false;
+        }
+
         QueryWrapper<Favorite> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("post_id", postId);
         queryWrapper.eq("user_id", userId);
@@ -395,11 +405,7 @@ public class CommunityPostService {
     public CommunityPost detail(Long id,Long userId){
         CommunityPost post = communityPostMapper.selectById(id);
 
-        if(post == null){
-            return null;
-        }
-
-        if(post.getStatus()==null||post.getStatus()==0){
+        if (post == null || !post.isVisible()) {
             return null;
         }
 
