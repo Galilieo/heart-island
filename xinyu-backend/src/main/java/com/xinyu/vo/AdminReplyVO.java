@@ -2,6 +2,9 @@ package com.xinyu.vo;
 
 import java.time.LocalDateTime;
 
+/**
+ * 后台回复管理分页行视图；状态与隐藏原因取值见 {@link com.xinyu.common.CommunityReportConstants}。
+ */
 public class AdminReplyVO {
 
     private String id;
@@ -9,7 +12,9 @@ public class AdminReplyVO {
     private String userId;
     private String content;
     private String anonymousName;
+    /** 内容可见状态（0 作者删、1 正常、2 管理员隐藏）。 */
     private Integer status;
+    /** 隐藏原因编码（ATTACK / AD / PRIVACY / ILLEGAL）。 */
     private String hideReason;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

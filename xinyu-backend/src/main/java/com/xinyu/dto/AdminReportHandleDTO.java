@@ -1,7 +1,7 @@
 package com.xinyu.dto;
 
 /**
- * 管理员处理举报请求体。
+ * 管理员处理举报请求体；目标类型、动作与隐藏原因取值见 {@link com.xinyu.common.CommunityReportConstants}。
  */
 public class AdminReportHandleDTO {
 

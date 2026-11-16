@@ -16,6 +16,7 @@ import java.util.List;
 @Mapper
 public interface ContentReportMapper extends BaseMapper<ContentReport> {
 
+    /** 统计待处理举报按 (target_type, target_id) 去重聚合后的目标总数。 */
     @Select("""
             SELECT COUNT(*) FROM (
                 SELECT target_type, target_id
@@ -26,6 +27,7 @@ public interface ContentReportMapper extends BaseMapper<ContentReport> {
             """)
     long countPendingTargetGroups();
 
+    /** 分页查询待处理目标聚合行：含 SAFETY 举报置顶，其余按首次举报时间升序。 */
     @Select("""
             SELECT target_type AS targetType,
                    target_id AS targetId,
@@ -42,6 +44,7 @@ public interface ContentReportMapper extends BaseMapper<ContentReport> {
             """)
     List<ReportTargetGroup> selectPendingTargetGroups(@Param("offset") long offset, @Param("size") long size);
 
+    /** 统计已处理举报（HIDDEN / DISMISSED / CLOSED）按目标聚合后的总数。 */
     @Select("""
             SELECT COUNT(*) FROM (
                 SELECT target_type, target_id
@@ -52,6 +55,7 @@ public interface ContentReportMapper extends BaseMapper<ContentReport> {
             """)
     long countDoneTargetGroups();
 
+    /** 分页查询已处理目标聚合行，按最近处理时间倒序排列。 */
     @Select("""
             SELECT target_type AS targetType,
                    target_id AS targetId,

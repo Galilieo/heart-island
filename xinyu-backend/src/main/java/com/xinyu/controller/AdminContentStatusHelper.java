@@ -3,15 +3,28 @@ package com.xinyu.controller;
 import com.xinyu.common.CommunityReportConstants;
 import com.xinyu.common.Result;
 import com.xinyu.service.AdminStatusResult;
+import com.xinyu.service.UserService;
+import com.xinyu.utils.JwtUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 后台帖子/回复状态变更共用校验与结果转换，防止两套控制器出现分叉校验逻辑。
+ * 后台管理控制器共用鉴权、状态校验与结果转换，防止各控制器出现分叉逻辑。
  */
 final class AdminContentStatusHelper {
 
     private AdminContentStatusHelper() {
+    }
+
+    /**
+     * 解析请求头中的管理员身份；token 为空或用户无 ADMIN 角色时返回 null。
+     */
+    static Long resolveAdminId(String token, JwtUtil jwtUtil, UserService userService) {
+        if (token == null || token.trim().isEmpty()) {
+            return null;
+        }
+        Long userId = jwtUtil.getUserId(token);
+        return userService.isAdmin(userId) ? userId : null;
     }
 
     static String validateAndNormalizeStatusUpdate(Long id, Integer status, String hideReason, String targetLabel) {

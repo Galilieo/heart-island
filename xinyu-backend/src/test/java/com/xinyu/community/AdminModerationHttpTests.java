@@ -102,7 +102,7 @@ class AdminModerationHttpTests {
     }
 
     @Test
-    void adminPostAndReplyRejectStatusZeroAndMissingOrInvalidHideReason() throws Exception {
+    void adminPostRejectsStatusZeroAndMissingHideReason() throws Exception {
         mvc.perform(put("/admin/post/{id}/status", POST_ID)
                         .param("status", "0")
                         .header("token", adminToken))
@@ -115,6 +115,13 @@ class AdminModerationHttpTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
+        mvc.perform(delete("/admin/post/{id}", POST_ID).header("token", adminToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400));
+    }
+
+    @Test
+    void adminReplyRejectsStatusZeroAndInvalidOrMissingHideReason() throws Exception {
         mvc.perform(put("/admin/reply/{id}/status", REPLY_ID)
                         .param("status", "0")
                         .header("token", adminToken))
@@ -128,17 +135,13 @@ class AdminModerationHttpTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
 
-        mvc.perform(delete("/admin/post/{id}", POST_ID).header("token", adminToken))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400));
-
         mvc.perform(delete("/admin/reply/{id}", REPLY_ID).header("token", adminToken))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400));
     }
 
     @Test
-    void adminPostAndReplyDetailAndConditionalStatusChangeSucceed() throws Exception {
+    void adminPostAndReplyDetailExposeReportSummary() throws Exception {
         CommunityPost post = new CommunityPost();
         post.setId(POST_ID);
         post.setUserId(101L);
@@ -181,7 +184,10 @@ class AdminModerationHttpTests {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.postContent").value("测试帖子全文"))
                 .andExpect(jsonPath("$.data.pendingReportCount").value(1));
+    }
 
+    @Test
+    void adminPostAndReplyConditionalStatusChangeSucceed() throws Exception {
         when(communityPostMapper.update(any(), any())).thenReturn(1);
         mvc.perform(put("/admin/post/{id}/status", POST_ID)
                         .param("status", "2")

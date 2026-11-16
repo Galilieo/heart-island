@@ -68,34 +68,22 @@ public class CommunityReportService {
         return clock != null ? clock : DEFAULT_CLOCK;
     }
 
+    // =====================================================================
+    // 一、用户端举报提交与查询
+    // =====================================================================
+
     /** 提交一条社区举报，在应用层校验目标可见性、限额与防自举，并兜底处理唯一索引并发冲突。 */
     public void submitReport(Long reporterId, CommunityReportCreateDTO dto) {
-        String targetType = dto == null || dto.getTargetType() == null ? "" : dto.getTargetType().trim();
-        Long targetId = dto == null ? null : dto.getTargetId();
-        String reason = dto == null || dto.getReason() == null ? "" : dto.getReason().trim();
-        String detail = validateSubmitParams(targetType, targetId, reason, dto == null ? null : dto.getDetail());
+        NormalizedSubmit params = validateAndNormalizeSubmit(dto);
 
-        TargetSnapshot target = resolveVisibleTarget(targetType, targetId);
+        TargetSnapshot target = resolveVisibleTarget(params.targetType(), params.targetId());
         if (reporterId.equals(target.targetUserId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能举报自己的内容");
         }
-
-        ensureNotReportedBefore(reporterId, targetType, targetId);
+        ensureNotReportedBefore(reporterId, params.targetType(), params.targetId());
         ensureWithinDailyLimit(reporterId);
 
-        LocalDateTime now = LocalDateTime.now(activeClock());
-        ContentReport report = new ContentReport();
-        report.setReporterId(reporterId);
-        report.setTargetType(targetType);
-        report.setTargetId(targetId);
-        report.setPostId(target.postId());
-        report.setTargetUserId(target.targetUserId());
-        report.setReason(reason);
-        report.setDetail(detail);
-        report.setContentSnapshot(target.content());
-        report.setStatus(CommunityReportConstants.REPORT_PENDING);
-        report.setCreateTime(now);
-
+        ContentReport report = buildPendingReport(reporterId, params, target, LocalDateTime.now(activeClock()));
         try {
             contentReportMapper.insert(report);
         } catch (DuplicateKeyException duplicate) {
@@ -103,44 +91,56 @@ public class CommunityReportService {
         }
     }
 
-    private String validateSubmitParams(String targetType, Long targetId, String reason, String rawDetail) {
+    private NormalizedSubmit validateAndNormalizeSubmit(CommunityReportCreateDTO dto) {
+        String targetType = dto == null || dto.getTargetType() == null ? "" : dto.getTargetType().trim();
+        Long targetId = dto == null ? null : dto.getTargetId();
+        String reason = dto == null || dto.getReason() == null ? "" : dto.getReason().trim();
+        String rawDetail = dto == null ? null : dto.getDetail();
+
         if (!CommunityReportConstants.isValidTargetType(targetType) || targetId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "举报目标无效");
         }
         if (!CommunityReportConstants.isValidReason(reason)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请选择合法的举报原因");
         }
-        String normalizedDetail = rawDetail == null ? null : rawDetail.trim();
-        if (normalizedDetail != null && normalizedDetail.isEmpty()) {
-            normalizedDetail = null;
-        }
+        String normalizedDetail = trimToNull(rawDetail);
         if (CommunityReportConstants.REASON_OTHER.equals(reason) && normalizedDetail == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "选「其他」时请填写补充说明");
         }
         if (normalizedDetail != null && normalizedDetail.length() > CommunityReportConstants.MAX_DETAIL_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "补充说明不能超过200个字");
         }
-        return normalizedDetail;
+        return new NormalizedSubmit(targetType, targetId, reason, normalizedDetail);
+    }
+
+    private static ContentReport buildPendingReport(Long reporterId, NormalizedSubmit params,
+                                                    TargetSnapshot target, LocalDateTime now) {
+        ContentReport report = new ContentReport();
+        report.setReporterId(reporterId);
+        report.setTargetType(params.targetType());
+        report.setTargetId(params.targetId());
+        report.setPostId(target.postId());
+        report.setTargetUserId(target.targetUserId());
+        report.setReason(params.reason());
+        report.setDetail(params.detail());
+        report.setContentSnapshot(target.content());
+        report.setStatus(CommunityReportConstants.REPORT_PENDING);
+        report.setCreateTime(now);
+        return report;
     }
 
     private TargetSnapshot resolveVisibleTarget(String targetType, Long targetId) {
-        if (CommunityReportConstants.TARGET_POST.equals(targetType)) {
-            CommunityPost post = communityPostMapper.selectById(targetId);
-            if (post == null || !post.isVisible()) {
+        TargetSnapshot snapshot = loadTargetSnapshot(targetType, targetId, false);
+        if (snapshot == null || !Integer.valueOf(CommunityReportConstants.STATUS_VISIBLE).equals(snapshot.status())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该内容不存在或暂不可举报");
+        }
+        if (CommunityReportConstants.TARGET_REPLY.equals(targetType)) {
+            CommunityPost parent = snapshot.postId() == null ? null : communityPostMapper.selectById(snapshot.postId());
+            if (parent == null || !parent.isVisible()) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该内容不存在或暂不可举报");
             }
-            return new TargetSnapshot(post.getId(), post.getUserId(), post.getContent(), post.getStatus(), post.getHideReason());
         }
-
-        CommunityReply reply = communityReplyMapper.selectById(targetId);
-        if (reply == null || !reply.isVisible()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该内容不存在或暂不可举报");
-        }
-        CommunityPost parent = reply.getPostId() == null ? null : communityPostMapper.selectById(reply.getPostId());
-        if (parent == null || !parent.isVisible()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该内容不存在或暂不可举报");
-        }
-        return new TargetSnapshot(reply.getPostId(), reply.getUserId(), reply.getContent(), reply.getStatus(), reply.getHideReason());
+        return snapshot;
     }
 
     private void ensureNotReportedBefore(Long reporterId, String targetType, Long targetId) {
@@ -210,6 +210,10 @@ public class CommunityReportService {
                         report.getStatus()))
                 .toList();
     }
+
+    // =====================================================================
+    // 二、后台举报队列与详情查询
+    // =====================================================================
 
     /** 分页查询后台举报队列（待处理：SAFETY 在前并按首次举报正序；已处理：按处理时间倒序）。 */
     public Page<AdminReportQueueRowVO> pageAdminReports(String statusParam, long pageNum, long pageSize) {
@@ -312,18 +316,13 @@ public class CommunityReportService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "举报对象参数无效");
         }
 
-        QueryWrapper<ContentReport> wrapper = new QueryWrapper<>();
-        wrapper.eq("target_type", targetType)
-                .eq("target_id", targetId)
-                .orderByAsc("create_time")
-                .orderByAsc("id");
-        List<ContentReport> reports = contentReportMapper.selectList(wrapper);
+        List<ContentReport> reports = listReportsByTarget(targetType, targetId);
         if (reports.isEmpty()) {
             return null;
         }
 
         ContentReport earliest = reports.get(0);
-        TargetSnapshot currentTarget = loadTargetSnapshotIgnoringStatus(targetType, targetId);
+        TargetSnapshot currentTarget = loadTargetSnapshot(targetType, targetId, false);
         Long targetUserId = currentTarget != null ? currentTarget.targetUserId() : earliest.getTargetUserId();
 
         AdminReportDetailVO detail = new AdminReportDetailVO();
@@ -343,23 +342,35 @@ public class CommunityReportService {
         detail.setContentChanged(currentTarget != null
                 && !Objects.equals(earliest.getContentSnapshot(), currentTarget.content()));
 
-        ContentReport latestHandled = findLatestHandledRecord(reports);
-        if (latestHandled != null) {
-            detail.setResultStatus(latestHandled.getStatus());
-            detail.setHideReason(latestHandled.getHideReason());
-            if (latestHandled.getHandlerId() != null) {
-                detail.setHandlerId(String.valueOf(latestHandled.getHandlerId()));
-                User handler = userMapper.selectById(latestHandled.getHandlerId());
-                detail.setHandlerName(handler != null && handler.getUsername() != null
-                        ? handler.getUsername()
-                        : "#" + latestHandled.getHandlerId());
-            }
-            detail.setHandleTime(latestHandled.getHandleTime());
-            detail.setHandleNote(latestHandled.getHandleNote());
-        }
-
+        applyDetailHandledInfo(detail, findLatestHandledRecord(reports));
         detail.setRecords(reports.stream().map(this::toRecordVO).toList());
         return detail;
+    }
+
+    private List<ContentReport> listReportsByTarget(String targetType, Long targetId) {
+        QueryWrapper<ContentReport> wrapper = new QueryWrapper<>();
+        wrapper.eq("target_type", targetType)
+                .eq("target_id", targetId)
+                .orderByAsc("create_time")
+                .orderByAsc("id");
+        return contentReportMapper.selectList(wrapper);
+    }
+
+    private void applyDetailHandledInfo(AdminReportDetailVO detail, ContentReport latestHandled) {
+        if (latestHandled == null) {
+            return;
+        }
+        detail.setResultStatus(latestHandled.getStatus());
+        detail.setHideReason(latestHandled.getHideReason());
+        if (latestHandled.getHandlerId() != null) {
+            detail.setHandlerId(String.valueOf(latestHandled.getHandlerId()));
+            User handler = userMapper.selectById(latestHandled.getHandlerId());
+            detail.setHandlerName(handler != null && handler.getUsername() != null
+                    ? handler.getUsername()
+                    : "#" + latestHandled.getHandlerId());
+        }
+        detail.setHandleTime(latestHandled.getHandleTime());
+        detail.setHandleNote(latestHandled.getHandleNote());
     }
 
     private AdminReportRecordVO toRecordVO(ContentReport report) {
@@ -373,64 +384,54 @@ public class CommunityReportService {
         return vo;
     }
 
+    // =====================================================================
+    // 三、后台裁决写入
+    // =====================================================================
+
     /** 在单一事务内关闭目标全部待处理举报，并在 HIDE 且原内容正常时隐藏内容并同步计数。 */
     @Transactional
     public String handleReport(Long adminId, AdminReportHandleDTO dto) {
-        String targetType = dto == null || dto.getTargetType() == null ? "" : dto.getTargetType().trim();
-        Long targetId = dto == null ? null : dto.getTargetId();
-        String action = dto == null || dto.getAction() == null ? "" : dto.getAction().trim();
-        String hideReason = dto == null || dto.getHideReason() == null ? null : dto.getHideReason().trim();
-        String note = dto == null || dto.getNote() == null ? null : dto.getNote().trim();
-        if (note != null && note.isEmpty()) {
-            note = null;
-        }
-
-        validateHandleRequest(targetType, targetId, action, hideReason, note);
+        NormalizedHandle params = validateAndNormalizeHandle(dto);
 
         LocalDateTime now = LocalDateTime.now(activeClock());
         // 先锁定目标内容主键行，串行化针对同一内容的多管理员并发裁决，消除二级索引间隙死锁。
-        TargetSnapshot target = lockTargetSnapshotForUpdate(targetType, targetId);
+        TargetSnapshot target = loadTargetSnapshot(params.targetType(), params.targetId(), true);
         if (target == null || target.status() == null
                 || target.status() == CommunityReportConstants.STATUS_AUTHOR_DELETED) {
-            closePendingReportsOrThrow(targetType, targetId, CommunityReportConstants.REPORT_CLOSED, null, adminId, note, now);
+            closePendingReportsOrThrow(params.targetType(), params.targetId(),
+                    CommunityReportConstants.REPORT_CLOSED, null, adminId, params.note(), now);
             return "内容已被作者删除，相关举报已关闭";
         }
 
-        if (CommunityReportConstants.ACTION_DISMISS.equals(action)) {
-            closePendingReportsOrThrow(targetType, targetId, CommunityReportConstants.REPORT_DISMISSED, null, adminId, note, now);
+        if (CommunityReportConstants.ACTION_DISMISS.equals(params.action())) {
+            closePendingReportsOrThrow(params.targetType(), params.targetId(),
+                    CommunityReportConstants.REPORT_DISMISSED, null, adminId, params.note(), now);
             return "已标记不违规，相关举报已关闭";
         }
 
-        closePendingReportsOrThrow(targetType, targetId, CommunityReportConstants.REPORT_HIDDEN, hideReason, adminId, note, now);
+        closePendingReportsOrThrow(params.targetType(), params.targetId(),
+                CommunityReportConstants.REPORT_HIDDEN, params.hideReason(), adminId, params.note(), now);
         if (target.status() == CommunityReportConstants.STATUS_VISIBLE) {
-            boolean hid = hideContentFromVisible(targetType, targetId, target.postId(), hideReason);
+            boolean hid = hideContentFromVisible(params.targetType(), params.targetId(),
+                    target.postId(), params.hideReason());
             if (!hid) {
-                TargetSnapshot latest = loadTargetSnapshotIgnoringStatus(targetType, targetId);
+                TargetSnapshot latest = loadTargetSnapshot(params.targetType(), params.targetId(), false);
                 if (latest == null || latest.status() == null
                         || latest.status() == CommunityReportConstants.STATUS_AUTHOR_DELETED) {
-                    contentReportMapper.correctClosedOnDeletedTarget(targetType, targetId, adminId, now);
+                    contentReportMapper.correctClosedOnDeletedTarget(params.targetType(), params.targetId(), adminId, now);
                 }
             }
         }
         return "已隐藏，相关举报都已关闭";
     }
 
-    private TargetSnapshot lockTargetSnapshotForUpdate(String targetType, Long targetId) {
-        if (CommunityReportConstants.TARGET_POST.equals(targetType)) {
-            CommunityPost post = communityPostMapper.selectByIdForUpdate(targetId);
-            if (post == null) {
-                return null;
-            }
-            return new TargetSnapshot(post.getId(), post.getUserId(), post.getContent(), post.getStatus(), post.getHideReason());
-        }
-        CommunityReply reply = communityReplyMapper.selectByIdForUpdate(targetId);
-        if (reply == null) {
-            return null;
-        }
-        return new TargetSnapshot(reply.getPostId(), reply.getUserId(), reply.getContent(), reply.getStatus(), reply.getHideReason());
-    }
+    private NormalizedHandle validateAndNormalizeHandle(AdminReportHandleDTO dto) {
+        String targetType = dto == null || dto.getTargetType() == null ? "" : dto.getTargetType().trim();
+        Long targetId = dto == null ? null : dto.getTargetId();
+        String action = dto == null || dto.getAction() == null ? "" : dto.getAction().trim();
+        String hideReason = dto == null || dto.getHideReason() == null ? null : dto.getHideReason().trim();
+        String note = trimToNull(dto == null ? null : dto.getNote());
 
-    private void validateHandleRequest(String targetType, Long targetId, String action, String hideReason, String note) {
         if (!CommunityReportConstants.isValidTargetType(targetType) || targetId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "举报对象参数无效");
         }
@@ -445,6 +446,7 @@ public class CommunityReportService {
         if (note != null && note.length() > CommunityReportConstants.MAX_HANDLE_NOTE_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "内部备注不能超过200个字");
         }
+        return new NormalizedHandle(targetType, targetId, action, hideReason, note);
     }
 
     private void closePendingReportsOrThrow(String targetType, Long targetId, String status, String hideReason,
@@ -484,19 +486,35 @@ public class CommunityReportService {
         return contentReportMapper.countPendingTargetGroups();
     }
 
-    private TargetSnapshot loadTargetSnapshotIgnoringStatus(String targetType, Long targetId) {
+    // =====================================================================
+    // 四、目标快照与统计辅助
+    // =====================================================================
+
+    private TargetSnapshot loadTargetSnapshot(String targetType, Long targetId, boolean forUpdate) {
         if (CommunityReportConstants.TARGET_POST.equals(targetType)) {
-            CommunityPost post = communityPostMapper.selectById(targetId);
+            CommunityPost post = forUpdate
+                    ? communityPostMapper.selectByIdForUpdate(targetId)
+                    : communityPostMapper.selectById(targetId);
             if (post == null) {
                 return null;
             }
             return new TargetSnapshot(post.getId(), post.getUserId(), post.getContent(), post.getStatus(), post.getHideReason());
         }
-        CommunityReply reply = communityReplyMapper.selectById(targetId);
+        CommunityReply reply = forUpdate
+                ? communityReplyMapper.selectByIdForUpdate(targetId)
+                : communityReplyMapper.selectById(targetId);
         if (reply == null) {
             return null;
         }
         return new TargetSnapshot(reply.getPostId(), reply.getUserId(), reply.getContent(), reply.getStatus(), reply.getHideReason());
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private int countAuthorHiddenContents(Long targetUserId) {
@@ -586,6 +604,12 @@ public class CommunityReportService {
         }
         String name = names.get(handlerId);
         return name != null && !name.isBlank() ? name : "#" + handlerId;
+    }
+
+    private record NormalizedSubmit(String targetType, Long targetId, String reason, String detail) {
+    }
+
+    private record NormalizedHandle(String targetType, Long targetId, String action, String hideReason, String note) {
     }
 
     private record TargetSnapshot(Long postId, Long targetUserId, String content, Integer status, String hideReason) {

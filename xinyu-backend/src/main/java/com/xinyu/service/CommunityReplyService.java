@@ -156,11 +156,13 @@ public class CommunityReplyService {
         return detail;
     }
 
+    /** 保留旧方法签名；后台控制器统一走 {@link #updateAdminStatusWithOutcome}。 */
     @Transactional
     public CommunityReply updateAdminStatus(Long id, Integer status) {
         return updateAdminStatus(id, status, null);
     }
 
+    /** 保留旧方法签名；后台控制器统一走 {@link #updateAdminStatusWithOutcome}。 */
     @Transactional
     public CommunityReply updateAdminStatus(Long id, Integer status, String hideReason) {
         if (updateAdminStatusWithOutcome(id, status, hideReason) != AdminStatusResult.UPDATED) {

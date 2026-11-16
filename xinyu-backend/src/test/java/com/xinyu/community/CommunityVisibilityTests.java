@@ -6,6 +6,8 @@ import com.xinyu.dto.CommunityReplyUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.entity.Favorite;
+import com.xinyu.entity.PostLike;
+import com.xinyu.entity.Topic;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
 import com.xinyu.mapper.FavoriteMapper;
@@ -79,21 +81,24 @@ class CommunityVisibilityTests {
     }
 
     @Test
-    void hiddenPostRejectsLikeFavoriteEditAndNonAuthorDetail() {
-        CommunityPost hiddenPost = post(2);
-        when(communityPostMapper.selectById(POST_ID)).thenReturn(hiddenPost);
-
-        Favorite fav = new Favorite();
-        fav.setPostId(POST_ID);
-        fav.setUserId(OTHER_USER_ID);
-        when(favoriteMapper.selectList(any())).thenReturn(List.of(fav));
+    void hiddenPostRejectsLikeAndFavorite() {
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
 
         assertThat(postService.like(POST_ID, OTHER_USER_ID)).isFalse();
-        verify(postLikeMapper, never()).insert(any(com.xinyu.entity.PostLike.class));
+        verify(postLikeMapper, never()).insert(any(PostLike.class));
         verify(communityPostMapper, never()).adjustLikeCount(anyLong(), anyInt());
 
         assertThat(postService.favorite(POST_ID, OTHER_USER_ID)).isFalse();
         verify(favoriteMapper, never()).insert(any(Favorite.class));
+    }
+
+    @Test
+    void hiddenPostRejectsAuthorEdit() {
+        Topic activeTopic = new Topic();
+        activeTopic.setId(1L);
+        activeTopic.setStatus(1);
+        when(topicMapper.selectById(1L)).thenReturn(activeTopic);
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
 
         CommunityPostUpdateDTO editDto = new CommunityPostUpdateDTO();
         editDto.setId(POST_ID);
@@ -101,6 +106,15 @@ class CommunityVisibilityTests {
         editDto.setMoodType("平静");
         editDto.setContent("试图修改被隐藏帖子");
         assertThat(postService.update(editDto, AUTHOR_ID)).isFalse();
+    }
+
+    @Test
+    void hiddenPostIsExcludedFromFavoritesUnlikeUnfavoriteAndNonAuthorDetail() {
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
+        Favorite fav = new Favorite();
+        fav.setPostId(POST_ID);
+        fav.setUserId(OTHER_USER_ID);
+        when(favoriteMapper.selectList(any())).thenReturn(List.of(fav));
 
         assertThat(postService.listFavorites(OTHER_USER_ID)).isEmpty();
         assertThat(postService.unlike(POST_ID, OTHER_USER_ID)).isFalse();

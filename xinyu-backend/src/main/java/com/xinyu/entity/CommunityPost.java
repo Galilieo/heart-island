@@ -37,8 +37,10 @@ public class CommunityPost {
 
     private Integer likeCount;
 
+    /** 内容可见状态（0 作者删、1 正常、2 管理员隐藏），见 {@link CommunityReportConstants}。 */
     private Integer status;
 
+    /** 管理员隐藏原因编码，见 {@link CommunityReportConstants#VALID_HIDE_REASONS}。 */
     private String hideReason;
 
     private LocalDateTime createTime;
@@ -54,6 +56,7 @@ public class CommunityPost {
     @TableField(exist = false)
     private Boolean mine;
 
+    /** 是否处于管理员隐藏状态（仅作者可见自身被隐藏内容时为 true）。 */
     @TableField(exist = false)
     private Boolean hidden;
 

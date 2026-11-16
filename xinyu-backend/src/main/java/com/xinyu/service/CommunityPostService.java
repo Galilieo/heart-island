@@ -56,7 +56,7 @@ public class CommunityPostService {
     public List<CommunityPost> listByTopicId(Long topicId, Long userId, Boolean mine, String sort) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
 
-        queryWrapper.eq("status", 1);
+        queryWrapper.eq("status", CommunityReportConstants.STATUS_VISIBLE);
 
         if (topicId != null) {
             queryWrapper.eq("topic_id", topicId);
@@ -170,6 +170,7 @@ public class CommunityPostService {
         return detail;
     }
 
+    /** 保留给旧集成测试调用；后台控制器统一走 {@link #updateAdminStatusWithOutcome}。 */
     public CommunityPost updateAdminStatus(Long id, Integer status) {
         return updateAdminStatus(id, status, null);
     }
@@ -209,6 +210,7 @@ public class CommunityPostService {
                 ? AdminStatusResult.NOT_FOUND
                 : AdminStatusResult.CONFLICT;
     }
+
     /**
      * 查询当前用户收藏的帖子，按收藏时间倒序。
      * 已被删除/隐藏的帖子会自动跳过。
@@ -235,22 +237,22 @@ public class CommunityPostService {
 
         return result;
     }
-    public Boolean isTopicAvailable(Long topicId){
-        if(topicId == null){
+
+    public Boolean isTopicAvailable(Long topicId) {
+        if (topicId == null) {
             return false;
         }
 
         Topic topic = topicMapper.selectById(topicId);
-
-        if(topic == null){
+        if (topic == null) {
             return false;
         }
 
-        return topic.getStatus() !=null && topic.getStatus() == 1;
+        return topic.getStatus() != null && topic.getStatus() == 1;
     }
 
-    public Boolean add(CommunityPostAddDTO dto, Long userId){
-        if(!isTopicAvailable(dto.getTopicId())){
+    public Boolean add(CommunityPostAddDTO dto, Long userId) {
+        if (!isTopicAvailable(dto.getTopicId())) {
             return false;
         }
         CommunityPost post = new CommunityPost();
@@ -262,7 +264,7 @@ public class CommunityPostService {
         post.setAnonymousName("匿名岛民");
         post.setReplyCount(0);
         post.setLikeCount(0);
-        post.setStatus(1);
+        post.setStatus(CommunityReportConstants.STATUS_VISIBLE);
 
         boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
         post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
@@ -331,7 +333,7 @@ public class CommunityPostService {
         // 标识也在此处更换；相同正文、关闭AI及改回原文都会使旧生成失效。
         // 只更新编辑字段，不回写读取时的点赞数、状态等快照；NULL不能交给updateById忽略。
         UpdateWrapper<CommunityPost> edit = new UpdateWrapper<>();
-        edit.eq("id", post.getId()).eq("user_id", userId).eq("status", 1);
+        edit.eq("id", post.getId()).eq("user_id", userId).eq("status", CommunityReportConstants.STATUS_VISIBLE);
         edit.set("topic_id", post.getTopicId());
         edit.set("mood_type", post.getMoodType());
         edit.set("content", post.getContent());
@@ -452,6 +454,7 @@ public class CommunityPostService {
 
         return favoriteMapper.selectCount(queryWrapper) > 0;
     }
+
     public CommunityPost detail(Long id, Long userId) {
         CommunityPost post = communityPostMapper.selectById(id);
         if (post == null || post.getStatus() == null
@@ -502,7 +505,7 @@ public class CommunityPostService {
 
         if (Boolean.TRUE.equals(result.getSuccess())) {
             UpdateWrapper<CommunityPost> reply = new UpdateWrapper<>();
-            reply.eq("id", post.getId()).eq("user_id", post.getUserId()).eq("status", 1);
+            reply.eq("id", post.getId()).eq("user_id", post.getUserId()).eq("status", CommunityReportConstants.STATUS_VISIBLE);
             reply.eq("ai_generation_id", post.getAiGenerationId());
             reply.set("ai_reply", result.getReplyContent());
             try {

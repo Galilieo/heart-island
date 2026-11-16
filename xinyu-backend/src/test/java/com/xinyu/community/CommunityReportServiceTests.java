@@ -105,29 +105,41 @@ class CommunityReportServiceTests {
     }
 
     @Test
-    void submitRejectsSelfHiddenDeletedInvalidOtherAndExcessLength() {
+    void submitRejectsSelfReport() {
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(1, "内容"));
         assertThatThrownBy(() -> service.submitReport(AUTHOR_ID, createDto("POST", POST_ID, "AD", null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 
+    @Test
+    void submitRejectsAdminHiddenPost() {
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2, "已隐藏"));
         assertThatThrownBy(() -> service.submitReport(REPORTER_ID, createDto("POST", POST_ID, "AD", null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+    }
 
+    @Test
+    void submitRejectsAuthorDeletedPost() {
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(0, "已删除"));
         assertThatThrownBy(() -> service.submitReport(REPORTER_ID, createDto("POST", POST_ID, "AD", null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+    }
 
+    @Test
+    void submitRejectsOtherReasonWithoutDetail() {
         assertThatThrownBy(() -> service.submitReport(REPORTER_ID, createDto("POST", POST_ID, "OTHER", "   ")))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("补充说明");
+    }
 
+    @Test
+    void submitRejectsDetailExceedingMaxLength() {
         String over200 = "字".repeat(201);
         assertThatThrownBy(() -> service.submitReport(REPORTER_ID, createDto("POST", POST_ID, "OTHER", over200)))
                 .isInstanceOf(ResponseStatusException.class)
@@ -135,7 +147,7 @@ class CommunityReportServiceTests {
     }
 
     @Test
-    void submitEnforcesDailyLimitAndTranslatesDuplicateKeyWithout500() {
+    void submitEnforcesDailyReportLimit() {
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(1, "内容"));
         // 首次查重返回 0，随后当日累计返回 20
         when(contentReportMapper.selectCount(any())).thenReturn(0L, 20L);
@@ -146,7 +158,11 @@ class CommunityReportServiceTests {
                     assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
                     assertThat(rse.getReason()).isEqualTo("今天的举报次数已用完");
                 });
+    }
 
+    @Test
+    void submitTranslatesDuplicateKeyToConflictWithout500() {
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(1, "内容"));
         when(contentReportMapper.selectCount(any())).thenReturn(0L, 19L);
         when(contentReportMapper.insert(any(ContentReport.class)))
                 .thenThrow(new DuplicateKeyException("uk_report_reporter_target"));
@@ -207,8 +223,7 @@ class CommunityReportServiceTests {
     }
 
     @Test
-    void handleReportCoversAuthorDeletedAlreadyHiddenDismissAndConflict() {
-        // 1. 已由其他管理员处理 -> 409
+    void handleReportThrowsConflictWhenAlreadyHandled() {
         when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(1, "正文"));
         when(contentReportMapper.handlePendingByTarget(any(), anyLong(), any(), any(), anyLong(), any(), any()))
                 .thenReturn(0);
@@ -219,16 +234,20 @@ class CommunityReportServiceTests {
                     assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(rse.getReason()).isEqualTo("已被其他管理员处理");
                 });
+    }
 
-        // 2. 内容已被作者删除(status=0) -> 举报改为 CLOSED
+    @Test
+    void handleReportClosesWhenTargetAuthorDeleted() {
         when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(0, "正文"));
         when(contentReportMapper.handlePendingByTarget(
                 eq("POST"), eq(POST_ID), eq("CLOSED"), eq(null), eq(ADMIN_ID), any(), any()))
                 .thenReturn(1);
         assertThat(service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "HIDE", "AD")))
                 .contains("作者删除");
+    }
 
-        // 3. 回复已是 status=2 时 HIDE 只关闭举报，不重复扣回复数
+    @Test
+    void handleReportOnAlreadyHiddenReplyDoesNotDecrementReplyCount() {
         CommunityReply hiddenReply = new CommunityReply();
         hiddenReply.setId(REPLY_ID);
         hiddenReply.setPostId(POST_ID);
@@ -241,8 +260,10 @@ class CommunityReportServiceTests {
                 .thenReturn(2);
         service.handleReport(ADMIN_ID, handleDto("REPLY", REPLY_ID, "HIDE", "AD"));
         verify(communityPostMapper, never()).adjustReplyCount(anyLong(), anyInt());
+    }
 
-        // 4. DISMISS 不改变内容状态
+    @Test
+    void handleReportDismissLeavesContentStatusUnchanged() {
         when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(2, "已隐藏帖子"));
         when(contentReportMapper.handlePendingByTarget(
                 eq("POST"), eq(POST_ID), eq("DISMISSED"), eq(null), eq(ADMIN_ID), any(), any()))

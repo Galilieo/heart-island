@@ -40,7 +40,7 @@ public class AdminReportController {
                                                     @RequestParam(defaultValue = "PENDING") String status,
                                                     @RequestParam(required = false) Long pageNum,
                                                     @RequestParam(required = false) Long pageSize) {
-        if (getAdminId(token) == null) {
+        if (AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService) == null) {
             return Result.error("权限不足");
         }
         long resolvedPageNum = pageNum == null ? 1L : pageNum;
@@ -56,7 +56,7 @@ public class AdminReportController {
     public Result<AdminReportDetailVO> detail(@RequestHeader(value = "token", required = false) String token,
                                               @RequestParam String targetType,
                                               @RequestParam Long targetId) {
-        if (getAdminId(token) == null) {
+        if (AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService) == null) {
             return Result.error("权限不足");
         }
         AdminReportDetailVO detail = communityReportService.getAdminReportDetail(targetType, targetId);
@@ -69,7 +69,7 @@ public class AdminReportController {
     @PostMapping("/handle")
     public Result<Boolean> handle(@RequestHeader(value = "token", required = false) String token,
                                   @RequestBody(required = false) AdminReportHandleDTO dto) {
-        Long adminId = getAdminId(token);
+        Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
         if (adminId == null) {
             return Result.error("权限不足");
         }
@@ -79,17 +79,9 @@ public class AdminReportController {
 
     @GetMapping("/pending-count")
     public Result<Long> pendingCount(@RequestHeader(value = "token", required = false) String token) {
-        if (getAdminId(token) == null) {
+        if (AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService) == null) {
             return Result.error("权限不足");
         }
         return Result.success("查询成功", communityReportService.getPendingTargetCount());
-    }
-
-    private Long getAdminId(String token) {
-        if (token == null || token.trim().isEmpty()) {
-            return null;
-        }
-        Long userId = jwtUtil.getUserId(token);
-        return userService.isAdmin(userId) ? userId : null;
     }
 }

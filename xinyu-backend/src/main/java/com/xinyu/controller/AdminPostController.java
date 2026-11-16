@@ -36,7 +36,7 @@ public class AdminPostController {
                                           @RequestParam(required = false) String keyword,
                                           @RequestParam(required = false) Long pageNum,
                                           @RequestParam(required = false) Long pageSize) {
-        Long adminId = getAdminId(token);
+        Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
 
         if (adminId == null) {
             return Result.error("权限不足");
@@ -74,7 +74,7 @@ public class AdminPostController {
     @GetMapping("/{id}")
     public Result<AdminPostDetailVO> detail(@RequestHeader(value = "token", required = false) String token,
                                             @PathVariable Long id) {
-        Long adminId = getAdminId(token);
+        Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
 
         if (adminId == null) {
             return Result.error("权限不足");
@@ -97,7 +97,7 @@ public class AdminPostController {
                                         @PathVariable Long id,
                                         @RequestParam Integer status,
                                         @RequestParam(required = false) String hideReason) {
-        Long adminId = getAdminId(token);
+        Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
 
         if (adminId == null) {
             return Result.error("权限不足");
@@ -113,7 +113,7 @@ public class AdminPostController {
     public Result<Boolean> delete(@RequestHeader(value = "token", required = false) String token,
                                   @PathVariable Long id,
                                   @RequestParam(required = false) String hideReason) {
-        Long adminId = getAdminId(token);
+        Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
 
         if (adminId == null) {
             return Result.error("权限不足");
@@ -127,14 +127,5 @@ public class AdminPostController {
         AdminStatusResult outcome = communityPostService.updateAdminStatusWithOutcome(
                 id, CommunityReportConstants.STATUS_ADMIN_HIDDEN, normalizedReason);
         return AdminContentStatusHelper.toResult(outcome, "帖子", "已隐藏");
-    }
-
-    private Long getAdminId(String token) {
-        if (token == null || token.trim().isEmpty()) {
-            return null;
-        }
-
-        Long userId = jwtUtil.getUserId(token);
-        return userService.isAdmin(userId) ? userId : null;
     }
 }

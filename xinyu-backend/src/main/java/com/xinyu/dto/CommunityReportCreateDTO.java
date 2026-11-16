@@ -1,7 +1,7 @@
 package com.xinyu.dto;
 
 /**
- * 社区举报提交请求体。
+ * 社区举报提交请求体；目标类型与原因枚举见 {@link com.xinyu.common.CommunityReportConstants}。
  */
 public class CommunityReportCreateDTO {
 
