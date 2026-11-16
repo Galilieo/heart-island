@@ -5,10 +5,7 @@ import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminDataTable from '../components/admin/AdminDataTable.vue'
 import AdminStatus from '../components/admin/AdminStatus.vue'
 import AdminRowAction from '../components/admin/AdminRowAction.vue'
-import BaseDialog from '../components/ui/BaseDialog.vue'
-import BaseButton from '../components/ui/BaseButton.vue'
-import BaseSelect from '../components/ui/BaseSelect.vue'
-import BaseInput from '../components/ui/BaseInput.vue'
+import AdminReportDetailDialog from '../components/admin/AdminReportDetailDialog.vue'
 import BaseTag from '../components/ui/BaseTag.vue'
 import BasePagination from '../components/ui/BasePagination.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
@@ -16,12 +13,10 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import { useToast } from '../composables/useToast'
 import { useAdminStore } from '../stores/admin'
 import {
-  HIDE_REASONS,
   MAX_HANDLE_NOTE_LENGTH,
   reasonLabel,
   adminReportResultMeta,
-  formatReportTime,
-  formatFullDateTime
+  formatReportTime
 } from '../utils/communityReport'
 
 const adminStore = useAdminStore()
@@ -45,86 +40,85 @@ const submitting = ref(false)
 
 const isPendingTab = computed(() => reportFilters.value.status !== 'DONE')
 
-const columns = computed(() => {
-  if (isPendingTab.value) {
-    return [
-      { key: 'targetType', title: '对象', width: 150, mobile: 'eyebrow' },
-      {
-        key: 'excerpt',
-        title: '内容',
-        mobile: 'body',
-        format: (row) => row.excerpt || '-',
-        tooltip: (row) => row.excerpt || ''
-      },
-      {
-        key: 'reporterCount',
-        title: '举报人数',
-        width: 84,
-        align: 'right',
-        mobile: 'meta',
-        format: (row) => `${row.reporterCount || 0} 人`
-      },
-      {
-        key: 'reasonCounts',
-        title: '原因',
-        width: 190,
-        mobile: 'meta',
-        format: (row) => formatReasonCounts(row.reasonCounts)
-      },
-      {
-        key: 'firstReportTime',
-        title: '首次举报',
-        width: 120,
-        mono: true,
-        mobile: 'meta',
-        format: (row) => formatReportTime(row.firstReportTime)
-      },
-      { key: 'targetUserId', title: '作者 ID', width: 88, mono: true, mobile: 'hidden' },
-      { key: 'actions', title: '操作', width: 88, align: 'right', mobile: 'hidden' }
-    ]
-  }
-  return [
-    {
-      key: 'targetType',
-      title: '对象',
-      width: 80,
-      mobile: 'eyebrow',
-      format: (row) => (row.targetType === 'REPLY' ? '回复' : '帖子')
-    },
-    {
-      key: 'excerpt',
-      title: '内容',
-      mobile: 'body',
-      format: (row) => row.excerpt || '-',
-      tooltip: (row) => row.excerpt || ''
-    },
-    { key: 'resultStatus', title: '结果', width: 180, mobile: 'status' },
-    {
-      key: 'handlerName',
-      title: '处理人',
-      width: 96,
-      mono: true,
-      mobile: 'meta',
-      format: (row) => row.handlerName || '-'
-    },
-    {
-      key: 'handleTime',
-      title: '时间',
-      width: 120,
-      mono: true,
-      mobile: 'meta',
-      format: (row) => formatReportTime(row.handleTime)
-    },
-    {
-      key: 'handleNote',
-      title: '备注',
-      width: 150,
-      mobile: 'hidden',
-      format: (row) => row.handleNote || '-'
-    },
-    { key: 'actions', title: '操作', width: 88, align: 'right', mobile: 'hidden' }
-  ]
-})
+const PENDING_COLUMNS = [
+  { key: 'targetType', title: '对象', width: 150, mobile: 'eyebrow' },
+  {
+    key: 'excerpt',
+    title: '内容',
+    mobile: 'body',
+    format: (row) => row.excerpt || '-',
+    tooltip: (row) => row.excerpt || ''
+  },
+  {
+    key: 'reporterCount',
+    title: '举报人数',
+    width: 84,
+    align: 'right',
+    mobile: 'meta',
+    format: (row) => `${row.reporterCount || 0} 人`
+  },
+  {
+    key: 'reasonCounts',
+    title: '原因',
+    width: 190,
+    mobile: 'meta',
+    format: (row) => formatReasonCounts(row.reasonCounts)
+  },
+  {
+    key: 'firstReportTime',
+    title: '首次举报',
+    width: 120,
+    mono: true,
+    mobile: 'meta',
+    format: (row) => formatReportTime(row.firstReportTime)
+  },
+  { key: 'targetUserId', title: '作者 ID', width: 88, mono: true, mobile: 'hidden' },
+  { key: 'actions', title: '操作', width: 88, align: 'right', mobile: 'hidden' }
+]
+
+const DONE_COLUMNS = [
+  {
+    key: 'targetType',
+    title: '对象',
+    width: 80,
+    mobile: 'eyebrow',
+    format: (row) => (row.targetType === 'REPLY' ? '回复' : '帖子')
+  },
+  {
+    key: 'excerpt',
+    title: '内容',
+    mobile: 'body',
+    format: (row) => row.excerpt || '-',
+    tooltip: (row) => row.excerpt || ''
+  },
+  { key: 'resultStatus', title: '结果', width: 180, mobile: 'status' },
+  {
+    key: 'handlerName',
+    title: '处理人',
+    width: 96,
+    mono: true,
+    mobile: 'meta',
+    format: (row) => row.handlerName || '-'
+  },
+  {
+    key: 'handleTime',
+    title: '时间',
+    width: 120,
+    mono: true,
+    mobile: 'meta',
+    format: (row) => formatReportTime(row.handleTime)
+  },
+  {
+    key: 'handleNote',
+    title: '备注',
+    width: 150,
+    mobile: 'hidden',
+    format: (row) => row.handleNote || '-'
+  },
+  { key: 'actions', title: '操作', width: 88, align: 'right', mobile: 'hidden' }
+]
+
+const columns = computed(() => (isPendingTab.value ? PENDING_COLUMNS : DONE_COLUMNS))
 
 onMounted(() => {
   adminStore.fetchReports()
@@ -292,128 +286,17 @@ async function submitHandle(action) {
       </template>
     </AdminDataTable>
 
-    <BaseDialog
+    <AdminReportDetailDialog
       v-model="detailVisible"
-      title="举报详情"
-      width="lg"
-      :persistent="submitting"
+      v-model:selected-hide-reason="selectedHideReason"
+      v-model:handle-note="handleNote"
+      :loading="detailLoading"
+      :detail="currentDetail"
+      :is-pending-tab="isPendingTab"
+      :submitting="submitting"
       @close="closeDetail"
-    >
-      <SkeletonCard v-if="detailLoading" rows="4" />
-
-      <div v-else-if="currentDetail" class="admin-reports__detail">
-        <div class="admin-reports__detail-grid">
-          <div>
-            <span>举报对象</span>
-            <strong>
-              {{ currentDetail.targetType === 'REPLY' ? '回复' : '帖子' }} #{{ currentDetail.targetId }}
-            </strong>
-          </div>
-          <div>
-            <span>作者</span>
-            <strong>
-              用户 #{{ currentDetail.targetUserId }} · 此前被隐藏 {{ currentDetail.authorHiddenCount || 0 }} 次
-            </strong>
-          </div>
-          <div>
-            <span>举报人数</span>
-            <strong>{{ currentDetail.reporterCount }} 人</strong>
-          </div>
-          <div>
-            <span>首次举报</span>
-            <strong>{{ formatFullDateTime(currentDetail.firstReportTime) }}</strong>
-          </div>
-        </div>
-
-        <div v-if="currentDetail.hasSafety" class="admin-reports__safety-banner">
-          这是「担心发帖人的安全」举报。隐藏不一定是最好的处理：内容本身不违规时可以选「不违规」，并留意这位用户之后的帖子。
-        </div>
-
-        <section class="admin-reports__detail-section">
-          <h3>举报时的内容</h3>
-          <p class="admin-reports__snapshot">{{ currentDetail.snapshotContent || '-' }}</p>
-          <p v-if="currentDetail.currentStatus === 0" class="admin-reports__diff-note">
-            当前内容已被作者删除。
-          </p>
-          <p v-else-if="currentDetail.contentChanged" class="admin-reports__diff-note">
-            作者在被举报后改过内容。现在是：{{ currentDetail.currentContent }}
-          </p>
-          <p v-else-if="currentDetail.currentStatus === 2" class="admin-reports__diff-note">
-            当前内容已处于隐藏状态（原因：{{ reasonLabel(currentDetail.currentHideReason) }}）。
-          </p>
-        </section>
-
-        <section class="admin-reports__detail-section">
-          <h3>举报记录</h3>
-          <ul class="admin-reports__record-list">
-            <li v-for="rec in currentDetail.records" :key="rec.id" class="admin-reports__record">
-              <div class="admin-reports__record-head">
-                <strong>{{ reasonLabel(rec.reason) }}</strong>
-                <span>举报人 #{{ rec.reporterId }} · {{ formatReportTime(rec.createTime) }}</span>
-              </div>
-              <p v-if="rec.detail" class="admin-reports__record-detail">{{ rec.detail }}</p>
-            </li>
-          </ul>
-        </section>
-
-        <section v-if="!isPendingTab && currentDetail.resultStatus" class="admin-reports__detail-section">
-          <h3>处理结果</h3>
-          <p>
-            {{ adminReportResultMeta(currentDetail.resultStatus, currentDetail.hideReason).text }}
-            · 处理人 {{ currentDetail.handlerName || '-' }}
-            · {{ formatFullDateTime(currentDetail.handleTime) }}
-          </p>
-          <p v-if="currentDetail.handleNote" class="admin-reports__handled-note">
-            内部备注：{{ currentDetail.handleNote }}
-          </p>
-        </section>
-      </div>
-
-      <template #footer>
-        <div v-if="isPendingTab && currentDetail" class="admin-reports__footer">
-          <div class="admin-reports__footer-inputs">
-            <BaseSelect
-              v-if="currentDetail.currentStatus !== 0"
-              v-model="selectedHideReason"
-              label="隐藏原因"
-              size="sm"
-              :options="HIDE_REASONS"
-            />
-            <BaseInput
-              v-model="handleNote"
-              label="内部备注"
-              placeholder="选填，只有管理员看得到"
-              :maxlength="MAX_HANDLE_NOTE_LENGTH"
-            />
-          </div>
-          <div class="admin-reports__footer-btns">
-            <BaseButton variant="plain" :disabled="submitting" @click="closeDetail">
-              关闭
-            </BaseButton>
-            <BaseButton
-              variant="secondary"
-              :disabled="submitting"
-              :loading="submitting"
-              @click="submitHandle('DISMISS')"
-            >
-              {{ currentDetail.currentStatus === 0 ? '关闭举报' : '不违规' }}
-            </BaseButton>
-            <BaseButton
-              v-if="currentDetail.currentStatus !== 0"
-              variant="danger"
-              :disabled="submitting"
-              :loading="submitting"
-              @click="submitHandle('HIDE')"
-            >
-              隐藏内容
-            </BaseButton>
-          </div>
-        </div>
-        <BaseButton v-else variant="plain" @click="closeDetail">
-          关闭
-        </BaseButton>
-      </template>
-    </BaseDialog>
+      @submit="submitHandle"
+    />
   </div>
 </template>
 
@@ -467,155 +350,5 @@ async function submitHandle(action) {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-}
-
-.admin-reports__detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.admin-reports__detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.admin-reports__detail-grid > div {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-2);
-  background: var(--bg-soft);
-}
-
-.admin-reports__detail-grid span {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-}
-
-.admin-reports__detail-grid strong {
-  color: var(--ink-1);
-  font-size: var(--fs-sm);
-  word-break: break-word;
-}
-
-.admin-reports__safety-banner {
-  padding: 12px 14px;
-  border: 1px solid var(--warn-line, rgba(212, 147, 57, 0.35));
-  border-radius: var(--radius-2);
-  background: var(--warn-soft, rgba(242, 184, 75, 0.12));
-  color: var(--warn-ink, #9a6011);
-  font-size: var(--fs-sm);
-  line-height: 1.65;
-}
-
-.admin-reports__detail-section {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-2);
-  background: var(--bg-card);
-}
-
-.admin-reports__detail-section h3 {
-  margin: 0 0 8px;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-
-.admin-reports__snapshot {
-  margin: 0;
-  color: var(--ink-1);
-  font-size: var(--fs-sm);
-  line-height: 1.8;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.admin-reports__diff-note {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: var(--radius-1);
-  background: var(--bg-soft);
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
-  line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.admin-reports__record-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.admin-reports__record {
-  padding-top: 8px;
-  border-top: 1px dashed var(--line);
-}
-
-.admin-reports__record:first-child {
-  padding-top: 0;
-  border-top: none;
-}
-
-.admin-reports__record-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-}
-
-.admin-reports__record-head strong {
-  color: var(--ink-1);
-  font-size: var(--fs-sm);
-}
-
-.admin-reports__record-detail {
-  margin: 4px 0 0;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-.admin-reports__handled-note {
-  margin: 6px 0 0;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-
-.admin-reports__footer {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.admin-reports__footer-inputs {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: 10px;
-}
-
-.admin-reports__footer-btns {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-@media (max-width: 768px) {
-  .admin-reports__detail-grid,
-  .admin-reports__footer-inputs {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

@@ -16,6 +16,7 @@ import BaseTag from '../components/ui/BaseTag.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import { useAdminStore } from '../stores/admin'
+import { formatFullDateTime } from '../utils/communityReport'
 
 const adminStore = useAdminStore()
 const detailVisible = ref(false)
@@ -92,7 +93,7 @@ const columns = [
     mono: true,
     mobile: 'meta',
     mobileLabel: '',
-    format: (row) => formatTime(row.createTime)
+    format: (row) => formatFullDateTime(row.createTime)
   },
   { key: 'actions', title: '操作', width: 76, align: 'right', mobile: 'hidden' }
 ]
@@ -113,11 +114,6 @@ function targetTypeText(targetType) {
   }
 
   return map[targetType] || targetType || '-'
-}
-
-function formatTime(value) {
-  if (!value) return '-'
-  return String(value).replace('T', ' ').slice(0, 16)
 }
 
 function handleSearch() {
@@ -271,7 +267,7 @@ function closeDetail() {
           </div>
           <div>
             <span>创建时间</span>
-            <strong>{{ formatTime(currentRecord.createTime) }}</strong>
+            <strong>{{ formatFullDateTime(currentRecord.createTime) }}</strong>
           </div>
         </div>
 
