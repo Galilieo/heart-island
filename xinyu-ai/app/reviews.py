@@ -7,21 +7,27 @@ from app.contracts import Contract, Correlation, MAX_CONTENT_UTF16, MoodType, ut
 
 # mood-review-v1 对应的提示词文件是 evals/prompts/mood-review-v1a.txt
 TEMPLATE_VERSION = 'mood-review-v1'
-# 与 Java MoodReviewService.MAX_TOTAL_CONTENT_UTF16 保持同值。
+# 与 Java MoodReviewPayloadBuilder.MAX_TOTAL_CONTENT_UTF16 保持同值。
 MAX_TOTAL_CONTENT_UTF16 = 12000
 # 2026-11-14 任务书第 3.7 节硬上限，与 Java ReviewAiResponse 同值。
 MAX_WEEK_BODY_UTF16 = 500
 MAX_RECENT_BODY_UTF16 = 600
 MAX_PS_UTF16 = 60
-# 与 Java MoodReviewService.TRUNCATION_MARKER 及 evals/run_review_eval.py 同值。
+# 与 Java MoodReviewPayloadBuilder.TRUNCATION_MARKER 及 evals/run_review_eval.py 同值。
 TRUNCATION_MARKER = '〔中间省略〕'
 TRUNCATION_MARKER_WORD = '中间省略'
 REFERENCE = re.compile(r'\{\{(r[1-9][0-9]*)}}')
-# 第6节的输出门禁，不能替代后续文字质量评测。
+# 第 6 节的输出门禁，不能替代后续文字质量评测。
 UNSAFE = re.compile(
+    # 精神科药物与临床诊断词（中文）
     r'舍曲林|氟西汀|帕罗西汀|艾司西酞普兰|文拉法辛|地西泮|劳拉西泮|阿普唑仑|锂盐|抑郁|躁郁|躁狂|强迫症|诊断|确诊|患有|抑郁症|焦虑症|双相|精神疾病|服药|用药|药物|处方|治疗|停药|加药|减药'
-    r'|sertraline|fluoxetine|paroxetine|escitalopram|venlafaxine|diazepam|lorazepam|alprazolam|depression|bipolar|disorder|prescri|dosage|diagnos|medication|antidepressant|https?://|www\.|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}'
-    r'|(?:\+?\d[\d\s-]{5,}\d)|热线|联系方式|拨打|致电|建议就医|建议看医生|建议服用', re.IGNORECASE,
+    # 精神科药物与临床诊断词（英文）
+    r'|sertraline|fluoxetine|paroxetine|escitalopram|venlafaxine|diazepam|lorazepam|alprazolam|depression|bipolar|disorder|prescri|dosage|diagnos|medication|antidepressant'
+    # 网址与邮箱
+    r'|https?://|www\.|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}'
+    # 电话号码、热线与就医建议
+    r'|(?:\+?\d[\d\s-]{5,}\d)|热线|联系方式|拨打|致电|建议就医|建议看医生|建议服用',
+    re.IGNORECASE,
 )
 # 日常记录里常见的联系方式词：发给小芽的记录原文写过时允许照说，模型自己引入时仍拒绝。
 # 2026-11-14 第二轮测评中“留了电话”“等外婆打电话”被整份误杀，见第 3 步任务书第 11 节。
@@ -71,9 +77,13 @@ class ReviewRequest(Correlation):
 
     @model_validator(mode='after')
     def consistent_references(self):
+        """校验抽样记录的 ref 唯一性、条数边界与总 UTF-16 字符预算。"""
         refs = [record.ref for record in self.records]
-        if len(set(refs)) != len(refs) or len(refs) > self.ai_enabled_total or self.ai_enabled_total > self.stats.total:
+        if len(set(refs)) != len(refs):
             raise ValueError('invalid_records')
+        if len(refs) > self.ai_enabled_total or self.ai_enabled_total > self.stats.total:
+            raise ValueError('invalid_records')
+
         total_content_utf16 = sum(utf16_length(record.content) for record in self.records)
         if total_content_utf16 > MAX_TOTAL_CONTENT_UTF16:
             raise ValueError('invalid_total_content')
@@ -92,13 +102,25 @@ def introduces_contact_word(value: str, record_text: str) -> bool:
 
 
 def validate_output(raw: str, request: ReviewRequest) -> ReviewText:
-    """校验完整 JSON、引用、长度和禁用内容；不自动重试，不接受多余字段。"""
+    """校验完整 JSON、引用、长度和禁用内容；不自动重试，不接受多余字段。
+
+    Args:
+        raw: 模型返回的原始 JSON 字符串。
+        request: 本次发送给模型的回顾请求，用于核对长度上限、允许的 ref 与原文联系方式白名单。
+
+    Returns:
+        校验通过的 ReviewText 对象。
+
+    Raises:
+        ValueError: JSON 格式不符、长度超限、含禁用内容/未授权联系方式或引用格式非法。
+    """
     text = ReviewText.model_validate(json.loads(raw))
     limit = MAX_WEEK_BODY_UTF16 if request.review_type == 'WEEK' else MAX_RECENT_BODY_UTF16
     if not text.body.strip() or utf16_length(text.body) > limit:
         raise ValueError('invalid_body')
     if text.ps is not None and (not text.ps.strip() or utf16_length(text.ps) > MAX_PS_UTF16):
         raise ValueError('invalid_ps')
+
     allowed = {record.ref for record in request.records}
     # 用换行分隔，避免上一条结尾和下一条开头拼出原文没有的词，例如“停电”+“话剧”。
     record_text = '\n'.join(record.content for record in request.records).casefold()
@@ -119,6 +141,10 @@ def success_response(request: ReviewRequest, body: str, ps: str | None, model: s
     """关联字段与日记回复保持相同类型，模板和内容字段独立。"""
     return {
         **request.model_dump(include={'request_id', 'job_id', 'attempt', 'source_version'}),
-        'body': body, 'ps': ps, 'result_kind': 'SUPPORT' if model is None else 'MODEL',
-        'model_called': model is not None, 'model_name': model, 'template_version': TEMPLATE_VERSION,
+        'body': body,
+        'ps': ps,
+        'result_kind': 'SUPPORT' if model is None else 'MODEL',
+        'model_called': model is not None,
+        'model_name': model,
+        'template_version': TEMPLATE_VERSION,
     }

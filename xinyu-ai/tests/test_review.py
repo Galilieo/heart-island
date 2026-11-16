@@ -1,8 +1,16 @@
 """回顾端点使用离线供应商替身，校验请求、危机零调用及结构失败。"""
+import json
+from pathlib import Path
+
 import pytest
 
+from app.contracts import MoodReplyRequest
 from app.main import create_app
-from tests.stub_provider import AUTH, StubProvider, client_for, make_settings
+from app.provider import SYSTEM_PROMPT, messages
+from app.review_prompt import REVIEW_SYSTEM_PROMPT
+from app.reviews import ReviewRequest
+from app.safety import build_support_reply, support_text
+from tests.stub_provider import AUTH, StubProvider, client_for, make_settings, payload
 
 
 def review_payload(**changes):
@@ -60,7 +68,6 @@ async def test_invalid_review_is_classified_without_retry(text):
 
 @pytest.mark.parametrize('body', ['你需要每天吃两片舍曲林。', 'You have depression. Take sertraline daily.'])
 async def test_medical_advice_and_diagnosis_are_rejected(body):
-    import json
     provider = StubProvider(json.dumps({'body': body, 'ps': None}, ensure_ascii=False))
     async with client_for(create_app(make_settings(), provider)) as client:
         response = await client.post('/internal/v1/mood-reviews', json=review_payload(), headers=AUTH)
@@ -70,7 +77,6 @@ async def test_medical_advice_and_diagnosis_are_rejected(body):
 
 def contact_review(content: str, body: str, ps: str | None = None):
     """构造只有一条记录的回顾请求，以及模型返回的信。"""
-    import json
     data = review_payload()
     data['records'][0]['content'] = content
     return data, StubProvider(json.dumps({'body': body, 'ps': ps}, ensure_ascii=False))
@@ -103,7 +109,6 @@ async def test_contact_word_introduced_by_model_is_rejected(body, ps):
 
 
 async def test_contact_word_spliced_across_records_is_rejected():
-    import json
     data = review_payload(ai_enabled_total=2, records=[
         {"ref": "r1", "date": "2026-11-03", "weekday": "TUESDAY", "mood_type": "平静", "content": "晚上楼下停电"},
         {"ref": "r2", "date": "2026-11-04", "weekday": "WEDNESDAY", "mood_type": "开心", "content": "话剧票抢到了"},
@@ -126,9 +131,6 @@ async def test_hotline_and_numbers_are_rejected_even_when_in_records(body):
 
 
 def test_shared_safety_corpus_matches_java_contract():
-    import json
-    from pathlib import Path
-    from app.safety import build_support_reply, support_text
     corpus = json.loads((Path(__file__).parents[2] / 'test-contracts/review-safety-cases.json').read_text())
     assert support_text() == corpus['supportText']
     for case in corpus['cases']:
@@ -136,13 +138,6 @@ def test_shared_safety_corpus_matches_java_contract():
 
 
 def test_messages_use_review_prompt_for_reviews_and_preserve_mood_reply_prompt():
-    import json
-    from pathlib import Path
-    from app.contracts import MoodReplyRequest
-    from app.provider import SYSTEM_PROMPT, messages
-    from app.review_prompt import REVIEW_SYSTEM_PROMPT
-    from app.reviews import ReviewRequest
-
     prompt_file = Path(__file__).resolve().parents[1] / 'evals/prompts/mood-review-v1a.txt'
     assert REVIEW_SYSTEM_PROMPT == prompt_file.read_text(encoding='utf-8').strip()
 
@@ -179,7 +174,6 @@ async def test_review_body_hard_limit_boundaries(review_type, ok_len, bad_len):
 
 
 async def test_review_accepts_full_12000_utf16_payload_with_escapable_chars():
-    import json
     records = [
         {
             'ref': f'r{i + 1}',
@@ -227,8 +221,6 @@ async def test_review_rejects_total_content_above_12000_utf16():
 
 
 async def test_review_allows_128_kib_limit_while_mood_reply_keeps_16_kib():
-    import json
-    from tests.stub_provider import payload
     provider = StubProvider('{"body":"散步了{{r1}}", "ps":null}')
     async with client_for(create_app(make_settings(), provider)) as client:
         oversized_review = b' ' * (131072 - len(b'{}')) + b'{' + b'}'  # 131072 bytes; +1 below

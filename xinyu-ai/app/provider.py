@@ -125,12 +125,12 @@ class ProviderFailure(Exception):
 class Provider(Protocol):
     """模型适配器协议，供生产 HTTP 调用及离线测试替身共同实现。"""
 
-    async def generate(self, request: MoodReplyRequest, deadline: float) -> ModelReply:
+    async def generate(self, request: MoodReplyRequest | ReviewRequest, deadline: float) -> ModelReply:
         """在事件循环单调时钟的绝对截止时间前返回回复，失败时抛出分类异常。"""
         ...
 
 
-def messages(request: MoodReplyRequest) -> list[dict[str, str]]:
+def messages(request: MoodReplyRequest | ReviewRequest) -> list[dict[str, str]]:
     """构造系统指令和用户消息，将心情记录作为 JSON 数据单独传入。"""
     if isinstance(request, ReviewRequest):
         return [
@@ -143,7 +143,7 @@ def messages(request: MoodReplyRequest) -> list[dict[str, str]]:
     ]
 
 
-def _request_body(settings: Settings, request: MoodReplyRequest) -> dict:
+def _request_body(settings: Settings, request: MoodReplyRequest | ReviewRequest) -> dict:
     """构造非流式 Chat Completions 请求体；思考模式按配置显式传给供应商。"""
     return {
         "model": settings.model_name,
@@ -183,7 +183,7 @@ class HttpProvider:
         self.settings = settings
         self.transport = transport
 
-    async def generate(self, request: MoodReplyRequest, deadline: float) -> ModelReply:
+    async def generate(self, request: MoodReplyRequest | ReviewRequest, deadline: float) -> ModelReply:
         """调用供应商并校验回复，同时限制阶段等待和整个调用的耗时。
 
         Args:
