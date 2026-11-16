@@ -365,9 +365,7 @@ public class CommunityReportService {
         if (latestHandled.getHandlerId() != null) {
             detail.setHandlerId(String.valueOf(latestHandled.getHandlerId()));
             User handler = userMapper.selectById(latestHandled.getHandlerId());
-            detail.setHandlerName(handler != null && handler.getUsername() != null
-                    ? handler.getUsername()
-                    : "#" + latestHandled.getHandlerId());
+            detail.setHandlerName(resolveHandlerDisplayName(handler, latestHandled.getHandlerId()));
         }
         detail.setHandleTime(latestHandled.getHandleTime());
         detail.setHandleNote(latestHandled.getHandleNote());
@@ -409,8 +407,12 @@ public class CommunityReportService {
             return "已标记不违规，相关举报已关闭";
         }
 
+        String effectiveHideReason = target.status() == CommunityReportConstants.STATUS_ADMIN_HIDDEN
+                && CommunityReportConstants.isValidHideReason(target.hideReason())
+                ? target.hideReason()
+                : params.hideReason();
         closePendingReportsOrThrow(params.targetType(), params.targetId(),
-                CommunityReportConstants.REPORT_HIDDEN, params.hideReason(), adminId, params.note(), now);
+                CommunityReportConstants.REPORT_HIDDEN, effectiveHideReason, adminId, params.note(), now);
         if (target.status() == CommunityReportConstants.STATUS_VISIBLE) {
             boolean hid = hideContentFromVisible(params.targetType(), params.targetId(),
                     target.postId(), params.hideReason());
@@ -419,6 +421,7 @@ public class CommunityReportService {
                 if (latest == null || latest.status() == null
                         || latest.status() == CommunityReportConstants.STATUS_AUTHOR_DELETED) {
                     contentReportMapper.correctClosedOnDeletedTarget(params.targetType(), params.targetId(), adminId, now);
+                    return "内容已被作者删除，相关举报已关闭";
                 }
             }
         }
@@ -589,13 +592,28 @@ public class CommunityReportService {
         Map<Long, String> names = new HashMap<>();
         if (users != null) {
             for (User user : users) {
-                String label = user.getUsername() != null && !user.getUsername().isBlank()
-                        ? user.getUsername()
-                        : user.getNickname();
-                names.put(user.getId(), label);
+                names.put(user.getId(), resolveHandlerLabel(user));
             }
         }
         return names;
+    }
+
+    private String resolveHandlerLabel(User user) {
+        if (user == null) {
+            return null;
+        }
+        if (user.getUsername() != null && !user.getUsername().isBlank()) {
+            return user.getUsername();
+        }
+        return user.getNickname();
+    }
+
+    private String resolveHandlerDisplayName(User user, Long handlerId) {
+        if (handlerId == null) {
+            return null;
+        }
+        String name = resolveHandlerLabel(user);
+        return name != null && !name.isBlank() ? name : "#" + handlerId;
     }
 
     private String resolveHandlerDisplayName(Long handlerId, Map<Long, String> names) {

@@ -82,7 +82,7 @@
 | --- | --- | --- | --- |
 | GET | `/admin/report/page` | 分页聚合队列 | Query: `status`(`PENDING`/`DONE`), `pageNum`, `pageSize`；按 `(target_type, target_id)` 聚合，`PENDING` 按含 `SAFETY` 优先再首次举报正序，`DONE` 按处理时间倒序 |
 | GET | `/admin/report/detail` | 举报详情 | Query: `targetType`, `targetId`；返回最早快照、`currentContent`/`currentStatus`/`contentChanged`、`authorHiddenCount`、`suggestedHideReason`（最多原因若为 `SAFETY`/`OTHER` 则默认 `ILLEGAL`）及全部举报记录 |
-| POST | `/admin/report/handle` | 裁决处理 | JSON: `targetType`, `targetId`, `action`(`HIDE`/`DISMISS`), `hideReason`(`HIDE`必填), `note`(≤200)；先对目标主键行加 `FOR UPDATE` 锁再条件更新 `PENDING` 行，并发冲突返回 `409`「已被其他管理员处理」；目标已被作者删除时统一闭环为 `CLOSED`；已处于 `2` 时只关闭举报不重复扣减回复数 |
+| POST | `/admin/report/handle` | 裁决处理 | JSON: `targetType`, `targetId`, `action`(`HIDE`/`DISMISS`), `hideReason`(`HIDE`必填), `note`(≤200)；先对目标主键行加 `FOR UPDATE` 锁再条件更新 `PENDING` 行，并发冲突返回 `409`「已被其他管理员处理」；目标已被作者删除时统一闭环为 `CLOSED`；已处于 `2` 时只关闭举报不重复扣减回复数，且举报记录保留内容当前 `hide_reason` |
 | GET | `/admin/report/pending-count` | 侧栏角标计数 | 按内容对象去重聚合后的待处理条数 |
 | GET | `/admin/post/{id}` | 后台帖子详情 | 含全文、话题名、`aiReply`、`hideReason`、`pendingReportCount`、`pendingReasons` |
 | GET | `/admin/reply/{id}` | 后台回复详情 | 含回复全文、所属帖子正文、`hideReason`、`pendingReportCount`、`pendingReasons` |

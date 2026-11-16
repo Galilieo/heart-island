@@ -307,6 +307,57 @@ class CommunityReportServiceTests {
         assertThat(row.getReasonCounts()).containsEntry("SAFETY", 1);
     }
 
+    @Test
+    void handleReportReturnsDeletedMessageWhenContentDeletedDuringHide() {
+        when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(1, "正文"));
+        when(contentReportMapper.handlePendingByTarget(
+                eq("POST"), eq(POST_ID), eq("HIDDEN"), eq("AD"), eq(ADMIN_ID), any(), any()))
+                .thenReturn(1);
+        when(communityPostMapper.update(eq(null), any())).thenReturn(0);
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(0, "正文"));
+
+        String message = service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "HIDE", "AD"));
+
+        assertThat(message).isEqualTo("内容已被作者删除，相关举报已关闭");
+        verify(contentReportMapper).correctClosedOnDeletedTarget(eq("POST"), eq(POST_ID), eq(ADMIN_ID), any());
+    }
+
+    @Test
+    void adminDetailUsesNicknameAndIdFallbackMatchingQueueList() {
+        ContentReport handled = reportRecord(10L, REPORTER_ID, "AD", "原文", "HIDDEN", LocalDateTime.of(2026, 11, 14, 9, 0));
+        handled.setHideReason("AD");
+        handled.setHandlerId(ADMIN_ID);
+        handled.setHandleTime(LocalDateTime.of(2026, 11, 14, 12, 0));
+        when(contentReportMapper.selectList(any())).thenReturn(List.of(handled));
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2, "原文"));
+        when(communityPostMapper.selectCount(any())).thenReturn(0L);
+        when(communityReplyMapper.selectCount(any())).thenReturn(0L);
+
+        User handler = new User();
+        handler.setId(ADMIN_ID);
+        handler.setUsername("  ");
+        handler.setNickname("值班管理员");
+        when(userMapper.selectById(ADMIN_ID)).thenReturn(handler);
+
+        AdminReportDetailVO detail = service.getAdminReportDetail("POST", POST_ID);
+        assertThat(detail.getHandlerName()).isEqualTo("值班管理员");
+    }
+
+    @Test
+    void handleReportOnAlreadyHiddenTargetPreservesExistingHideReason() {
+        CommunityPost hiddenPost = post(2, "已隐藏帖子");
+        hiddenPost.setHideReason("PRIVACY");
+        when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(hiddenPost);
+        when(contentReportMapper.handlePendingByTarget(
+                eq("POST"), eq(POST_ID), eq("HIDDEN"), eq("PRIVACY"), eq(ADMIN_ID), any(), any()))
+                .thenReturn(1);
+
+        service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "HIDE", "AD"));
+
+        verify(contentReportMapper).handlePendingByTarget(
+                eq("POST"), eq(POST_ID), eq("HIDDEN"), eq("PRIVACY"), eq(ADMIN_ID), any(), any());
+    }
+
     private static CommunityPost post(int status, String content) {
         CommunityPost post = new CommunityPost();
         post.setId(POST_ID);

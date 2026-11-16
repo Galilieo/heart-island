@@ -101,8 +101,8 @@ const emit = defineEmits([
         <p v-else-if="detail.contentChanged" class="admin-report-dialog__diff-note">
           作者在被举报后改过内容。现在是：{{ detail.currentContent }}
         </p>
-        <p v-else-if="detail.currentStatus === 2" class="admin-report-dialog__diff-note">
-          当前内容已处于隐藏状态（原因：{{ reasonLabel(detail.currentHideReason) }}）。
+        <p v-if="detail.currentStatus === 2" class="admin-report-dialog__diff-note">
+          这条内容已被隐藏，原因：{{ reasonLabel(detail.currentHideReason) }}。
         </p>
       </section>
 
