@@ -8,7 +8,8 @@ import {
   formatChineseDate,
   formatRangeShort,
   parseLetterSegments,
-  resolveLetterStaleUI
+  resolveLetterStaleUI,
+  shouldShowReviewLetter
 } from '../../utils/review'
 
 const props = defineProps({
@@ -32,8 +33,6 @@ const props = defineProps({
 
 const emit = defineEmits(['generate', 'regenerate', 'retry', 'refresh', 'openRecord'])
 
-const SHOWS_LETTER_STATES = new Set(['ready', 'stale_edited', 'failed_with_report'])
-
 const paperRef = ref(null)
 const activeCitation = ref(null)
 
@@ -41,7 +40,7 @@ const report = computed(() => props.pageData?.report || null)
 const sources = computed(() => report.value?.sources || [])
 const sourceByRef = computed(() => new Map(sources.value.map((item) => [item.ref, item])))
 const staleUi = computed(() => resolveLetterStaleUI({ mode: props.mode, viewState: props.viewState }))
-const showLetter = computed(() => Boolean(report.value?.body && SHOWS_LETTER_STATES.has(props.viewState)))
+const showLetter = computed(() => shouldShowReviewLetter(props.viewState, report.value))
 
 const bodyParagraphs = computed(() => {
   const raw = report.value?.body

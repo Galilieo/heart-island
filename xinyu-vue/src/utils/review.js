@@ -297,10 +297,23 @@ export function stripRecordQuery(query = {}) {
   return next
 }
 
+export const SHOWS_LETTER_STATES = new Set(['ready', 'stale_edited', 'failed_with_report'])
+
 /** 统一周报与近 30 天的过期 UI 分支：周报显示黄色提醒条，近 30 天仅在过期时显示信头重生成按钮。 */
 export function resolveLetterStaleUI({ mode, viewState }) {
   return {
     showWeekStaleBanner: mode === 'week' && viewState === 'stale_edited',
     showRecentRegenerate: mode === 'recent30' && viewState === 'stale_edited'
   }
+}
+
+export function shouldShowReviewLetter(viewState, report) {
+  return Boolean(report?.body && SHOWS_LETTER_STATES.has(viewState))
+}
+
+export function resolveVisibleSources(viewState, report) {
+  if (!shouldShowReviewLetter(viewState, report)) {
+    return []
+  }
+  return report.sources || []
 }

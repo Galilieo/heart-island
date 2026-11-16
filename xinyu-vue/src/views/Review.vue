@@ -1,6 +1,6 @@
 <script setup>
 // 回顾页：周报/近 30 天统计、小芽来信（12 种状态）、引用来源卡片、过往周报与任务轮询协调。
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
@@ -13,11 +13,13 @@ import { useReviewStore } from '../stores/review'
 import { useUserStore } from '../stores/user'
 import { useToast } from '../composables/useToast'
 import { useReviewPolling } from '../composables/useReviewPolling'
+import { parseQueryStart, useReviewNavigation } from '../composables/useReviewNavigation'
 import {
   canGoNextWeek,
   formatRangeLong,
   mondayOf,
   resolveReviewViewState,
+  resolveVisibleSources,
   shiftWeek,
   toDateKey
 } from '../utils/review'
@@ -70,12 +72,9 @@ const viewState = computed(() =>
   })
 )
 
-const visibleSources = computed(() => {
-  if (viewState.value === 'crisis' || !activeStats.value?.report?.body) {
-    return []
-  }
-  return activeStats.value.report.sources || []
-})
+const visibleSources = computed(() =>
+  resolveVisibleSources(viewState.value, activeStats.value?.report)
+)
 
 const pageTitle = computed(() => {
   if (mode.value === 'recent30') {
@@ -115,65 +114,22 @@ const { stopPolling } = useReviewPolling({
   }
 })
 
-function parseQueryStart(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
-}
+const { loadWeek, loadRecent30, navigateToWeek } = useReviewNavigation({
+  route,
+  router,
+  reviewStore,
+  mode,
+  weekStart,
+  loadError,
+  stopPolling,
+  toast
+})
 
 onMounted(() => {
   const initialStart = parseQueryStart(route.query.start)
   loadWeek(initialStart)
   reviewStore.fetchHistory(1).catch(() => {})
 })
-
-watch(
-  () => route.query.start,
-  (nextStart, prevStart) => {
-    if (nextStart === prevStart || mode.value !== 'week') {
-      return
-    }
-    const parsed = parseQueryStart(nextStart)
-    if (!parsed) {
-      stopPolling()
-      loadWeek('')
-      return
-    }
-    if (parsed !== weekStart.value) {
-      stopPolling()
-      loadWeek(parsed)
-    }
-  }
-)
-
-async function loadWeek(start = '') {
-  loadError.value = ''
-  reviewStore.setPollingTimedOut(false)
-  const res = await reviewStore.fetchWeek(start)
-  if (!res.ok) {
-    loadError.value = res.message || '统计加载失败'
-    toast.error(loadError.value)
-    return
-  }
-  weekStart.value = res.data.rangeStart
-}
-
-async function loadRecent30() {
-  loadError.value = ''
-  reviewStore.setPollingTimedOut(false)
-  const res = await reviewStore.fetchRecent30()
-  if (!res.ok) {
-    loadError.value = res.message || '统计加载失败'
-    toast.error(loadError.value)
-  }
-}
-
-function navigateToWeek(start) {
-  if (!start || start === weekStart.value) {
-    return
-  }
-  stopPolling()
-  loadWeek(start)
-  router.replace({ query: { ...route.query, start } })
-}
 
 function switchMode(next) {
   if (mode.value === next) {
