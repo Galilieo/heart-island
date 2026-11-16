@@ -75,7 +75,8 @@ class AiReplyContractIT {
         String schema = Files.readString(Path.of("../sql/xinyu.sql"));
         var tables = Pattern.compile("CREATE TABLE .*?;(?=\\s*(?:CREATE|INSERT|$))", Pattern.DOTALL)
                 .matcher(schema).results().map(match -> match.group()).toList();
-        assertThat(tables).hasSize(8);
+        // 8→10：回顾功能（fb793fd）把 mood_review、mood_review_source 并入建库脚本时未同步本断言。
+        assertThat(tables).hasSize(10);
         tables.forEach(jdbc::execute);
         String migration = Files.readString(Path.of("../sql/migrations/20261107_01_ai_reply_job.sql"));
         for (String statement : migration.split(";")) {
