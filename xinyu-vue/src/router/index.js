@@ -34,6 +34,11 @@ const routes = [
     meta: { title: '我的', requiresAuth: true },
   },
   {
+    path: '/profile/reports',
+    component: () => import('../views/MyReports.vue'),
+    meta: { title: '我的举报', requiresAuth: true },
+  },
+  {
     path: '/review',
     component: () => import('../views/Review.vue'),
     meta: { title: '回顾', requiresAuth: true },

@@ -18,6 +18,7 @@ import XiaoyaNote from '../components/ui/XiaoyaNote.vue'
 import PostReplyForm from '../components/community/PostReplyForm.vue'
 import PostReplyList from '../components/community/PostReplyList.vue'
 import PostEditDialog from '../components/community/PostEditDialog.vue'
+import ReportDialog from '../components/community/ReportDialog.vue'
 import { useCommunityStore } from '../stores/community'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
@@ -29,9 +30,13 @@ const communityStore = useCommunityStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
-const { currentPost, replies, topics } = storeToRefs(communityStore)
+const { currentPost, replies, topics, reportedTargets } = storeToRefs(communityStore)
 
 const editOpen = ref(false)
+const reportOpen = ref(false)
+const reportTarget = ref(null)
+const reportSubmitting = ref(false)
+const reportError = ref('')
 const updatingReplyId = ref(null)
 const deletingReplyId = ref(null)
 
@@ -138,21 +143,54 @@ async function handleDeletePost() {
   }
 }
 
+function openReport(targetType, item) {
+  reportError.value = ''
+  reportTarget.value = {
+    targetType,
+    targetId: item.id,
+    excerpt: item.content
+  }
+  reportOpen.value = true
+}
+
+async function handleSubmitReport(payload) {
+  reportSubmitting.value = true
+  reportError.value = ''
+  try {
+    const res = await communityStore.submitReport(payload)
+    if (res.ok) {
+      reportOpen.value = false
+      toast.success(res.message || '已收到举报，会尽快处理')
+    } else {
+      reportError.value = res.message || '提交举报失败'
+    }
+  } finally {
+    reportSubmitting.value = false
+  }
+}
+
 function goBack() {
   router.push('/posts')
+}
+
+async function loadPostPage() {
+  if (!route.params.id) return
+  await Promise.all([
+    doFetch(),
+    doFetchReplies(),
+    communityStore.fetchReportedTargets(route.params.id).catch(() => null)
+  ])
 }
 
 watch(
   () => route.params.id,
   async () => {
-    if (route.params.id) {
-      await Promise.all([doFetch(), doFetchReplies()])
-    }
+    await loadPostPage()
   }
 )
 
 onMounted(async () => {
-  await Promise.all([doFetch(), doFetchReplies(), doFetchTopics()])
+  await Promise.all([loadPostPage(), doFetchTopics()])
 })
 </script>
 
@@ -171,11 +209,13 @@ onMounted(async () => {
         <PostCard
           :post="currentPost"
           :topics="topics"
+          :reported-status="reportedTargets[`POST:${currentPost.id}`] || ''"
           variant="detail"
           @toggle-like="handleLike"
           @toggle-favorite="handleFavorite"
           @edit="editOpen = true"
           @delete="handleDeletePost"
+          @report="openReport('POST', $event)"
         />
 
         <!-- AI 批注统一用小芽「页边手写」样式；提示语来自原 PostAiReply，不能丢 -->
@@ -184,7 +224,12 @@ onMounted(async () => {
           <p class="detail__note-hint">这条回复由 AI 自动生成，不代表平台立场</p>
         </div>
 
+        <p v-if="currentPost.hidden" class="detail__hidden-reply-tip">
+          这条帖子已被隐藏，暂时不能继续回复。
+        </p>
+
         <PostReplyForm
+          v-else
           ref="replyFormRef"
           :submitting="replySubmitting"
           @submit="handleSubmitReply"
@@ -193,10 +238,13 @@ onMounted(async () => {
         <PostReplyList
           :replies="replies"
           :loading="repliesLoading"
+          :reported-targets="reportedTargets"
+          :post-hidden="Boolean(currentPost.hidden)"
           :updating-id="updatingReplyId"
           :deleting-id="deletingReplyId"
           @edit-submit="handleEditReply"
           @delete="handleDeleteReply"
+          @report="openReport('REPLY', $event)"
         />
       </template>
 
@@ -214,6 +262,14 @@ onMounted(async () => {
         :topics="topics"
         :saving="postUpdating"
         @save="handleSavePost"
+      />
+
+      <ReportDialog
+        v-model="reportOpen"
+        :target="reportTarget"
+        :submitting="reportSubmitting"
+        :server-error="reportError"
+        @submit="handleSubmitReport"
       />
     </div>
   </AppShell>
@@ -255,5 +311,15 @@ onMounted(async () => {
   margin: 6px 0 0 16px;
   color: var(--ink-3);
   font-size: var(--fs-xs);
+}
+
+.detail__hidden-reply-tip {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-2);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  text-align: center;
 }
 </style>

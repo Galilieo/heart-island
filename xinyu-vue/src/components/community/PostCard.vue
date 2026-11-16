@@ -8,11 +8,15 @@ import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import MoodTag from '../mood/MoodTag.vue'
 import XiaoyaNote from '../ui/XiaoyaNote.vue'
+import Xiaoya from '../ui/Xiaoya.vue'
+import MoreMenu from './MoreMenu.vue'
 import { formatTime } from '../../utils/mood'
+import { reasonLabel } from '../../utils/communityReport'
 
 const props = defineProps({
   post: { type: Object, required: true },
   topics: { type: Array, default: () => [] },
+  reportedStatus: { type: String, default: '' },
   variant: {
     type: String,
     default: 'card', // card | detail
@@ -20,7 +24,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['open', 'toggle-like', 'toggle-favorite', 'edit', 'delete'])
+defineEmits(['open', 'toggle-like', 'toggle-favorite', 'edit', 'delete', 'report'])
 
 const topicName = computed(() => {
   const t = props.topics.find((x) => x.id === props.post.topicId)
@@ -31,7 +35,7 @@ const authorName = computed(() => {
   return props.post.anonymousName || props.post.nickname || '匿名朋友'
 })
 
-const isOwner = computed(() => Boolean(props.post?.mine))
+const isOwner = computed(() => Boolean(props.post.mine))
 
 // 有数量时统一写「抱抱 N」，无数量按是否已抱抱区分
 const likeLabel = computed(() => {
@@ -48,12 +52,28 @@ const likeLabel = computed(() => {
     :class="`pc--${variant}`"
     @click="variant === 'card' ? $emit('open', post.id) : null"
   >
+    <div v-if="variant === 'detail' && post.hidden" class="pc__hidden-banner" role="status">
+      <Xiaoya expression="thinking" :size="40" />
+      <div class="pc__hidden-copy">
+        <strong>这条内容因违反社区规范已被隐藏，仅你自己可见。</strong>
+        <p>
+          违规原因：{{ reasonLabel(post.hideReason) }}。如有异议，请按隐私政策中的联系邮箱与我们联系。
+        </p>
+      </div>
+    </div>
+
     <header class="pc__meta">
       <MoodTag :mood-type="post.moodType" size="sm" />
       <span class="pc__meta-item">{{ authorName }}</span>
       <span class="pc__meta-sep" aria-hidden="true">·</span>
       <span class="pc__meta-item">{{ topicName }}</span>
       <span class="pc__meta-time">{{ formatTime(post.createTime) }}</span>
+      <MoreMenu
+        v-if="variant === 'detail' && !isOwner && !post.hidden"
+        :reported-status="reportedStatus"
+        label="举报或更多操作"
+        @report="$emit('report', post)"
+      />
     </header>
 
     <p
@@ -72,6 +92,8 @@ const likeLabel = computed(() => {
         type="button"
         class="pc__action motion-press"
         :class="{ 'is-active': post.liked }"
+        :disabled="Boolean(post.hidden)"
+        :title="post.hidden ? '内容已被隐藏' : undefined"
         @click="$emit('toggle-like', post)"
       >
         <span class="pc__action-ico" aria-hidden="true">{{ post.liked ? '♥' : '♡' }}</span>
@@ -82,6 +104,8 @@ const likeLabel = computed(() => {
         type="button"
         class="pc__action motion-press"
         :class="{ 'is-active is-fav': post.favorited }"
+        :disabled="Boolean(post.hidden)"
+        :title="post.hidden ? '内容已被隐藏' : undefined"
         @click="$emit('toggle-favorite', post)"
       >
         <span class="pc__action-ico" aria-hidden="true">{{ post.favorited ? '★' : '☆' }}</span>
@@ -95,7 +119,12 @@ const likeLabel = computed(() => {
       <span class="pc__spacer" />
 
       <template v-if="isOwner && variant === 'detail'">
-        <button type="button" class="pc__action pc__action--soft motion-press" @click="$emit('edit', post)">
+        <button
+          v-if="!post.hidden"
+          type="button"
+          class="pc__action pc__action--soft motion-press"
+          @click="$emit('edit', post)"
+        >
           编辑
         </button>
         <button type="button" class="pc__action pc__action--danger motion-press" @click="$emit('delete', post)">
@@ -196,6 +225,40 @@ const likeLabel = computed(() => {
 .pc__action-ico {
   font-size: 14px;
   line-height: 1;
+}
+
+.pc__action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pc__hidden-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--warn-line, rgba(212, 147, 57, 0.35));
+  border-radius: var(--radius-2);
+  background: var(--warn-soft, rgba(242, 184, 75, 0.12));
+  color: var(--ink-1);
+}
+
+.pc__hidden-copy {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+.pc__hidden-copy strong {
+  display: block;
+  color: var(--warn-ink, #9a6011);
+}
+
+.pc__hidden-copy p {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
 }
 
 .pc__spacer { flex: 1; }

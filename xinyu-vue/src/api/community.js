@@ -1,7 +1,7 @@
 // 社区相关接口：帖子 + 回复。
 // 注意后端 like/unlike/favorite/unfavorite/delete 用的是 query param
 // （不是请求体），所以这里都走 params 形式。
-import { request, unwrap } from './_helpers'
+import { request, unwrap, unwrapHttp } from './_helpers'
 
 // 已用有限真实调用校准：同步社区生成使用独立20秒等待，不改变全局5秒。
 const SAVE_TIMEOUT_MS = 20_000
@@ -78,5 +78,19 @@ export const communityApi = {
 
   removeReply(id) {
     return unwrap(request.post('/community/reply/delete', null, { params: { id } }))
+  },
+
+  /* ───── reports ───── */
+
+  report(payload) {
+    return unwrapHttp(request.post('/community/report', payload))
+  },
+
+  myReports(params = {}) {
+    return unwrapHttp(request.get('/community/report/mine', { params }))
+  },
+
+  reportedTargets(postId) {
+    return unwrapHttp(request.get('/community/report/reported-targets', { params: { postId } }))
   }
 }

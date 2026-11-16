@@ -37,7 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest
 @Import({JwtUtil.class, AuthWebConfig.class, CorsConfig.class, JacksonConfig.class})
 @MockitoBean(types = {MoodRecordService.class, MoodReviewService.class, AiJobService.class,
-        CommunityPostService.class, CommunityReplyService.class, TopicService.class, AiReplyLogService.class,
+        CommunityPostService.class, CommunityReplyService.class, CommunityReportService.class,
+        TopicService.class, AiReplyLogService.class,
         UserMapper.class, CommunityPostMapper.class, CommunityReplyMapper.class, ContentReportMapper.class,
         AiReplyMapper.class})
 class AuthHttpTests {
@@ -65,8 +66,8 @@ class AuthHttpTests {
 
     @ParameterizedTest
     @ValueSource(strings = {"/mood/list", "/mood/trend/recent7", "/user/profile-stats",
-            "/user/test/11", "/community/post/favorites", "/admin/user/page",
-            "/admin/post/page", "/admin/reply/page", "/admin/topic/list",
+            "/user/test/11", "/community/post/favorites", "/community/report/mine",
+            "/admin/user/page", "/admin/post/page", "/admin/reply/page", "/admin/topic/list",
             "/admin/ai-replies/page", "/admin/overview", "/mood/report/week", "/mood/analysis", "/mood/report/week/history"})
     void missingTokenReturns401(String path) throws Exception {
         mvc.perform(get(path)).andExpect(status().isUnauthorized())

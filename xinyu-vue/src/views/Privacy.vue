@@ -11,7 +11,7 @@ import AppShell from '../components/layout/AppShell.vue'
 
       <header class="privacy__head">
         <h1 class="privacy__title">心屿隐私政策</h1>
-        <p class="privacy__date">更新日期：2026年11月11日</p>
+        <p class="privacy__date">更新日期：2026年11月16日</p>
       </header>
 
       <section class="privacy__summary">
@@ -39,6 +39,9 @@ import AppShell from '../components/layout/AppShell.vue'
         用于记录、历史回看和情绪统计。</p>
       <p><strong>社区内容。</strong>你发布的帖子、评论、抱抱（即点赞）和收藏用于社区展示。
         社区以匿名昵称展示，但我们的系统仍保留内容与账号的关联，匿名不等于无法识别发布者。</p>
+      <p><strong>举报与内容治理。</strong>你举报社区内容时，我们会保存举报原因、补充说明，
+        以及被举报内容在举报时的副本，用于管理员核实与处理；页面「我的举报」展示最近 90 天内的举报处理进度。
+        被举报内容的作者不会看到举报人身份，也不会看到管理员的内部处理备注。</p>
       <p><strong>AI 回复与运行记录。</strong>保存 AI 生成的回复，以及生成状态、失败原因等记录，
         用于让你回看回复、查询生成进度和排查故障。</p>
       <p><strong>访问日志。</strong>服务器会记录访问时间、IP 地址等必要的访问日志，用于保障安全和排查故障。</p>

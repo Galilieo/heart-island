@@ -9,16 +9,20 @@ import BaseTextarea from '../ui/BaseTextarea.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import EmptyState from '../ui/EmptyState.vue'
 import SkeletonCard from '../ui/SkeletonCard.vue'
+import MoreMenu from './MoreMenu.vue'
 import { formatTime } from '../../utils/mood'
+import { reasonLabel } from '../../utils/communityReport'
 
 const props = defineProps({
   replies: { type: Array, default: () => [] },
   loading: Boolean,
+  reportedTargets: { type: Object, default: () => ({}) },
+  postHidden: Boolean,
   updatingId: { type: [String, Number, null], default: null },
   deletingId: { type: [String, Number, null], default: null }
 })
 
-const emit = defineEmits(['edit-submit', 'delete'])
+const emit = defineEmits(['edit-submit', 'delete', 'report'])
 
 const editingId = ref(null)
 const editContent = ref('')
@@ -91,6 +95,7 @@ async function saveEdit(reply) {
 
           <div v-if="isOwner(r) && editingId !== r.id" class="rl__owner-ops">
             <button
+              v-if="!r.hidden && !postHidden"
               type="button"
               class="rl__op"
               :disabled="updatingId === r.id || deletingId === r.id"
@@ -103,9 +108,19 @@ async function saveEdit(reply) {
               @click="emit('delete', r)"
             >{{ deletingId === r.id ? '删除中…' : '删除' }}</button>
           </div>
+          <MoreMenu
+            v-else-if="!isOwner(r) && !r.hidden && !postHidden"
+            :reported-status="reportedTargets[`REPLY:${r.id}`] || ''"
+            label="举报回复或更多操作"
+            @report="emit('report', r)"
+          />
         </header>
 
-        <div v-if="editingId === r.id" class="rl__edit">
+        <div v-if="r.hidden" class="rl__hidden-placeholder" role="status">
+          这条回复因违反社区规范已被隐藏（原因：{{ reasonLabel(r.hideReason) }}），仅你自己可见。
+        </div>
+
+        <div v-else-if="editingId === r.id" class="rl__edit">
           <BaseTextarea
             v-model="editContent"
             :rows="3"
@@ -260,5 +275,15 @@ async function saveEdit(reply) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.rl__hidden-placeholder {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-2);
+  background: var(--bg-soft);
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
 }
 </style>

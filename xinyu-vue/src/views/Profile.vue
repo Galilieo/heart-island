@@ -171,10 +171,16 @@ async function handleSavePassword() {
       </div>
 
       <!-- 手机底部导航不再放「收藏」，这里保留统一入口。 -->
-      <RouterLink to="/favorites" class="profile__favorites">
-        <span>我的收藏</span>
-        <span class="profile__favorites-arrow" aria-hidden="true">›</span>
-      </RouterLink>
+      <div class="profile__links">
+        <RouterLink to="/favorites" class="profile__favorites">
+          <span>我的收藏</span>
+          <span class="profile__favorites-arrow" aria-hidden="true">›</span>
+        </RouterLink>
+        <RouterLink to="/profile/reports" class="profile__favorites">
+          <span>我的举报</span>
+          <span class="profile__favorites-arrow" aria-hidden="true">›</span>
+        </RouterLink>
+      </div>
 
       <!-- 设置区：局部 tabs 分层 -->
       <BaseCard padding="lg" class="profile__panel">
@@ -403,7 +409,19 @@ async function handleSavePassword() {
   white-space: nowrap;
 }
 
-/* ── 收藏入口：手机底部导航收起收藏后的统一入口 ── */
+/* ── 收藏 / 举报入口 ── */
+.profile__links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .profile__links {
+    grid-template-columns: 1fr;
+  }
+}
+
 .profile__favorites {
   display: flex;
   align-items: center;
