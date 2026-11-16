@@ -13,6 +13,10 @@ spring:
       data-source-properties:
         connectTimeout: 2000
         socketTimeout: 6000
+  data:
+    redis:
+      # 留空时只用本机进程内计数，应用照常启动（本机开发默认）。
+      url: ${REDIS_URL:}
 
 server:
   forward-headers-strategy: framework
@@ -21,6 +25,18 @@ xinyu:
   review:
     # 回顾统计的自然周和近 30 天都按这个时区的墙上时间计算。
     time-zone: Asia/Shanghai
+  rate-limit:
+    # 付费 AI 调用的时间窗口额度（阶段 1b）；窗口按整点和自然日对齐。
+    # key-prefix 含冒号，必须带引号。
+    enabled: true
+    key-prefix: "xinyu:dev:"
+    redis-timeout: 200ms
+    fallback-cooldown: 30s
+    mood-per-hour: 20
+    mood-per-day: 100
+    community-per-hour: 10
+    review-per-day: 10
+    global-per-hour: 1000
 
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}
