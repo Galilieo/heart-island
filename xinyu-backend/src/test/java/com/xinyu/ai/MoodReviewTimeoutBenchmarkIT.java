@@ -10,6 +10,7 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.MoodRecordMapper;
 import com.xinyu.mapper.MoodReviewMapper;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.service.AiJobAdmission;
 import com.xinyu.service.MoodReviewService;
 import com.xinyu.service.MoodReviewStatsService;
@@ -111,7 +112,7 @@ class MoodReviewTimeoutBenchmarkIT {
         Clock clock = Clock.fixed(Instant.parse("2026-11-13T04:00:00Z"), ZoneId.of("Asia/Shanghai"));
         statsService = new MoodReviewStatsService(recordMapper, clock);
         reviewService = new MoodReviewService(
-                new MoodReviewMapper(jdbc), statsService, clock, manager, new AiJobAdmission(manager));
+                new MoodReviewMapper(jdbc), statsService, clock, manager, new AiJobAdmission(manager), new AlwaysAllowRateLimiter());
         reviewService.setReviewJobs(sessions.getMapper(AiJobMapper.class));
 
         cleanupBenchmarkUser();

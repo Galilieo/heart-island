@@ -10,6 +10,7 @@ import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.MoodRecordMapper;
 import com.xinyu.mapper.MoodReviewMapper;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.service.AiJobAdmission;
 import com.xinyu.service.AiJobService;
 import com.xinyu.service.AiJobWorker;
@@ -88,7 +89,7 @@ class MoodReviewPersistenceIT {
         reviews = new MoodReviewService(
                 new MoodReviewMapper(jdbc),
                 new MoodReviewStatsService(sessions.getMapper(MoodRecordMapper.class), clock),
-                clock, manager, new AiJobAdmission(manager));
+                clock, manager, new AiJobAdmission(manager), new AlwaysAllowRateLimiter());
         reviews.setReviewJobs(sessions.getMapper(AiJobMapper.class));
     }
 
@@ -96,7 +97,7 @@ class MoodReviewPersistenceIT {
         var instance = new MoodReviewService(
                 new MoodReviewMapper(jdbc),
                 new MoodReviewStatsService(sessions.getMapper(MoodRecordMapper.class), clock),
-                clock, manager, new AiJobAdmission(manager));
+                clock, manager, new AiJobAdmission(manager), new AlwaysAllowRateLimiter());
         instance.setReviewJobs(sessions.getMapper(AiJobMapper.class));
         return instance;
     }
@@ -150,7 +151,7 @@ class MoodReviewPersistenceIT {
         }
         var jobs = new AiJobService(sessions.getMapper(AiJobMapper.class),
                 sessions.getMapper(MoodRecordMapper.class), sessions.getMapper(AiReplyMapper.class),
-                new AiJobAdmission(manager), true);
+                new AiJobAdmission(manager), new AlwaysAllowRateLimiter(), true);
         jobs.setReviews(reviews);
         return jobs;
     }
@@ -379,7 +380,7 @@ class MoodReviewPersistenceIT {
         var tomorrow = Clock.offset(clock, Duration.ofDays(1));
         var nextDay = new MoodReviewService(new MoodReviewMapper(jdbc),
                 new MoodReviewStatsService(sessions.getMapper(MoodRecordMapper.class), tomorrow),
-                tomorrow, manager, new AiJobAdmission(manager));
+                tomorrow, manager, new AiJobAdmission(manager), new AlwaysAllowRateLimiter());
         assertThat(nextDay.get(user, "RECENT_30", null).report().stale()).isTrue();
         assertThat(nextDay.get(user, "RECENT_30", null).report().id()).isEqualTo(report.id());
 

@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 
 /** 验证发往 Python 的回顾请求使用中文星期、配额与长度上限，且不依赖系统 Locale。 */
 class MoodReviewServiceTests {
@@ -261,7 +262,7 @@ class MoodReviewServiceTests {
                 new MoodReviewStatsService(recordMapper, CLOCK),
                 CLOCK,
                 manager,
-                new AiJobAdmission(manager));
+                new AiJobAdmission(manager), new AlwaysAllowRateLimiter());
         if (reviewJobs != null) {
             service.setReviewJobs(reviewJobs);
         }

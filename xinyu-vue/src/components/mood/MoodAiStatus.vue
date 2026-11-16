@@ -15,6 +15,14 @@ const messages = {
   superseded: '内容已更新，请刷新查看当前回复状态。',
   cancelled: '本次生成已取消。',
 }
+
+// 限流错误的专属文案（对应后端 rate_limited_* 错误码）：
+// 记录已保存，只是这次不生成；小时额度稍后可重试，每天额度明天恢复。
+const rateLimitMessages = {
+  rate_limited_day: '今天小芽的回复次数用完了，记录已保存。',
+  rate_limited_hour: '小芽这会儿回复得太多了，记录已保存，稍后可以重试。',
+  rate_limited_global: '小芽这会儿太忙了，记录已保存，稍后可以重试。',
+}
 const remaining = computed(() => {
   if (props.mood.aiReplyState !== 'failed' || !props.mood.aiJob?.retryAfterSeconds) {
     return 0
@@ -37,13 +45,22 @@ const observationMessage = computed(() => {
 // 仅用于展示：排队 / 生成中的状态配一个小芽“思考”表情；不参与任何状态判断。
 // 小于 36px 时头顶的“…”气泡和挑眉看不清，会被看成普通笑脸。
 const isThinking = computed(() => ['queued', 'running'].includes(props.mood.aiReplyState))
+
+// 失败且错误码是限流时，用对应文案替换通用失败提示。
+const statusMessage = computed(() => {
+  if (props.mood.aiReplyState === 'failed') {
+    const limited = rateLimitMessages[props.mood.aiJob?.errorCode]
+    if (limited) return limited
+  }
+  return messages[props.mood.aiReplyState] || '暂无 AI 回复。'
+})
 </script>
 
 <template>
   <div class="ai-status" role="status" aria-live="polite">
     <p class="ai-status__message">
       <Xiaoya v-if="isThinking" expression="thinking" animated :size="36" />
-      <span>{{ messages[mood.aiReplyState] || '暂无 AI 回复。' }}</span>
+      <span>{{ statusMessage }}</span>
     </p>
     <p v-if="observationMessage">{{ observationMessage }}</p>
     <p v-else-if="remaining > 0">还需等待 {{ remaining }} 秒，之后可手动重试。</p>

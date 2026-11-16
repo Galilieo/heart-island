@@ -8,6 +8,7 @@ import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.dto.MoodAiResponse;
 import com.xinyu.dto.MoodAiRequest;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.service.AiJobWorker;
 import com.xinyu.service.AiJobRuntime;
 import com.xinyu.service.AiServiceClient;
@@ -105,8 +106,8 @@ class AiJobPersistenceIT {
         jobs = sessions.getMapper(AiJobMapper.class);
         replies = sessions.getMapper(AiReplyMapper.class);
         admission = new AiJobAdmission(manager);
-        jobService = new AiJobService(jobs, moods, replies, admission, true);
-        service = new MoodRecordService(moods, jobService, admission);
+        jobService = new AiJobService(jobs, moods, replies, admission, new AlwaysAllowRateLimiter(), true);
+        service = new MoodRecordService(moods, jobService, admission, new AlwaysAllowRateLimiter());
     }
 
     @BeforeEach
@@ -631,7 +632,7 @@ class AiJobPersistenceIT {
             MoodRecord snapshot = moods.selectById(saved.getId());
             checked.countDown(); await(release); return snapshot;
         }).when(paused).selectById(saved.getId());
-        AiJobService retrying = new AiJobService(jobs, paused, replies, admission, true);
+        AiJobService retrying = new AiJobService(jobs, paused, replies, admission, new AlwaysAllowRateLimiter(), true);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             Future<?> retry = executor.submit(() -> retrying.retry(userId, job.getId()));
@@ -657,7 +658,7 @@ class AiJobPersistenceIT {
             int rows = jobs.requeueAfterCooldown(call.getArgument(0), call.getArgument(1));
             requeued.countDown(); await(release); return rows;
         }).when(paused).requeueAfterCooldown(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt());
-        AiJobService retrying = new AiJobService(paused, moods, replies, admission, true);
+        AiJobService retrying = new AiJobService(paused, moods, replies, admission, new AlwaysAllowRateLimiter(), true);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
             Future<?> retry = executor.submit(() -> retrying.retry(userId, job.getId()));
@@ -1154,7 +1155,7 @@ class AiJobPersistenceIT {
                 });
 
         // 服务对象重建不改变资格，冷却依据保存在数据库中。
-        AiJobService restarted = new AiJobService(jobs, moods, replies, admission, true);
+        AiJobService restarted = new AiJobService(jobs, moods, replies, admission, new AlwaysAllowRateLimiter(), true);
         assertThat(restarted.getOwned(userId, saved.getJobId()).retryable()).isFalse();
         jdbc.update("UPDATE ai_job SET finished_at=TIMESTAMPADD(SECOND,-181,CURRENT_TIMESTAMP) WHERE id=?",
                 saved.getJobId());

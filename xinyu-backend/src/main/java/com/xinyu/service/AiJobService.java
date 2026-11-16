@@ -8,6 +8,8 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.MoodRecordMapper;
+import com.xinyu.ratelimit.RateLimiter;
+import com.xinyu.ratelimit.RateLimitType;
 import com.xinyu.vo.AiJobVO;
 import com.xinyu.vo.MoodRecordVO;
 import org.slf4j.Logger;
@@ -53,6 +55,11 @@ public class AiJobService {
     private static final String ERROR_CAPACITY_EXCEEDED = "capacity_exceeded";
     private static final String ERROR_INTERNAL = "internal_error";
 
+    /** 限流拒绝的错误码集合，取值见 RateLimitScope.errorCode；任务 attempt=0，不在冷却中。 */
+    private static final String ERROR_RATE_LIMITED_HOUR = "rate_limited_hour";
+    private static final String ERROR_RATE_LIMITED_DAY = "rate_limited_day";
+    private static final String ERROR_RATE_LIMITED_GLOBAL = "rate_limited_global";
+
     /** 无任务时的来源状态：历史回复 legacy、待生成 unavailable、已关闭 disabled。 */
     private static final String STATE_LEGACY = "legacy";
     private static final String STATE_UNAVAILABLE = "unavailable";
@@ -71,20 +78,24 @@ public class AiJobService {
     private static final Set<String> ERROR_CODES = Set.of(
             "invalid_request", "unauthorized", "provider_timeout", "provider_error",
             ERROR_INVALID_MODEL_RESPONSE, "overloaded", "execution_interrupted",
-            ERROR_CAPACITY_EXCEEDED, ERROR_INTERNAL);
+            ERROR_CAPACITY_EXCEEDED, ERROR_INTERNAL,
+            ERROR_RATE_LIMITED_HOUR, ERROR_RATE_LIMITED_DAY, ERROR_RATE_LIMITED_GLOBAL);
 
     private final AiJobMapper jobs;
     private final MoodRecordMapper moods;
     private final AiReplyMapper replies;
     private final AiJobAdmission admission;
+    private final RateLimiter rateLimiter;
     private final boolean workerEnabled;
 
     public AiJobService(AiJobMapper jobs, MoodRecordMapper moods, AiReplyMapper replies,
-                        AiJobAdmission admission, @Value("${AI_WORKER_ENABLED:false}") boolean workerEnabled) {
+                        AiJobAdmission admission, RateLimiter rateLimiter,
+                        @Value("${AI_WORKER_ENABLED:false}") boolean workerEnabled) {
         this.jobs = jobs;
         this.moods = moods;
         this.replies = replies;
         this.admission = admission;
+        this.rateLimiter = rateLimiter;
         this.workerEnabled = workerEnabled;
     }
 
@@ -202,13 +213,14 @@ public class AiJobService {
      * 失败重试沿用任务；准入锁覆盖容量检查到事务提交，但不反向锁定来源。
      *
      * @return 任务当前视图；已处于 queued/running/succeeded 时按幂等返回
-     * @throws ResponseStatusException 任务不可重试、容量已满或状态已变化
+     * @throws ResponseStatusException 任务不可重试、额度不足（429）、容量已满或状态已变化
      */
     public AiJobVO retry(long userId, long jobId) {
         AiJob observed = jobs.selectById(jobId);
         if (observed != null && MoodReviewService.TASK_TYPE.equals(observed.getTaskType())) {
             return reviews.retry(userId, jobId);
         }
+        requireRetryQuota(userId, observed);
         return admission.save(() -> {
             AiJob job = ownedJob(userId, jobId);
             MoodRecord source = ownedCurrentSource(job);
@@ -393,16 +405,21 @@ public class AiJobService {
     private void requireCooldownElapsed(AiJob job, int cooldownSeconds) {
         int remainingSeconds = retryAfterSeconds(job, cooldownSeconds);
         if (remainingSeconds > 0) {
-            HttpHeaders headers = new HttpHeaders();
-            headers.set(HttpHeaders.RETRY_AFTER, Integer.toString(remainingSeconds));
-            // ResponseStatusException默认返回只读空头；覆盖取头方法，沿用既有异常响应结构。
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "回应任务冷却中，请稍后重试") {
-                @Override
-                public HttpHeaders getHeaders() {
-                    return headers;
-                }
-            };
+            throw tooManyRequests(remainingSeconds, "回应任务冷却中，请稍后重试");
         }
+    }
+
+    /** 冷却与限流共用的 429 返回：携带 Retry-After 头，沿用既有异常响应结构。 */
+    private static ResponseStatusException tooManyRequests(int retryAfterSeconds, String message) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, Integer.toString(retryAfterSeconds));
+        // ResponseStatusException默认返回只读空头；覆盖取头方法，沿用既有异常响应结构。
+        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, message) {
+            @Override
+            public HttpHeaders getHeaders() {
+                return headers;
+            }
+        };
     }
 
     private static ResponseStatusException http(HttpStatus status, String message) {
@@ -412,27 +429,74 @@ public class AiJobService {
     /**
      * 为来源当前版本创建任务；来源未开启 AI 回应时返回 null。
      * 调用方必须持有单实例准入锁，并处于来源保存的同一事务中。
+     * 限流决定由调用方在事务外先做出并传入：额度检查不进入数据库事务与准入锁（契约 2.5）。
      *
      * @param source 已保存且版本为当前值的来源
+     * @param rateLimit 调用方在事务外完成的限流结果
      * @return 新建任务；来源未开启 AI 回应时返回 null
      */
-    public AiJob createForVersion(MoodRecord source) {
+    public AiJob createForVersion(MoodRecord source, RateLimiter.Decision rateLimit) {
         if (!Boolean.TRUE.equals(source.getAiReplyEnabled())) return null;
-        boolean full = capacityFull(source.getUserId());
+        boolean rateLimited = rateLimit != null && !rateLimit.allowed();
+        boolean full = !rateLimited && capacityFull(source.getUserId());
         AiJob job = new AiJob();
         job.setUserId(source.getUserId());
         job.setTargetId(source.getId());
         job.setTaskType(TASK_TYPE_MOOD_REPLY);
         job.setTargetVersion(source.getContentVersion());
         job.setAttemptCount(0);
-        job.setStatus(full ? STATUS_FAILED : STATUS_QUEUED);
+        job.setStatus(rateLimited || full ? STATUS_FAILED : STATUS_QUEUED);
         job.setTemplateVersion(TEMPLATE_VERSION);
-        if (full) {
+        if (rateLimited) {
+            // 记录仍照常保存（契约 2.4）；任务 attempt=0 不在冷却中，retryable 为真。
+            job.setLastErrorCode(rateLimit.blockedScope().errorCode());
+            job.setFinishedAt(LocalDateTime.now());
+        } else if (full) {
             job.setLastErrorCode(ERROR_CAPACITY_EXCEEDED);
             job.setFinishedAt(LocalDateTime.now());
         }
         if (jobs.insert(job) != 1) throw new IllegalStateException("任务保存未成功");
         return job;
+    }
+
+    /**
+     * 重试的限流预检：在准入事务外完成（Redis 调用不进事务与锁，契约 2.5）。
+     * 快照判断“确定会重新入队”才扣额度——幂等返回（queued/running/succeeded）、不可重试状态、
+     * 冷却中都不重新入队，不扣；容量满留给事务内 503，按“已扣不退”契约处理。
+     * 归属、类型与来源的正式校验仍在事务内；危机文本豁免——命中安全正则的来源由固定
+     * SUPPORT 回应，不应被额度挡住（契约 2.1）。
+     */
+    private void requireRetryQuota(long userId, AiJob observed) {
+        if (observed == null
+                || !TASK_TYPE_MOOD_REPLY.equals(observed.getTaskType())
+                || !Objects.equals(observed.getUserId(), userId)) {
+            return;
+        }
+        if (ACTIVE_OR_SUCCEEDED.contains(observed.getStatus())) {
+            return;
+        }
+        if (!STATUS_FAILED.equals(observed.getStatus())) {
+            return;
+        }
+        int cooldownSeconds = AiJobRetryPolicy.cooldownSeconds(observed.getAttemptCount());
+        if (cooldownSeconds > 0) {
+            Integer remainingSeconds = jobs.selectRetryAfterSeconds(observed, cooldownSeconds);
+            if (remainingSeconds == null || remainingSeconds > 0) {
+                return;
+            }
+        }
+        MoodRecord source = moods.selectById(observed.getTargetId());
+        if (source == null || source.getContent() == null) {
+            return;
+        }
+        if (MoodReviewSafety.matches(source.getContent())) {
+            return;
+        }
+        RateLimiter.Decision decision = rateLimiter.check(RateLimitType.MOOD_REPLY, userId);
+        if (!decision.allowed()) {
+            // 不改任务状态；沿用冷却 429 的返回方式，Retry-After 取限流组件给的再试秒数。
+            throw tooManyRequests(decision.retryAfterSeconds(), "回应次数已用完，请稍后重试");
+        }
     }
 
     /** 失效来源的未完成任务；调用方负责事务边界。 */

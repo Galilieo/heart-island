@@ -7,6 +7,7 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.MoodRecordMapper;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.service.AiJobAdmission;
 import com.xinyu.service.AiJobService;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +42,7 @@ class AiJobLifecycleTests {
         transaction = mock(TransactionStatus.class);
         when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(transaction);
         admission = new AiJobAdmission(manager);
-        service = new AiJobService(jobs, moods, replies, admission, true);
+        service = new AiJobService(jobs, moods, replies, admission, new AlwaysAllowRateLimiter(), true);
     }
 
     /** 构造一条属于用户 2、来源版本 7 的任务，由各用例指定状态与尝试次数。 */
@@ -78,7 +79,7 @@ class AiJobLifecycleTests {
 
     @Test
     void workerOffNeverClaimsOrRecovers() {
-        service = new AiJobService(jobs, moods, replies, admission, false);
+        service = new AiJobService(jobs, moods, replies, admission, new AlwaysAllowRateLimiter(), false);
         assertThat(service.claimNext()).isNull();
         assertThat(service.recoverInterrupted()).isZero();
         verifyNoInteractions(jobs, moods, replies, manager);

@@ -10,6 +10,8 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.entity.MoodReview;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.MoodReviewMapper;
+import com.xinyu.ratelimit.RateLimiter;
+import com.xinyu.ratelimit.RateLimitType;
 import com.xinyu.vo.AiJobVO;
 import com.xinyu.vo.MoodReviewStatsVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,6 +70,7 @@ public class MoodReviewService {
     private final Clock clock;
     private final TransactionTemplate transactions;
     private final AiJobAdmission admission;
+    private final RateLimiter rateLimiter;
     private AiJobMapper reviewJobs;
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -91,12 +94,13 @@ public class MoodReviewService {
 
     public MoodReviewService(MoodReviewMapper reports, MoodReviewStatsService stats,
                              @Qualifier("reviewClock") Clock clock, PlatformTransactionManager manager,
-                             AiJobAdmission admission) {
+                             AiJobAdmission admission, RateLimiter rateLimiter) {
         this.reports = reports;
         this.stats = stats;
         this.clock = clock;
         this.transactions = new TransactionTemplate(manager);
         this.admission = admission;
+        this.rateLimiter = rateLimiter;
     }
 
     @Autowired
@@ -110,6 +114,7 @@ public class MoodReviewService {
 
     /** 创建或复用当前范围的任务；未结束的周、无来源和无 AI 授权分别拒绝。 */
     public Report generate(long userId, String type, String start, boolean regenerate) {
+        requireGenerateQuota(userId, type, start, regenerate);
         return admission.save(() -> {
             // 用户锁先于所有一致性读取，等待后不会读到加锁前的 RR 快照。
             lockUser(userId);
@@ -195,6 +200,7 @@ public class MoodReviewService {
 
     /** 用户显式重试同一任务，复用 1a 冷却与容量门禁，不自动调用模型。 */
     public AiJobVO retry(long userId, long jobId) {
+        requireRetryQuota(userId, jobId);
         return admission.save(() -> {
             lockUser(userId);
             AiJob observed = ownedJob(userId, jobId);
@@ -220,7 +226,7 @@ public class MoodReviewService {
             int cooldown = AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount());
             int remaining = reviewJobs.selectRetryAfterSeconds(job, cooldown);
             if (remaining > 0) {
-                throw tooManyRequestsWithRetryAfter(remaining);
+                throw tooManyRequestsWithRetryAfter(remaining, "review_cooldown");
             }
 
             requireCapacity(userId);
@@ -485,6 +491,86 @@ public class MoodReviewService {
         }
     }
 
+    /**
+     * 生成入口的限流预检（准入事务外，契约 2.5）：按快照预判“确定会新建生成任务”才扣额度——
+     * 直接返回已有报告（指纹未变且非 regenerate）、已有进行中任务、本周未结束、无记录或无授权记录
+     * 都不会创建任务，不扣（做法同 MoodRecordService 的修改入口预检）。
+     * 危机豁免在其后：含危机记录的回顾由固定 SUPPORT 回应、不产生费用，不计额度也不应被额度挡住（契约 2.1）。
+     * 快照与事务内锁定读取存在窗口，误判按“已扣不退”接受；正常业务校验仍在事务内原样执行。
+     */
+    private void requireGenerateQuota(long userId, String type, String start, boolean regenerate) {
+        MoodReviewStatsVO snapshot = statistics(userId, type, start);
+        if ("WEEK".equals(type) && snapshot.rangeEnd().isAfter(LocalDate.now(clock))) {
+            return;
+        }
+        List<MoodRecord> records = sources(userId, snapshot.rangeStart(), snapshot.rangeEnd(), false);
+        if (records.isEmpty()) {
+            return;
+        }
+        if (records.stream().noneMatch(record -> Boolean.TRUE.equals(record.getAiReplyEnabled()))) {
+            return;
+        }
+        if (latest(userId, type, snapshot.rangeStart(), true) != null) {
+            return;
+        }
+        MoodReview success = latest(userId, type, snapshot.rangeStart(), false);
+        if (!regenerate && success != null && success.fingerprint().equals(fingerprint(records))) {
+            return;
+        }
+        if (records.stream().anyMatch(record -> MoodReviewSafety.matches(record.getContent()))) {
+            return;
+        }
+        RateLimiter.Decision decision = rateLimiter.check(RateLimitType.REVIEW, userId);
+        if (!decision.allowed()) {
+            throw tooManyRequestsWithRetryAfter(decision.retryAfterSeconds(), "review_rate_limited");
+        }
+    }
+
+    /**
+     * 重试入口的限流预检（准入事务外）：快照判断确定会重新入队才扣——幂等状态、不可重试状态、
+     * 冷却中、已有其他进行中任务或来源已变化都不扣；危机豁免同生成入口。
+     * 归属与状态的正式校验仍在准入事务内。
+     */
+    private void requireRetryQuota(long userId, long jobId) {
+        AiJob observed = job(jobId);
+        if (observed == null || !TASK_TYPE.equals(observed.getTaskType())
+                || observed.getUserId() != userId) {
+            return;
+        }
+        if (List.of("queued", "running", "succeeded").contains(observed.getStatus())) {
+            return;
+        }
+        if (!"failed".equals(observed.getStatus())) {
+            return;
+        }
+        MoodReview row = load(observed.getTargetId());
+        if (row == null) {
+            return;
+        }
+        List<MoodRecord> records = sources(userId, row.start(), row.end(), false);
+        if (records.isEmpty() || !row.fingerprint().equals(fingerprint(records))) {
+            return;
+        }
+        MoodReview active = latest(userId, row.type(), row.start(), true);
+        if (active != null && active.id() != row.id()) {
+            return;
+        }
+        if (records.stream().anyMatch(record -> MoodReviewSafety.matches(record.getContent()))) {
+            return;
+        }
+        int cooldown = AiJobRetryPolicy.cooldownSeconds(observed.getAttemptCount());
+        if (cooldown > 0) {
+            Integer remaining = reviewJobs.selectRetryAfterSeconds(observed, cooldown);
+            if (remaining == null || remaining > 0) {
+                return;
+            }
+        }
+        RateLimiter.Decision decision = rateLimiter.check(RateLimitType.REVIEW, userId);
+        if (!decision.allowed()) {
+            throw tooManyRequestsWithRetryAfter(decision.retryAfterSeconds(), "review_rate_limited");
+        }
+    }
+
     private void requireCapacity(long userId) {
         int queued = reports.queuedCount();
         int active = reports.activeCount(userId);
@@ -601,8 +687,9 @@ public class MoodReviewService {
         }
     }
 
-    private static ResponseStatusException tooManyRequestsWithRetryAfter(int remaining) {
-        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "review_cooldown") {
+    /** 冷却与限流共用的 429 返回；限流消息 review_rate_limited 由前端文案表单独映射。 */
+    private static ResponseStatusException tooManyRequestsWithRetryAfter(int remaining, String code) {
+        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, code) {
             @Override
             public HttpHeaders getHeaders() {
                 var headers = new HttpHeaders();

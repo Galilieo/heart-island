@@ -19,6 +19,10 @@ const ERROR_MESSAGES = {
 /** 把后端业务错误码或 Axios 异常转换为面向用户的中文提示。 */
 export function formatReviewError(error) {
   const code = error?.response?.data?.message || error?.message
+  // 回顾信限流（每天额度）：Retry-After 通常到明天零点，不说"休息一下"。
+  if (code === 'review_rate_limited') {
+    return '今天的回顾信生成次数已用完，明天再来吧'
+  }
   if (code === 'review_cooldown' || error?.response?.status === 429) {
     const retryAfter = Number(error?.response?.headers?.['retry-after'])
     if (Number.isFinite(retryAfter) && retryAfter > 0) {

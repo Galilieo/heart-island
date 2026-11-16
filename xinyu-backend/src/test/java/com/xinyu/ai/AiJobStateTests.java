@@ -6,6 +6,7 @@ import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.MoodRecordMapper;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.service.AiJobAdmission;
 import com.xinyu.service.AiJobService;
 import com.xinyu.service.MoodRecordService;
@@ -44,8 +45,8 @@ class AiJobStateTests {
         transaction = mock(TransactionStatus.class);
         when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(transaction);
         AiJobAdmission admission = new AiJobAdmission(manager);
-        AiJobService jobService = new AiJobService(jobs, moods, mock(AiReplyMapper.class), admission, true);
-        service = new MoodRecordService(moods, jobService, admission);
+        AiJobService jobService = new AiJobService(jobs, moods, mock(AiReplyMapper.class), admission, new AlwaysAllowRateLimiter(), true);
+        service = new MoodRecordService(moods, jobService, admission, new AlwaysAllowRateLimiter());
         when(moods.insert(any(MoodRecord.class))).thenAnswer(invocation -> {
             invocation.<MoodRecord>getArgument(0).setId(9L);
             return 1;

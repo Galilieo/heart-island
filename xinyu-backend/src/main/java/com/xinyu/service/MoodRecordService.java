@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.entity.AiJob;
 import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.MoodRecordMapper;
+import com.xinyu.ratelimit.RateLimiter;
+import com.xinyu.ratelimit.RateLimitType;
 import com.xinyu.vo.MoodRecordVO;
 import com.xinyu.vo.MoodSaveVO;
 import com.xinyu.vo.MoodTrendVO;
@@ -41,16 +43,26 @@ public class MoodRecordService {
     private final MoodRecordMapper moodRecordMapper;
     private final AiJobService jobs;
     private final AiJobAdmission admission;
+    private final RateLimiter rateLimiter;
 
-    public MoodRecordService(MoodRecordMapper moodRecordMapper, AiJobService jobs, AiJobAdmission admission) {
+    public MoodRecordService(MoodRecordMapper moodRecordMapper, AiJobService jobs,
+                             AiJobAdmission admission, RateLimiter rateLimiter) {
         this.moodRecordMapper = moodRecordMapper;
         this.jobs = jobs;
         this.admission = admission;
+        this.rateLimiter = rateLimiter;
     }
 
     /** 先保存日记与本版本任务，事务提交后返回；不在保存接口等待模型。 */
     public MoodSaveVO add(MoodRecord request) {
         validateInput(request);
+        // 限流预检在准入事务外完成（契约 2.5）；关闭 AI 不创建任务、不发起付费调用，不扣额度；
+        // 危机文本由固定 SUPPORT 回应、不产生费用，不计入额度也不应被额度挡住
+        // （契约 2.1，正则与 Python safety.py 逐字对应）。
+        boolean enabled = !Boolean.FALSE.equals(request.getNeedAiReply());
+        RateLimiter.Decision rateLimit = enabled && !MoodReviewSafety.matches(request.getContent())
+                ? rateLimiter.check(RateLimitType.MOOD_REPLY, request.getUserId())
+                : RateLimiter.Decision.allow();
         return admission.save(() -> {
             MoodRecord source = new MoodRecord();
             source.setUserId(request.getUserId());
@@ -60,7 +72,7 @@ public class MoodRecordService {
             source.setContentVersion(1L);
             source.setAiReplyEnabled(!Boolean.FALSE.equals(request.getNeedAiReply()));
             if (moodRecordMapper.insert(source) != 1) throw new IllegalStateException("日记保存未成功");
-            return saved(source, jobs.createForVersion(source));
+            return saved(source, jobs.createForVersion(source, rateLimit));
         });
     }
 
@@ -223,6 +235,7 @@ public class MoodRecordService {
         input.setContent(request == null ? null : request.getContent());
         validateInput(input);
         boolean enabled = !Boolean.FALSE.equals(request.getNeedAiReply());
+        RateLimiter.Decision rateLimit = requireUpdateQuota(id, userId, input, enabled);
         return admission.save(() -> {
             MoodRecord source = moodRecordMapper.selectOwnedForUpdate(id, userId);
             if (source == null || !Integer.valueOf(STATUS_ACTIVE).equals(source.getStatus())) return null;
@@ -239,8 +252,31 @@ public class MoodRecordService {
             jobs.supersedeUnfinished(id, userId);
             source.setContentVersion(Math.addExact(source.getContentVersion(), 1));
             source.setAiReplyEnabled(enabled);
-            return saved(source, jobs.createForVersion(source));
+            return saved(source, jobs.createForVersion(source, rateLimit));
         });
+    }
+
+    /**
+     * 修改入口的限流预检（准入事务外）：只有快照显示“会创建新任务”时才扣额度——
+     * 无变化保存不创建任务、关闭 AI 不创建任务，都不该消耗额度。
+     * 快照与行锁内比较存在并发窗口：误判已扣不退（契约 2.5），危机文本豁免同保存入口（契约 2.1）。
+     */
+    private RateLimiter.Decision requireUpdateQuota(Long id, Long userId, MoodRecord input, boolean enabled) {
+        MoodRecord current = moodRecordMapper.selectById(id);
+        if (current == null || !Integer.valueOf(STATUS_ACTIVE).equals(current.getStatus())
+                || !userId.equals(current.getUserId())) {
+            return RateLimiter.Decision.allow();
+        }
+        boolean unchanged = Objects.equals(current.getMoodType(), input.getMoodType())
+                && Objects.equals(current.getContent(), input.getContent())
+                && Boolean.valueOf(enabled).equals(current.getAiReplyEnabled());
+        if (unchanged || !enabled) {
+            return RateLimiter.Decision.allow();
+        }
+        if (MoodReviewSafety.matches(input.getContent())) {
+            return RateLimiter.Decision.allow();
+        }
+        return rateLimiter.check(RateLimitType.MOOD_REPLY, userId);
     }
 
     /** 统计最近 7 天（含今天）的有效日记数量、主要心情与最近一条记录。 */
