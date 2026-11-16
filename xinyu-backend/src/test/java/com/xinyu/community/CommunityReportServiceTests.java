@@ -1,13 +1,21 @@
 package com.xinyu.community;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xinyu.common.CommunityReportConstants;
+import com.xinyu.dto.AdminReportHandleDTO;
 import com.xinyu.dto.CommunityReportCreateDTO;
 import com.xinyu.entity.CommunityPost;
+import com.xinyu.entity.CommunityReply;
 import com.xinyu.entity.ContentReport;
+import com.xinyu.entity.User;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
 import com.xinyu.mapper.ContentReportMapper;
+import com.xinyu.mapper.ReportTargetGroup;
+import com.xinyu.mapper.UserMapper;
 import com.xinyu.service.CommunityReportService;
+import com.xinyu.vo.AdminReportDetailVO;
+import com.xinyu.vo.AdminReportQueueRowVO;
 import com.xinyu.vo.MyReportVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,12 +38,16 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 4.4 举报提交流程、每日限额与我的举报隐私过滤单测。
+ * 4.4 / 4.5 举报提交流程、每日限额、我的举报隐私过滤与后台聚合/裁决单测。
  */
 @ExtendWith(MockitoExtension.class)
 class CommunityReportServiceTests {
@@ -47,6 +59,7 @@ class CommunityReportServiceTests {
     private static final long REPORTER_ID = 202L;
     private static final long ADMIN_ID = 303L;
     private static final long POST_ID = 11L;
+    private static final long REPLY_ID = 21L;
 
     @Mock
     private ContentReportMapper contentReportMapper;
@@ -56,6 +69,9 @@ class CommunityReportServiceTests {
 
     @Mock
     private CommunityReplyMapper communityReplyMapper;
+
+    @Mock
+    private UserMapper userMapper;
 
     @InjectMocks
     private CommunityReportService service;
@@ -121,6 +137,7 @@ class CommunityReportServiceTests {
     @Test
     void submitEnforcesDailyLimitAndTranslatesDuplicateKeyWithout500() {
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(1, "内容"));
+        // 首次查重返回 0，随后当日累计返回 20
         when(contentReportMapper.selectCount(any())).thenReturn(0L, 20L);
         assertThatThrownBy(() -> service.submitReport(REPORTER_ID, createDto("POST", POST_ID, "AD", null)))
                 .isInstanceOf(ResponseStatusException.class)
@@ -171,10 +188,109 @@ class CommunityReportServiceTests {
         assertThat(vo.getHideReason()).isEqualTo("PRIVACY");
     }
 
+    @Test
+    void adminDetailSuggestsIllegalWhenSafetyOrOtherIsTopAndDetectsEdits() {
+        ContentReport r1 = reportRecord(1L, 201L, "SAFETY", "改前原文", "PENDING", LocalDateTime.of(2026, 11, 14, 9, 0));
+        ContentReport r2 = reportRecord(2L, 202L, "SAFETY", "改前原文", "PENDING", LocalDateTime.of(2026, 11, 14, 9, 5));
+        when(contentReportMapper.selectList(any())).thenReturn(List.of(r1, r2));
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(1, "改后正文"));
+        when(communityPostMapper.selectCount(any())).thenReturn(1L);
+        when(communityReplyMapper.selectCount(any())).thenReturn(2L);
+
+        AdminReportDetailVO detail = service.getAdminReportDetail("POST", POST_ID);
+        assertThat(detail).isNotNull();
+        assertThat(detail.getSuggestedHideReason()).isEqualTo(CommunityReportConstants.REASON_ILLEGAL);
+        assertThat(detail.getContentChanged()).isTrue();
+        assertThat(detail.getAuthorHiddenCount()).isEqualTo(3);
+        assertThat(detail.getHasSafety()).isTrue();
+        assertThat(detail.getRecords()).hasSize(2);
+    }
+
+    @Test
+    void handleReportCoversAuthorDeletedAlreadyHiddenDismissAndConflict() {
+        // 1. 已由其他管理员处理 -> 409
+        when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(1, "正文"));
+        when(contentReportMapper.handlePendingByTarget(any(), anyLong(), any(), any(), anyLong(), any(), any()))
+                .thenReturn(0);
+        assertThatThrownBy(() -> service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "HIDE", "AD")))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> {
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                    assertThat(rse.getReason()).isEqualTo("已被其他管理员处理");
+                });
+
+        // 2. 内容已被作者删除(status=0) -> 举报改为 CLOSED
+        when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(0, "正文"));
+        when(contentReportMapper.handlePendingByTarget(
+                eq("POST"), eq(POST_ID), eq("CLOSED"), eq(null), eq(ADMIN_ID), any(), any()))
+                .thenReturn(1);
+        assertThat(service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "HIDE", "AD")))
+                .contains("作者删除");
+
+        // 3. 回复已是 status=2 时 HIDE 只关闭举报，不重复扣回复数
+        CommunityReply hiddenReply = new CommunityReply();
+        hiddenReply.setId(REPLY_ID);
+        hiddenReply.setPostId(POST_ID);
+        hiddenReply.setUserId(AUTHOR_ID);
+        hiddenReply.setContent("回复");
+        hiddenReply.setStatus(2);
+        when(communityReplyMapper.selectByIdForUpdate(REPLY_ID)).thenReturn(hiddenReply);
+        when(contentReportMapper.handlePendingByTarget(
+                eq("REPLY"), eq(REPLY_ID), eq("HIDDEN"), eq("AD"), eq(ADMIN_ID), any(), any()))
+                .thenReturn(2);
+        service.handleReport(ADMIN_ID, handleDto("REPLY", REPLY_ID, "HIDE", "AD"));
+        verify(communityPostMapper, never()).adjustReplyCount(anyLong(), anyInt());
+
+        // 4. DISMISS 不改变内容状态
+        when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(post(2, "已隐藏帖子"));
+        when(contentReportMapper.handlePendingByTarget(
+                eq("POST"), eq(POST_ID), eq("DISMISSED"), eq(null), eq(ADMIN_ID), any(), any()))
+                .thenReturn(1);
+        service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "DISMISS", null));
+        verify(communityPostMapper, never()).update(any(), any());
+    }
+
+    @Test
+    void pageAdminReportsAssemblesAggregatedQueueAndHandlerName() {
+        ReportTargetGroup g = new ReportTargetGroup();
+        g.setTargetType("POST");
+        g.setTargetId(POST_ID);
+        g.setPostId(POST_ID);
+        g.setTargetUserId(AUTHOR_ID);
+        g.setReporterCount(2);
+        g.setHasSafety(1);
+        g.setFirstReportTime(LocalDateTime.of(2026, 11, 14, 10, 0));
+
+        when(contentReportMapper.countDoneTargetGroups()).thenReturn(1L);
+        when(contentReportMapper.selectDoneTargetGroups(0L, 10L)).thenReturn(List.of(g));
+
+        ContentReport r = reportRecord(5L, REPORTER_ID, "SAFETY", "快照文本", "HIDDEN", LocalDateTime.of(2026, 11, 14, 10, 0));
+        r.setHideReason("PRIVACY");
+        r.setHandlerId(ADMIN_ID);
+        r.setHandleNote("确认违规");
+        r.setHandleTime(LocalDateTime.of(2026, 11, 14, 12, 0));
+        when(contentReportMapper.selectList(any())).thenReturn(List.of(r));
+
+        User admin = new User();
+        admin.setId(ADMIN_ID);
+        admin.setUsername("admin");
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(admin));
+
+        Page<AdminReportQueueRowVO> page = service.pageAdminReports("DONE", 1L, 10L);
+        assertThat(page.getTotal()).isEqualTo(1);
+        AdminReportQueueRowVO row = page.getRecords().get(0);
+        assertThat(row.getHasSafety()).isTrue();
+        assertThat(row.getResultStatus()).isEqualTo("HIDDEN");
+        assertThat(row.getHandlerName()).isEqualTo("admin");
+        assertThat(row.getReasonCounts()).containsEntry("SAFETY", 1);
+    }
+
     private static CommunityPost post(int status, String content) {
         CommunityPost post = new CommunityPost();
         post.setId(POST_ID);
         post.setUserId(AUTHOR_ID);
+        post.setTopicId(1L);
         post.setContent(content);
         post.setStatus(status);
         return post;
@@ -187,5 +303,30 @@ class CommunityReportServiceTests {
         dto.setReason(reason);
         dto.setDetail(detail);
         return dto;
+    }
+
+    private static AdminReportHandleDTO handleDto(String type, Long id, String action, String hideReason) {
+        AdminReportHandleDTO dto = new AdminReportHandleDTO();
+        dto.setTargetType(type);
+        dto.setTargetId(id);
+        dto.setAction(action);
+        dto.setHideReason(hideReason);
+        return dto;
+    }
+
+    private static ContentReport reportRecord(Long id, Long reporterId, String reason, String snapshot,
+                                              String status, LocalDateTime createTime) {
+        ContentReport report = new ContentReport();
+        report.setId(id);
+        report.setReporterId(reporterId);
+        report.setTargetType("POST");
+        report.setTargetId(POST_ID);
+        report.setPostId(POST_ID);
+        report.setTargetUserId(AUTHOR_ID);
+        report.setReason(reason);
+        report.setContentSnapshot(snapshot);
+        report.setStatus(status);
+        report.setCreateTime(createTime);
+        return report;
     }
 }

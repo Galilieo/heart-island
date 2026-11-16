@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.config.AuthWebConfig;
 import com.xinyu.config.CorsConfig;
 import com.xinyu.config.JacksonConfig;
+import com.xinyu.controller.AdminReportController;
 import com.xinyu.controller.CommunityPostController;
 import com.xinyu.controller.CommunityReplyController;
 import com.xinyu.controller.CommunityReportController;
@@ -50,6 +51,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(controllers = {
         CommunityReportController.class,
+        AdminReportController.class,
         CommunityPostController.class,
         CommunityReplyController.class
 })
@@ -196,12 +198,26 @@ class CommunityReportHttpTests {
     }
 
     @Test
-    void reportSubmitValidatesAuth() throws Exception {
+    void reportSubmitAndAdminHandleValidateAuth() throws Exception {
         doNothing().when(communityReportService).submitReport(any(), any());
         mvc.perform(post("/community/report")
                         .header("token", otherToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"targetType\":\"POST\",\"targetId\":11,\"reason\":\"AD\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        mvc.perform(post("/admin/report/handle")
+                        .header("token", otherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetType\":\"POST\",\"targetId\":11,\"action\":\"DISMISS\"}"))
+                .andExpect(status().isForbidden());
+
+        when(communityReportService.handleReport(any(), any())).thenReturn("已标记不违规，相关举报已关闭");
+        mvc.perform(post("/admin/report/handle")
+                        .header("token", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetType\":\"POST\",\"targetId\":11,\"action\":\"DISMISS\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
     }

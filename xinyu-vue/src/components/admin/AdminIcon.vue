@@ -10,6 +10,7 @@ const iconPaths = {
   users: ['M4 21c0-4 4-6 8-6s8 2 8 6'],
   posts: ['M4 4h16v12H8l-4 4z'],
   replies: ['M9 14l-5-5 5-5', 'M4 9h10a6 6 0 0 1 6 6v5'],
+  reports: ['M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z', 'M4 22v-7'],
   topics: ['M4 9h16M4 15h16M10 3L8 21M16 3l-2 18'],
   ai: ['M12 3v3M12 18v3M3 12h3M18 12h3'],
   back: ['M15 18l-6-6 6-6']

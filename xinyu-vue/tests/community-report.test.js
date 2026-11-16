@@ -14,10 +14,12 @@ const server = await createServer({
 
 let reportUtils
 let useCommunityStore
+let useAdminStore
 let request
 try {
   reportUtils = await server.ssrLoadModule('/src/utils/communityReport.js')
   useCommunityStore = (await server.ssrLoadModule('/src/stores/community.js')).useCommunityStore
+  useAdminStore = (await server.ssrLoadModule('/src/stores/admin.js')).useAdminStore
   request = (await server.ssrLoadModule('/src/utils/request.js')).default
 } finally {
   await server.close()
@@ -80,6 +82,37 @@ test('submitReport 成功后标记已举报状态，409/429 返回友好失败�
   assert.equal(dupRes.ok, false)
   assert.equal(dupRes.status, 409)
   assert.equal(dupRes.message, '你已经举报过这条内容了')
+})
+
+test('后台 handleReport 成功或遭遇 409 冲突都会刷新队列与待处理角标', async () => {
+  const calls = []
+  request.defaults.adapter = async (config) => {
+    calls.push(config.url)
+    if (config.url === '/admin/report/handle') {
+      throw httpError(config, 409, '已被其他管理员处理')
+    }
+    if (config.url === '/admin/report/page') {
+      return ok(config, { records: [], total: 1 })
+    }
+    if (config.url === '/admin/report/pending-count') {
+      return ok(config, 1)
+    }
+    return ok(config, null)
+  }
+
+  const adminStore = useAdminStore()
+  const conflictRes = await adminStore.handleReport({
+    targetType: 'POST',
+    targetId: 11,
+    action: 'HIDE',
+    hideReason: 'AD'
+  })
+  assert.equal(conflictRes.ok, false)
+  assert.equal(conflictRes.conflict, true)
+  assert.equal(conflictRes.message, '已被其他管理员处理')
+  assert.equal(adminStore.pendingReportCount, 1)
+  assert.ok(calls.includes('/admin/report/page'))
+  assert.ok(calls.includes('/admin/report/pending-count'))
 })
 
 test('切换查看已被隐藏或删除的帖子详情时清空上一篇 currentPost 与 replies', async () => {

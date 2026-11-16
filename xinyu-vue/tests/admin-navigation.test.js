@@ -16,11 +16,11 @@ test('导航分组与页面名称和任务书一致', () => {
   )
   assert.deepEqual(
     adminNavigationItems.map((item) => item.label),
-    ['概览', '用户管理', '帖子管理', '回复管理', '话题管理', 'AI 记录']
+    ['概览', '用户管理', '帖子管理', '回复管理', '举报处理', '话题管理', 'AI 记录']
   )
   assert.deepEqual(
     adminNavigationItems.map((item) => item.to),
-    ['/admin', '/admin/users', '/admin/posts', '/admin/replies', '/admin/topics', '/admin/ai-replies']
+    ['/admin', '/admin/users', '/admin/posts', '/admin/replies', '/admin/reports', '/admin/topics', '/admin/ai-replies']
   )
 })
 

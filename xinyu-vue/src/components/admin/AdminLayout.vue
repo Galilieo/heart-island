@@ -1,9 +1,11 @@
 <script setup>
 // 后台独立外框：电脑固定在左侧的导航、顶部细栏、内容区；≤1024px 时导航改为
 // 顶部横向滑动条（手机和中等宽度共用），手机端隐藏面包屑。权限仍由路由守卫负责。
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useUserStore } from '../../stores/user'
+import { useAdminStore } from '../../stores/admin'
 import { useTheme } from '../../composables/useTheme'
 import { adminNavigationGroups, isAdminNavigationActive } from './adminNavigation'
 import AdminIcon from './AdminIcon.vue'
@@ -12,7 +14,13 @@ import lockupDarkUrl from '../../assets/brand/xinyu-lockup-dark.svg'
 
 const route = useRoute()
 const userStore = useUserStore()
+const adminStore = useAdminStore()
+const { pendingReportCount } = storeToRefs(adminStore)
 const { theme } = useTheme()
+
+onMounted(() => {
+  adminStore.fetchPendingReportCount().catch(() => null)
+})
 
 const logoUrl = computed(() =>
   theme.value === 'night' ? lockupDarkUrl : lockupUrl
@@ -54,6 +62,10 @@ function isActive(item) {
           >
             <AdminIcon :name="item.icon" />
             <span>{{ item.label }}</span>
+            <span
+              v-if="item.to === '/admin/reports' && pendingReportCount > 0"
+              class="admin-nav__badge"
+            >{{ pendingReportCount }}</span>
           </RouterLink>
         </template>
       </nav>
@@ -209,6 +221,20 @@ function isActive(item) {
 .admin-nav__item:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+.admin-nav__badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--danger-ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
 }
 
 .admin-sidebar__back {

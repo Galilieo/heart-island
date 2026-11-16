@@ -12,6 +12,7 @@ export const adminNavigationGroups = [
       { label: '用户管理', to: '/admin/users', icon: 'users' },
       { label: '帖子管理', to: '/admin/posts', icon: 'posts' },
       { label: '回复管理', to: '/admin/replies', icon: 'replies' },
+      { label: '举报处理', to: '/admin/reports', icon: 'reports' },
       { label: '话题管理', to: '/admin/topics', icon: 'topics' }
     ]
   },

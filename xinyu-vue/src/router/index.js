@@ -73,6 +73,11 @@ const routes = [
         meta: { title: '回复管理' },
       },
       {
+        path: 'reports',
+        component: () => import('../views/AdminReports.vue'),
+        meta: { title: '举报处理' },
+      },
+      {
         path: 'topics',
         component: () => import('../views/AdminTopics.vue'),
         meta: { title: '话题管理' },

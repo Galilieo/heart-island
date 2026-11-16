@@ -54,6 +54,22 @@ export const adminApi = {
     return unwrapHttp(request.delete(`/admin/reply/${id}`, { params: { hideReason } }))
   },
 
+  reportPage(params = {}) {
+    return unwrapHttp(request.get('/admin/report/page', { params }))
+  },
+
+  reportDetail(targetType, targetId) {
+    return unwrapHttp(request.get('/admin/report/detail', { params: { targetType, targetId } }))
+  },
+
+  handleReport(payload) {
+    return unwrapHttp(request.post('/admin/report/handle', payload))
+  },
+
+  reportPendingCount() {
+    return unwrapHttp(request.get('/admin/report/pending-count'))
+  },
+
   topicList(params = {}) {
     return unwrap(request.get('/admin/topic/list', { params }))
   },
