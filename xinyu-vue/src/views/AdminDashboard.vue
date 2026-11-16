@@ -17,6 +17,24 @@ const aiFailureRate = computed(() => {
   return `${Math.round((failed / total) * 100)}%`
 })
 
+// 限流观测：后端状态 + 今日各范围拒绝总数。
+// 拒绝计数来自后端进程内统计，重启归零；降级中提示注意 Redis 状态。
+const RATE_LIMIT_BACKEND_LABELS = {
+  redis: 'Redis',
+  local_only: '本机（未配置 Redis）',
+  local_degraded: '本机（Redis 降级中）',
+  disabled: '已关闭'
+}
+
+const rateLimitBackendLabel = computed(() =>
+  RATE_LIMIT_BACKEND_LABELS[overview.value.rateLimitBackend] || '未知'
+)
+
+const rateLimitRejections = computed(() =>
+  // 后端 Long 全局序列化为字符串（JacksonConfig），求和前先转数字，避免拼接。
+  Object.values(overview.value.rateLimitRejections || {}).reduce((sum, count) => sum + Number(count), 0)
+)
+
 // 按业务域分组展示：用户与账号 / 社区内容 / AI 服务。
 // 只重组展示结构，字段与数据来源完全不变；指标卡一排 4 张，手机一排 2 张。
 const statGroups = computed(() => [
@@ -47,6 +65,18 @@ const statGroups = computed(() => [
         hint: `当前失败率 ${aiFailureRate.value}`,
         // 只有确实有失败记录时才用危险色；0 次失败按普通提示文字显示。
         tone: (overview.value.aiReplyFailed || 0) > 0 ? 'danger' : 'default'
+      },
+      {
+        label: '限流后端',
+        value: rateLimitBackendLabel.value,
+        hint: '付费 AI 调用的共享计数来源',
+        // Redis 不可用退回本机时提醒管理员关注。
+        tone: overview.value.rateLimitBackend === 'local_degraded' ? 'danger' : 'default'
+      },
+      {
+        label: '今日限流拒绝',
+        value: rateLimitRejections.value,
+        hint: '各范围拒绝合计（进程内计数，重启归零）'
       }
     ]
   }

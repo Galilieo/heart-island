@@ -1,5 +1,7 @@
 package com.xinyu.vo;
 
+import java.util.Map;
+
 public class AdminOverviewVO {
 
     private Long userTotal;
@@ -11,6 +13,8 @@ public class AdminOverviewVO {
     private Long aiReplyTotal;
     private Long aiReplySuccess;
     private Long aiReplyFailed;
+    private String rateLimitBackend;
+    private Map<String, Long> rateLimitRejections;
 
     public AdminOverviewVO() {
     }
@@ -18,7 +22,8 @@ public class AdminOverviewVO {
     public AdminOverviewVO(Long userTotal, Long userDisabled,
                            Long postTotal, Long postHidden,
                            Long replyTotal, Long replyHidden,
-                           Long aiReplyTotal, Long aiReplySuccess, Long aiReplyFailed) {
+                           Long aiReplyTotal, Long aiReplySuccess, Long aiReplyFailed,
+                           String rateLimitBackend, Map<String, Long> rateLimitRejections) {
         this.userTotal = userTotal;
         this.userDisabled = userDisabled;
         this.postTotal = postTotal;
@@ -28,6 +33,8 @@ public class AdminOverviewVO {
         this.aiReplyTotal = aiReplyTotal;
         this.aiReplySuccess = aiReplySuccess;
         this.aiReplyFailed = aiReplyFailed;
+        this.rateLimitBackend = rateLimitBackend;
+        this.rateLimitRejections = rateLimitRejections;
     }
 
     public Long getUserTotal() {
@@ -100,5 +107,21 @@ public class AdminOverviewVO {
 
     public void setAiReplyFailed(Long aiReplyFailed) {
         this.aiReplyFailed = aiReplyFailed;
+    }
+
+    public String getRateLimitBackend() {
+        return rateLimitBackend;
+    }
+
+    public void setRateLimitBackend(String rateLimitBackend) {
+        this.rateLimitBackend = rateLimitBackend;
+    }
+
+    public Map<String, Long> getRateLimitRejections() {
+        return rateLimitRejections;
+    }
+
+    public void setRateLimitRejections(Map<String, Long> rateLimitRejections) {
+        this.rateLimitRejections = rateLimitRejections;
     }
 }

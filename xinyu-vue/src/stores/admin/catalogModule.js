@@ -17,7 +17,9 @@ function emptyOverview() {
     replyHidden: 0,
     aiReplyTotal: 0,
     aiReplySuccess: 0,
-    aiReplyFailed: 0
+    aiReplyFailed: 0,
+    rateLimitBackend: '',
+    rateLimitRejections: {}
   }
 }
 
@@ -81,7 +83,9 @@ export function createCatalogModule() {
           replyHidden: res.data?.replyHidden || 0,
           aiReplyTotal: res.data?.aiReplyTotal || 0,
           aiReplySuccess: res.data?.aiReplySuccess || 0,
-          aiReplyFailed: res.data?.aiReplyFailed || 0
+          aiReplyFailed: res.data?.aiReplyFailed || 0,
+          rateLimitBackend: res.data?.rateLimitBackend || '',
+          rateLimitRejections: res.data?.rateLimitRejections || {}
         }
       }
       return res

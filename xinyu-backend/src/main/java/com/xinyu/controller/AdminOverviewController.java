@@ -10,6 +10,8 @@ import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
 import com.xinyu.mapper.UserMapper;
+import com.xinyu.ratelimit.FallbackRateLimiter;
+import com.xinyu.ratelimit.RateLimitMetrics;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
 import com.xinyu.vo.AdminOverviewVO;
@@ -34,6 +36,12 @@ public class AdminOverviewController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private FallbackRateLimiter rateLimiter;
+
+    @Autowired
+    private RateLimitMetrics rateLimitMetrics;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -80,7 +88,10 @@ public class AdminOverviewController {
                 replyHidden,
                 aiReplyTotal,
                 aiReplySuccess,
-                aiReplyFailed
+                aiReplyFailed,
+                // 限流观测（契约 2.6）：后端状态与今日各范围拒绝次数；进程内计数，重启归零。
+                rateLimiter.backend(),
+                rateLimitMetrics.todayRejections()
         );
 
         return Result.success("查询成功", overview);

@@ -40,7 +40,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         CommunityPostService.class, CommunityReplyService.class, CommunityReportService.class,
         TopicService.class, AiReplyLogService.class,
         UserMapper.class, CommunityPostMapper.class, CommunityReplyMapper.class, ContentReportMapper.class,
-        AiReplyMapper.class})
+        AiReplyMapper.class, com.xinyu.ratelimit.FallbackRateLimiter.class,
+        com.xinyu.ratelimit.RateLimitMetrics.class})
 class AuthHttpTests {
     @Autowired MockMvc mvc;
     @Autowired JwtUtil jwtUtil;

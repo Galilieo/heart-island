@@ -49,6 +49,25 @@ test('useAdminStore 对外导出的 state/computed/action 键集合保持稳定'
   }
 })
 
+test('fetchOverview 携带限流后端状态与今日拒绝计数', async () => {
+  const prevAdapter = request.defaults.adapter
+  request.defaults.adapter = async (config) => {
+    return ok(config, {
+      userTotal: 1,
+      rateLimitBackend: 'redis',
+      rateLimitRejections: { mood_hour: '2', review_day: '1' }
+    })
+  }
+  try {
+    const store = useAdminStore()
+    await store.fetchOverview()
+    assert.equal(store.overview.rateLimitBackend, 'redis')
+    assert.deepEqual(store.overview.rateLimitRejections, { mood_hour: '2', review_day: '1' })
+  } finally {
+    request.defaults.adapter = prevAdapter
+  }
+})
+
 test('fetchOverview 加载概览并在缺省字段时回落为 0', async () => {
   const prevAdapter = request.defaults.adapter
   request.defaults.adapter = async (config) => {
