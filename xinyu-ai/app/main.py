@@ -99,6 +99,8 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
             (text for record in data.records if (text := build_support_reply(record.content)) is not None),
             None,
         )
+        if _deadline_reached(deadline):
+            raise TimeoutError
         if support is not None:
             return JSONResponse(success_response(data, support, None, None))
 

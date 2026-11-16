@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import app.main as main_module
 from app.contracts import MoodReplyRequest
 from app.main import create_app
 from app.provider import SYSTEM_PROMPT, messages
@@ -247,3 +248,32 @@ async def test_review_allows_128_kib_limit_while_mood_reply_keeps_16_kib():
         )
         assert r_reply_over.status_code == 400
         assert r_reply_over.json()['code'] == 'invalid_request'
+
+
+async def test_review_crisis_branch_respects_deadline_check(monkeypatch):
+    calls = 0
+
+    def fake_deadline(_deadline):
+        nonlocal calls
+        calls += 1
+        return calls >= 2
+
+    serialized = []
+    orig_success = main_module.success_response
+
+    def spy_success(*args, **kwargs):
+        serialized.append(True)
+        return orig_success(*args, **kwargs)
+
+    monkeypatch.setattr(main_module, '_deadline_reached', fake_deadline)
+    monkeypatch.setattr(main_module, 'success_response', spy_success)
+    data = review_payload(
+        records=[{"ref": "r1", "date": "2026-11-03", "weekday": "TUESDAY", "mood_type": "平静", "content": "我想自杀"}],
+    )
+    provider = StubProvider('{"body":"不应调用", "ps":null}')
+    async with client_for(create_app(make_settings(), provider)) as client:
+        response = await client.post('/internal/v1/mood-reviews', json=data, headers=AUTH)
+    assert response.status_code == 504
+    assert response.json()['code'] == 'provider_timeout'
+    assert serialized == []
+    assert provider.calls == []
