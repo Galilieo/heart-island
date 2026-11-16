@@ -1,6 +1,7 @@
 package com.xinyu.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xinyu.dto.ReviewAiRequest;
 import com.xinyu.dto.ReviewAiResponse;
 import com.xinyu.entity.AiJob;
@@ -21,19 +22,23 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 验证发往 Python 的回顾请求使用中文星期且不依赖 Locale。 */
+/** 验证发往 Python 的回顾请求使用中文星期、配额与长度上限，且不依赖系统 Locale。 */
 class MoodReviewServiceTests {
 
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-11-13T04:00:00Z"), SHANGHAI);
+    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
 
     @Test
     void weekdayMapsAllSevenDaysToChinese() {
@@ -50,16 +55,8 @@ class MoodReviewServiceTests {
     void prepareEmitsChineseWeekdaysAcrossFullWeek() throws Exception {
         MoodReviewMapper reports = mock(MoodReviewMapper.class);
         AiJobMapper reviewJobs = mock(AiJobMapper.class);
-        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
-        when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(mock(TransactionStatus.class));
-
-        MoodReviewService service = new MoodReviewService(
-                reports,
-                new MoodReviewStatsService(mock(MoodRecordMapper.class), CLOCK),
-                CLOCK,
-                manager,
-                new AiJobAdmission(manager));
-        service.setReviewJobs(reviewJobs);
+        PlatformTransactionManager manager = mockTxManager();
+        MoodReviewService service = createService(reports, mock(MoodRecordMapper.class), reviewJobs, manager);
 
         List<MoodRecord> records = List.of(
                 record(1L, LocalDateTime.of(2026, 11, 2, 9, 0)),
@@ -72,8 +69,7 @@ class MoodReviewServiceTests {
 
         LocalDate start = LocalDate.of(2026, 11, 2);
         LocalDate end = LocalDate.of(2026, 11, 9);
-        MoodReviewStatsVO snapshot = MoodReviewStatsService.aggregate(records, start, end);
-        String statsJson = new ObjectMapper().findAndRegisterModules().writeValueAsString(snapshot);
+        String statsJson = JSON.writeValueAsString(MoodReviewStatsService.aggregate(records, start, end));
         String fingerprint = MoodReviewService.fingerprint(records);
 
         AiJob job = new AiJob();
@@ -102,37 +98,32 @@ class MoodReviewServiceTests {
                 .containsExactly("周一", "周二", "周三", "周四", "周五", "周六", "周日");
     }
 
-    private static MoodRecord record(long id, LocalDateTime createTime) {
-        MoodRecord record = new MoodRecord();
-        record.setId(id);
-        record.setUserId(1L);
-        record.setMoodType("平静");
-        record.setContent("日常记录" + id);
-        record.setAiReplyEnabled(true);
-        record.setContentVersion(1L);
-        record.setCreateTime(createTime);
-        record.setStatus(1);
-        return record;
+    @Test
+    void allocateBudgetsKeepsShortRecordsUntouched() {
+        assertThat(MoodReviewService.allocateBudgets(List.of(10, 200, 1000), 12000))
+                .containsExactly(10, 200, 1000);
     }
 
     @Test
-    void allocateBudgetsCoversAllShortOneLongAndAllLong() {
-        assertThat(MoodReviewService.allocateBudgets(List.of(10, 200, 1000), 12000))
-                .containsExactly(10, 200, 1000);
+    void allocateBudgetsWaterfillsMixedLengths() {
+        List<Integer> mixed = new ArrayList<>();
+        mixed.addAll(Collections.nCopies(10, 100));
+        mixed.addAll(Collections.nCopies(10, 900));
+        mixed.addAll(Collections.nCopies(5, 1000));
 
-        List<Integer> mixed = new java.util.ArrayList<>();
-        for (int i = 0; i < 10; i++) mixed.add(100);
-        for (int i = 0; i < 10; i++) mixed.add(900);
-        for (int i = 0; i < 5; i++) mixed.add(1000);
-        List<Integer> expectedMixed = new java.util.ArrayList<>();
-        for (int i = 0; i < 10; i++) expectedMixed.add(100);
-        for (int i = 0; i < 10; i++) expectedMixed.add(733);
-        for (int i = 0; i < 5; i++) expectedMixed.add(734);
+        List<Integer> expectedMixed = new ArrayList<>();
+        expectedMixed.addAll(Collections.nCopies(10, 100));
+        expectedMixed.addAll(Collections.nCopies(10, 733));
+        expectedMixed.addAll(Collections.nCopies(5, 734));
+
         assertThat(MoodReviewService.allocateBudgets(mixed, 12000)).isEqualTo(expectedMixed);
+    }
 
-        List<Integer> allLong = java.util.Collections.nCopies(60, 1000);
+    @Test
+    void allocateBudgetsCapsAllLongRecordsEqually() {
+        List<Integer> allLong = Collections.nCopies(60, 1000);
         assertThat(MoodReviewService.allocateBudgets(allLong, 12000))
-                .isEqualTo(java.util.Collections.nCopies(60, 200));
+                .isEqualTo(Collections.nCopies(60, 200));
     }
 
     @Test
@@ -144,57 +135,47 @@ class MoodReviewServiceTests {
     }
 
     @Test
-    void responseValidateEnforcesNewBodyHardLimits() {
+    void responseValidateEnforcesWeekBodyHardLimit() {
         var entry = new ReviewAiRequest.Entry("r1", "2026-11-02", "周一", "平静", "散步");
         var stats = new MoodReviewStatsVO(LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 9), 1, 1, List.of(), List.of());
         var weekReq = new ReviewAiRequest("req-1", "10", 1, "1", "WEEK", List.of(entry), 1, stats, 40000);
-        var recentReq = new ReviewAiRequest("req-1", "10", 1, "1", "RECENT_30", List.of(entry), 1, stats, 40000);
 
-        new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(500), null, "MODEL", true, "mood-review-v1", "m").validate(weekReq);
-        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(501), null, "MODEL", true, "mood-review-v1", "m").validate(weekReq))
-                .isInstanceOf(IllegalArgumentException.class);
-
-        new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(600), null, "MODEL", true, "mood-review-v1", "m").validate(recentReq);
-        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(601), null, "MODEL", true, "mood-review-v1", "m").validate(recentReq))
+        new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(500), null, "MODEL", true, "mood-review-v1", "m")
+                .validate(weekReq);
+        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(501), null, "MODEL", true, "mood-review-v1", "m")
+                .validate(weekReq))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void getReconstructsCitedSourcesInRefOrderAndExposesLatestFailedAttempt() {
-        MoodReviewMapper reports = mock(MoodReviewMapper.class);
-        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
-        when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(mock(TransactionStatus.class));
+    void responseValidateEnforcesRecent30BodyHardLimit() {
+        var entry = new ReviewAiRequest.Entry("r1", "2026-11-02", "周一", "平静", "散步");
+        var stats = new MoodReviewStatsVO(LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 9), 1, 1, List.of(), List.of());
+        var recentReq = new ReviewAiRequest("req-1", "10", 1, "1", "RECENT_30", List.of(entry), 1, stats, 40000);
 
+        new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(600), null, "MODEL", true, "mood-review-v1", "m")
+                .validate(recentReq);
+        assertThatThrownBy(() -> new ReviewAiResponse("req-1", "10", 1, "1", "文".repeat(601), null, "MODEL", true, "mood-review-v1", "m")
+                .validate(recentReq))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getReconstructsCitedSourcesInRefOrderAndExposesLatestFailedAttempt() throws Exception {
+        MoodReviewMapper reports = mock(MoodReviewMapper.class);
         MoodRecordMapper recordMapper = mock(MoodRecordMapper.class);
-        MoodReviewService service = new MoodReviewService(
-                reports,
-                new MoodReviewStatsService(recordMapper, CLOCK),
-                CLOCK,
-                manager,
-                new AiJobAdmission(manager));
+        PlatformTransactionManager manager = mockTxManager();
+        MoodReviewService service = createService(reports, recordMapper, null, manager);
 
         LocalDate start = LocalDate.of(2026, 11, 2);
         LocalDate end = LocalDate.of(2026, 11, 9);
-        MoodRecord first = record(101L, LocalDateTime.of(2026, 11, 2, 10, 0));
-        first.setContent("第一条记录完整全文".repeat(60));
-        MoodRecord second = record(102L, LocalDateTime.of(2026, 11, 4, 15, 0));
-        second.setContent("第二条未被引用的记录");
-        MoodRecord third = record(103L, LocalDateTime.of(2026, 11, 6, 20, 0));
-        third.setMoodType("开心");
-        third.setContent("第三条记录全文");
-        MoodRecord disabled = record(104L, LocalDateTime.of(2026, 11, 7, 9, 0));
-        disabled.setAiReplyEnabled(false);
+        MoodRecord first = record(101L, LocalDateTime.of(2026, 11, 2, 10, 0), "平静", "第一条记录完整全文".repeat(60), true);
+        MoodRecord second = record(102L, LocalDateTime.of(2026, 11, 4, 15, 0), "平静", "第二条未被引用的记录", true);
+        MoodRecord third = record(103L, LocalDateTime.of(2026, 11, 6, 20, 0), "开心", "第三条记录全文", true);
+        MoodRecord disabled = record(104L, LocalDateTime.of(2026, 11, 7, 9, 0), "平静", "日常记录104", false);
 
         List<MoodRecord> allRecords = List.of(first, second, third, disabled);
-        MoodReviewStatsVO snapshot = MoodReviewStatsService.aggregate(allRecords, start, end);
-        String statsJson;
-        try {
-            statsJson = new ObjectMapper().findAndRegisterModules()
-                    .writeValueAsString(snapshot)
-                    .replace("}", ",\"aiEnabledTotal\":3}");
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        String statsJson = snapshotJson(allRecords, start, end, 3);
         String fingerprint = MoodReviewService.fingerprint(allRecords);
 
         MoodReview succeeded = new MoodReview(
@@ -233,26 +214,67 @@ class MoodReviewServiceTests {
                 20L, 1, "succeeded", "散步{{r1}}", null, "MODEL", false, 30L,
                 LocalDate.of(2026, 11, 2), LocalDate.of(2026, 11, 9), 1, "2026-11-09 08:00:00", List.of(source));
 
-        String serialized = new ObjectMapper().findAndRegisterModules().writeValueAsString(report);
+        String serialized = JSON.writeValueAsString(report);
         assertThat(serialized).contains("\"sources\":[", "\"ref\":\"r1\"", "\"recordId\":101");
     }
 
     @Test
     void historyUsesPageSizeFiveForBothLimitAndOffset() {
         MoodReviewMapper reports = mock(MoodReviewMapper.class);
-        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
-        MoodReviewService service = new MoodReviewService(
-                reports,
-                new MoodReviewStatsService(mock(MoodRecordMapper.class), CLOCK),
-                CLOCK,
-                manager,
-                new AiJobAdmission(manager));
+        PlatformTransactionManager manager = mockTxManager();
+        MoodReviewService service = createService(reports, mock(MoodRecordMapper.class), null, manager);
         when(reports.history(1L, 5, 0)).thenReturn(List.of());
         when(reports.history(1L, 5, 5)).thenReturn(List.of());
 
         assertThat(service.history(1L, 1)).isEmpty();
         assertThat(service.history(1L, 2)).isEmpty();
-        org.mockito.Mockito.verify(reports).history(1L, 5, 0);
-        org.mockito.Mockito.verify(reports).history(1L, 5, 5);
+        verify(reports).history(1L, 5, 0);
+        verify(reports).history(1L, 5, 5);
+    }
+
+    private static PlatformTransactionManager mockTxManager() {
+        PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
+        when(manager.getTransaction(any(TransactionDefinition.class))).thenReturn(mock(TransactionStatus.class));
+        return manager;
+    }
+
+    private static MoodReviewService createService(MoodReviewMapper reports, MoodRecordMapper recordMapper,
+                                                   AiJobMapper reviewJobs, PlatformTransactionManager manager) {
+        MoodReviewService service = new MoodReviewService(
+                reports,
+                new MoodReviewStatsService(recordMapper, CLOCK),
+                CLOCK,
+                manager,
+                new AiJobAdmission(manager));
+        if (reviewJobs != null) {
+            service.setReviewJobs(reviewJobs);
+        }
+        return service;
+    }
+
+    private static String snapshotJson(List<MoodRecord> records, LocalDate start, LocalDate end, int aiEnabledTotal)
+            throws Exception {
+        MoodReviewStatsVO snapshot = MoodReviewStatsService.aggregate(records, start, end);
+        ObjectNode node = JSON.valueToTree(snapshot);
+        node.put("aiEnabledTotal", aiEnabledTotal);
+        return JSON.writeValueAsString(node);
+    }
+
+    private static MoodRecord record(long id, LocalDateTime createTime) {
+        return record(id, createTime, "平静", "日常记录" + id, true);
+    }
+
+    private static MoodRecord record(long id, LocalDateTime createTime, String moodType,
+                                     String content, boolean aiReplyEnabled) {
+        MoodRecord record = new MoodRecord();
+        record.setId(id);
+        record.setUserId(1L);
+        record.setMoodType(moodType);
+        record.setContent(content);
+        record.setAiReplyEnabled(aiReplyEnabled);
+        record.setContentVersion(1L);
+        record.setCreateTime(createTime);
+        record.setStatus(1);
+        return record;
     }
 }

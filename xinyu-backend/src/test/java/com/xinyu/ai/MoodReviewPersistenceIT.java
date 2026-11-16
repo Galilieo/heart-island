@@ -1,60 +1,107 @@
 package com.xinyu.ai;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xinyu.dto.ReviewAiRequest;
+import com.xinyu.dto.ReviewAiResponse;
+import com.xinyu.mapper.AiJobMapper;
+import com.xinyu.mapper.AiReplyMapper;
+import com.xinyu.mapper.MoodRecordMapper;
+import com.xinyu.mapper.MoodReviewMapper;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.AiJobService;
+import com.xinyu.service.AiJobWorker;
+import com.xinyu.service.AiServiceClient;
+import com.xinyu.service.MoodReviewService;
+import com.xinyu.service.MoodReviewStatsService;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.mybatis.spring.SqlSessionTemplate;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** 显式新建空 MySQL 库，验证真实迁移与报告事务；不接受业务库名称。 */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MoodReviewPersistenceIT {
     private JdbcTemplate jdbc;
     private DriverManagerDataSource source;
-    private com.xinyu.service.MoodReviewService reviews;
+    private MoodReviewService reviews;
     private long nextUser = 2000;
-    private org.mybatis.spring.SqlSessionTemplate sessions;
-    private java.time.Clock clock;
-    private org.springframework.jdbc.datasource.DataSourceTransactionManager manager;
+    private SqlSessionTemplate sessions;
+    private Clock clock;
+    private DataSourceTransactionManager manager;
     private Process python;
     private String pythonUrl;
-    private final com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
+    private final ObjectMapper json = new ObjectMapper();
 
-    @org.junit.jupiter.api.BeforeEach
+    @BeforeEach
     void services() throws Exception {
-        manager = new org.springframework.jdbc.datasource.DataSourceTransactionManager(source);
-        var factory = new com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean();
+        manager = new DataSourceTransactionManager(source);
+        var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
-        var configuration = new com.baomidou.mybatisplus.core.MybatisConfiguration();
+        var configuration = new MybatisConfiguration();
         configuration.setMapUnderscoreToCamelCase(true);
-        configuration.addMapper(com.xinyu.mapper.MoodRecordMapper.class);
-        configuration.addMapper(com.xinyu.mapper.AiJobMapper.class);
+        configuration.addMapper(MoodRecordMapper.class);
+        configuration.addMapper(AiJobMapper.class);
         factory.setConfiguration(configuration);
-        sessions = new org.mybatis.spring.SqlSessionTemplate(factory.getObject());
-        clock = java.time.Clock.fixed(java.time.Instant.parse("2026-11-13T04:00:00Z"), java.time.ZoneId.of("Asia/Shanghai"));
-        reviews = new com.xinyu.service.MoodReviewService(new com.xinyu.mapper.MoodReviewMapper(jdbc),
-                new com.xinyu.service.MoodReviewStatsService(sessions.getMapper(com.xinyu.mapper.MoodRecordMapper.class), clock),
-                clock, manager, new com.xinyu.service.AiJobAdmission(manager));
-        reviews.setReviewJobs(sessions.getMapper(com.xinyu.mapper.AiJobMapper.class));
+        sessions = new SqlSessionTemplate(factory.getObject());
+        clock = Clock.fixed(Instant.parse("2026-11-13T04:00:00Z"), ZoneId.of("Asia/Shanghai"));
+        reviews = new MoodReviewService(
+                new MoodReviewMapper(jdbc),
+                new MoodReviewStatsService(sessions.getMapper(MoodRecordMapper.class), clock),
+                clock, manager, new AiJobAdmission(manager));
+        reviews.setReviewJobs(sessions.getMapper(AiJobMapper.class));
     }
 
-    com.xinyu.service.MoodReviewService independentReviews() {
-        var instance = new com.xinyu.service.MoodReviewService(new com.xinyu.mapper.MoodReviewMapper(jdbc),
-                new com.xinyu.service.MoodReviewStatsService(sessions.getMapper(com.xinyu.mapper.MoodRecordMapper.class), clock),
-                clock, manager, new com.xinyu.service.AiJobAdmission(manager));
-        instance.setReviewJobs(sessions.getMapper(com.xinyu.mapper.AiJobMapper.class));
+    MoodReviewService independentReviews() {
+        var instance = new MoodReviewService(
+                new MoodReviewMapper(jdbc),
+                new MoodReviewStatsService(sessions.getMapper(MoodRecordMapper.class), clock),
+                clock, manager, new AiJobAdmission(manager));
+        instance.setReviewJobs(sessions.getMapper(AiJobMapper.class));
         return instance;
     }
 
-    @org.junit.jupiter.api.AfterEach
+    @AfterEach
     void finishPendingFixtures() {
         jdbc.update("UPDATE ai_job SET status='cancelled' WHERE task_type='MOOD_REVIEW' AND status IN ('queued','running')");
         jdbc.update("UPDATE mood_review SET status='failed' WHERE status IN ('queued','running')");
@@ -66,14 +113,14 @@ class MoodReviewPersistenceIT {
         }
         python = new ProcessBuilder(".venv/bin/python", "-m", "tests.review_stack_server")
                 .directory(Path.of("../xinyu-ai").toFile()).redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        var reader = new java.io.BufferedReader(new java.io.InputStreamReader(python.getInputStream()));
+        var reader = new BufferedReader(new InputStreamReader(python.getInputStream()));
         pythonUrl = "http://127.0.0.1:" + Integer.parseInt(reader.readLine());
-        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(5).toNanos();
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
         while (true) {
             try {
                 httpGet("/health");
                 break;
-            } catch (java.io.IOException unavailable) {
+            } catch (IOException unavailable) {
                 if (System.nanoTime() >= deadline) {
                     throw unavailable;
                 }
@@ -82,28 +129,28 @@ class MoodReviewPersistenceIT {
         }
     }
 
-    com.fasterxml.jackson.databind.JsonNode httpGet(String path) throws Exception {
-        var request = java.net.http.HttpRequest.newBuilder(URI.create(pythonUrl + path)).GET().build();
-        return json.readTree(java.net.http.HttpClient.newHttpClient().send(request,
-                java.net.http.HttpResponse.BodyHandlers.ofString()).body());
+    JsonNode httpGet(String path) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create(pythonUrl + path)).GET().build();
+        return json.readTree(HttpClient.newHttpClient().send(request,
+                HttpResponse.BodyHandlers.ofString()).body());
     }
 
-    @org.junit.jupiter.api.AfterAll
+    @AfterAll
     void stopPython() throws Exception {
         if (python != null) {
             python.destroy();
-            assertThat(python.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(python.waitFor(5, TimeUnit.SECONDS)).isTrue();
         }
     }
 
-    com.xinyu.service.AiJobService jobsService() {
+    AiJobService jobsService() {
         var configuration = sessions.getConfiguration();
-        if (!configuration.hasMapper(com.xinyu.mapper.AiReplyMapper.class)) {
-            configuration.addMapper(com.xinyu.mapper.AiReplyMapper.class);
+        if (!configuration.hasMapper(AiReplyMapper.class)) {
+            configuration.addMapper(AiReplyMapper.class);
         }
-        var jobs = new com.xinyu.service.AiJobService(sessions.getMapper(com.xinyu.mapper.AiJobMapper.class),
-                sessions.getMapper(com.xinyu.mapper.MoodRecordMapper.class), sessions.getMapper(com.xinyu.mapper.AiReplyMapper.class),
-                new com.xinyu.service.AiJobAdmission(manager), true);
+        var jobs = new AiJobService(sessions.getMapper(AiJobMapper.class),
+                sessions.getMapper(MoodRecordMapper.class), sessions.getMapper(AiReplyMapper.class),
+                new AiJobAdmission(manager), true);
         jobs.setReviews(reviews);
         return jobs;
     }
@@ -118,7 +165,7 @@ class MoodReviewPersistenceIT {
     @BeforeAll
     void migrateEmptyIsolatedDatabase() {
         String url = System.getenv("AI_TEST_JDBC_URL");
-        org.junit.jupiter.api.Assumptions.assumeTrue(url != null, "需要显式隔离库");
+        assumeTrue(url != null, "需要显式隔离库");
         URI uri = URI.create(url.substring(5));
         if (!url.startsWith("jdbc:mysql://") || uri.getUserInfo() != null || uri.getQuery() != null
                 || uri.getFragment() != null || !uri.getPath().matches("/xinyu_test_[A-Za-z0-9_]+")) {
@@ -129,11 +176,11 @@ class MoodReviewPersistenceIT {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()", Integer.class))
                 .as("只迁移全新空测试库").isZero();
         try {
-            String baseline = new ClassPathResource("ai/schema.sql").getContentAsString(java.nio.charset.StandardCharsets.UTF_8)
+            String baseline = new ClassPathResource("ai/schema.sql").getContentAsString(StandardCharsets.UTF_8)
                     .split("-- STAGE2_REVIEW_TABLES")[0];
-            new ResourceDatabasePopulator(new org.springframework.core.io.ByteArrayResource(
-                    baseline.getBytes(java.nio.charset.StandardCharsets.UTF_8))).execute(source);
-        } catch (java.io.IOException failure) {
+            new ResourceDatabasePopulator(new ByteArrayResource(
+                    baseline.getBytes(StandardCharsets.UTF_8))).execute(source);
+        } catch (IOException failure) {
             throw new IllegalStateException(failure);
         }
         for (String migration : new String[]{"20261107_02_ai_reply_model_name.sql", "20261107_01_ai_reply_job.sql",
@@ -152,10 +199,10 @@ class MoodReviewPersistenceIT {
     @Test
     void concurrentClicksCreateExactlyOneReportAndJob() throws Exception {
         long user = userWithRecord(true, "散步");
-        var executor = java.util.concurrent.Executors.newFixedThreadPool(6);
-        var gate = new java.util.concurrent.CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(6);
+        var gate = new CountDownLatch(1);
         try {
-            var calls = new java.util.ArrayList<java.util.concurrent.Future<Long>>();
+            var calls = new ArrayList<Future<Long>>();
             for (int index = 0; index < 6; index++) {
                 calls.add(executor.submit(() -> {
                     gate.await();
@@ -163,9 +210,9 @@ class MoodReviewPersistenceIT {
                 }));
             }
             gate.countDown();
-            var ids = new java.util.HashSet<Long>();
+            var ids = new HashSet<Long>();
             for (var call : calls) {
-                ids.add(call.get(10, java.util.concurrent.TimeUnit.SECONDS));
+                ids.add(call.get(10, TimeUnit.SECONDS));
             }
             assertThat(ids).hasSize(1);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mood_review WHERE user_id=?", Integer.class, user)).isEqualTo(1);
@@ -182,8 +229,8 @@ class MoodReviewPersistenceIT {
         return report.jobId();
     }
 
-    com.xinyu.dto.ReviewAiResponse response(com.xinyu.dto.ReviewAiRequest request, String body) {
-        return new com.xinyu.dto.ReviewAiResponse(request.requestId(), request.jobId(), request.attempt(),
+    ReviewAiResponse response(ReviewAiRequest request, String body) {
+        return new ReviewAiResponse(request.requestId(), request.jobId(), request.attempt(),
                 request.sourceVersion(), body, null, "MODEL", true, "mood-review-v1", "stub-model");
     }
 
@@ -249,9 +296,9 @@ class MoodReviewPersistenceIT {
         jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'难过','关闭AI的正文不能发送',0,1,'2026-11-04 12:00:00')", user);
         var report = reviews.generate(user, "WEEK", "2026-11-02", false);
         int before = httpGet("/test/state").get("calls").size();
-        try (var client = new com.xinyu.service.AiServiceClient(pythonUrl, "test-internal-secret", 3)) {
-            var worker = new com.xinyu.service.AiJobWorker(jobsService(), client, manager, Runnable::run, System::nanoTime);
-            assertThat(worker.runOne().get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(com.xinyu.service.AiJobWorker.Outcome.SUCCEEDED);
+        try (var client = new AiServiceClient(pythonUrl, "test-internal-secret", 3)) {
+            var worker = new AiJobWorker(jobsService(), client, manager, Runnable::run, System::nanoTime);
+            assertThat(worker.runOne().get(10, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
             var calls = httpGet("/test/state").get("calls");
             assertThat(calls.size()).isEqualTo(before + 1);
             var sent = calls.get(before);
@@ -265,7 +312,7 @@ class MoodReviewPersistenceIT {
             long crisisUser = userWithRecord(true, "散步");
             jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'难过',?,0,1,'2026-11-04 12:00:00')", crisisUser, "文".repeat(400) + "我想自杀");
             reviews.generate(crisisUser, "WEEK", "2026-11-02", false);
-            assertThat(worker.runOne().get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(com.xinyu.service.AiJobWorker.Outcome.SUCCEEDED);
+            assertThat(worker.runOne().get(10, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
             assertThat(httpGet("/test/state").get("calls").size()).isEqualTo(before + 1);
             assertThat(reviews.get(crisisUser, "WEEK", "2026-11-02").report().resultKind()).isEqualTo("SUPPORT");
         }
@@ -281,7 +328,7 @@ class MoodReviewPersistenceIT {
         assertThat(reviews.generate(user, "WEEK", "2026-11-02", false).id()).isEqualTo(oldId);
         var next = reviews.generate(user, "WEEK", "2026-11-02", true);
         var service = jobsService();
-        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var tx = new TransactionTemplate(manager);
         var job = tx.execute(status -> service.claimNext());
         assertThat(job.getId()).isEqualTo(next.jobId());
         boolean failed = tx.execute(status -> service.fail(job.getId(), 1, job.getRequestId(), "provider_error"));
@@ -293,11 +340,11 @@ class MoodReviewPersistenceIT {
         tx.execute(status -> service.recoverInterrupted());
         assertThat(service.getOwned(user, second.getId()).errorCode()).isEqualTo("execution_interrupted");
         jdbc.update("UPDATE ai_job SET attempt_count=3,finished_at=CURRENT_TIMESTAMP WHERE id=?", second.getId());
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.retry(user, second.getId()))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
-                .satisfies(problem -> assertThat(((org.springframework.web.server.ResponseStatusException) problem).getStatusCode().value()).isEqualTo(429));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.getOwned(user + 10, second.getId()))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThatThrownBy(() -> service.retry(user, second.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(problem -> assertThat(((ResponseStatusException) problem).getStatusCode().value()).isEqualTo(429));
+        assertThatThrownBy(() -> service.getOwned(user + 10, second.getId()))
+                .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
@@ -319,7 +366,7 @@ class MoodReviewPersistenceIT {
             jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'平静',?,1,1,'2026-11-04 12:00:00')", user, "记录" + index);
         }
         var report = reviews.generate(user, "RECENT_30", null, false);
-        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var tx = new TransactionTemplate(manager);
         var job = tx.execute(status -> jobsService().claimNext());
         var prepared = reviews.prepare(job.getId(), 1, job.getRequestId());
         assertThat(prepared.request().records()).hasSize(60);
@@ -329,10 +376,10 @@ class MoodReviewPersistenceIT {
         assertThat(prepared.request().records().get(59).content()).isEqualTo("记录69");
         assertThat(reviews.complete(job.getId(), 1, job.getRequestId(), response(prepared.request(), "旧回顾{{r1}}"))).isTrue();
         assertThat(reviews.get(user, "RECENT_30", null).report().aiEnabledCount()).isEqualTo(71);
-        var tomorrow = java.time.Clock.offset(clock, java.time.Duration.ofDays(1));
-        var nextDay = new com.xinyu.service.MoodReviewService(new com.xinyu.mapper.MoodReviewMapper(jdbc),
-                new com.xinyu.service.MoodReviewStatsService(sessions.getMapper(com.xinyu.mapper.MoodRecordMapper.class), tomorrow),
-                tomorrow, manager, new com.xinyu.service.AiJobAdmission(manager));
+        var tomorrow = Clock.offset(clock, Duration.ofDays(1));
+        var nextDay = new MoodReviewService(new MoodReviewMapper(jdbc),
+                new MoodReviewStatsService(sessions.getMapper(MoodRecordMapper.class), tomorrow),
+                tomorrow, manager, new AiJobAdmission(manager));
         assertThat(nextDay.get(user, "RECENT_30", null).report().stale()).isTrue();
         assertThat(nextDay.get(user, "RECENT_30", null).report().id()).isEqualTo(report.id());
 
@@ -345,11 +392,11 @@ class MoodReviewPersistenceIT {
     @Test
     void emptyDisabledAndUnfinishedWeekDoNotCreateJobs() {
         long user = userWithRecord(false, "不授权");
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> reviews.generate(user, "WEEK", "2026-11-02", false))
+        assertThatThrownBy(() -> reviews.generate(user, "WEEK", "2026-11-02", false))
                 .hasMessageContaining("no_ai_enabled_records");
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> reviews.generate(user, "WEEK", "2026-10-26", false))
+        assertThatThrownBy(() -> reviews.generate(user, "WEEK", "2026-10-26", false))
                 .hasMessageContaining("no_records");
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> reviews.generate(user, "WEEK", "2026-11-09", false))
+        assertThatThrownBy(() -> reviews.generate(user, "WEEK", "2026-11-09", false))
                 .hasMessageContaining("week_not_finished");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE user_id=?", Integer.class, user)).isZero();
     }
@@ -368,10 +415,10 @@ class MoodReviewPersistenceIT {
     void failedOldRevisionCannotRetryWhenNewRevisionIsAlreadyQueued() {
         long user = userWithRecord(true, "散步");
         long oldJob = claim(user);
-        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var tx = new TransactionTemplate(manager);
         tx.execute(status -> reviews.fail(oldJob, 1, "review-test", "provider_error"));
         var newer = reviews.generate(user, "WEEK", "2026-11-02", true);
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> reviews.retry(user, oldJob))
+        assertThatThrownBy(() -> reviews.retry(user, oldJob))
                 .hasMessageContaining("review_already_active");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE user_id=? AND status IN ('queued','running')", Integer.class, user)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT status FROM ai_job WHERE id=?", String.class, newer.jobId())).isEqualTo("queued");
@@ -389,7 +436,7 @@ class MoodReviewPersistenceIT {
                     user, content, time);
         }
         reviews.generate(user, "WEEK", "2026-11-02", false);
-        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var tx = new TransactionTemplate(manager);
         var job = tx.execute(status -> jobsService().claimNext());
         var prepared = reviews.prepare(job.getId(), 1, job.getRequestId());
         assertThat(prepared.support()).isNull();
@@ -438,9 +485,9 @@ class MoodReviewPersistenceIT {
 
         reviews.generate(user, "WEEK", "2026-11-02", false);
         int before = httpGet("/test/state").get("calls").size();
-        try (var client = new com.xinyu.service.AiServiceClient(pythonUrl, "test-internal-secret", 3)) {
-            var worker = new com.xinyu.service.AiJobWorker(jobsService(), client, manager, Runnable::run, System::nanoTime);
-            assertThat(worker.runOne().get(10, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(com.xinyu.service.AiJobWorker.Outcome.SUCCEEDED);
+        try (var client = new AiServiceClient(pythonUrl, "test-internal-secret", 3)) {
+            var worker = new AiJobWorker(jobsService(), client, manager, Runnable::run, System::nanoTime);
+            assertThat(worker.runOne().get(10, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SUCCEEDED);
         }
 
         var sentRecords = httpGet("/test/state").get("calls").get(before).get("records");
@@ -456,7 +503,7 @@ class MoodReviewPersistenceIT {
         assertThat(firstSource.content()).isEqualTo("长首段" + "甲".repeat(900) + "长尾段");
 
         var regen = reviews.generate(user, "WEEK", "2026-11-02", true);
-        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        var tx = new TransactionTemplate(manager);
         var claimed = tx.execute(status -> jobsService().claimNext());
         assertThat(claimed.getId()).isEqualTo(regen.jobId());
         var prepared = reviews.prepare(claimed.getId(), 1, claimed.getRequestId());
@@ -466,7 +513,7 @@ class MoodReviewPersistenceIT {
 
         var reloaded = reviews.get(user, "WEEK", "2026-11-02");
         var sources = reloaded.report().sources();
-        assertThat(sources).extracting(com.xinyu.service.MoodReviewService.Source::ref).containsExactly("r1", "r30", "r60");
+        assertThat(sources).extracting(MoodReviewService.Source::ref).containsExactly("r1", "r30", "r60");
         for (var source : sources) {
             int idx = Integer.parseInt(source.ref().substring(1)) - 1;
             var sent = prepared.request().records().get(idx);
@@ -486,10 +533,10 @@ class MoodReviewPersistenceIT {
     void historyDeduplicatesRevisionsPerWeekAndPaginatesByFive() {
         long user = ++nextUser;
         jdbc.update("INSERT INTO user(id) VALUES (?)", user);
-        java.time.LocalDate baseMonday = java.time.LocalDate.of(2026, 9, 28);
-        var tx = new org.springframework.transaction.support.TransactionTemplate(manager);
+        LocalDate baseMonday = LocalDate.of(2026, 9, 28);
+        var tx = new TransactionTemplate(manager);
         for (int week = 0; week < 6; week++) {
-            java.time.LocalDate weekStart = baseMonday.plusWeeks(week);
+            LocalDate weekStart = baseMonday.plusWeeks(week);
             jdbc.update("INSERT INTO mood_record(user_id,mood_type,content,ai_reply_enabled,content_version,create_time) VALUES (?,'平静',?,1,1,?)",
                     user, "第" + week + "周记录", weekStart.atTime(10, 0));
             var generated = reviews.generate(user, "WEEK", weekStart.toString(), false);
@@ -509,7 +556,7 @@ class MoodReviewPersistenceIT {
         assertThat(page1).hasSize(5);
         assertThat(page1.get(0).rangeStart()).isEqualTo(baseMonday.plusWeeks(5));
         assertThat(page1.get(0).revision()).isEqualTo(2);
-        assertThat(page1.stream().map(com.xinyu.service.MoodReviewService.History::rangeStart).distinct()).hasSize(5);
+        assertThat(page1.stream().map(MoodReviewService.History::rangeStart).distinct()).hasSize(5);
         assertThat(page2).hasSize(1);
         assertThat(page2.get(0).rangeStart()).isEqualTo(baseMonday);
     }

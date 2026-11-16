@@ -1,31 +1,41 @@
 package com.xinyu.service;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xinyu.dto.ReviewAiRequest;
+import com.xinyu.dto.ReviewAiResponse;
 import com.xinyu.entity.AiJob;
 import com.xinyu.entity.MoodRecord;
-import com.xinyu.mapper.AiJobMapper;
-import com.xinyu.vo.MoodReviewStatsVO;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpStatus;
-import com.xinyu.mapper.MoodReviewMapper;
 import com.xinyu.entity.MoodReview;
+import com.xinyu.mapper.AiJobMapper;
+import com.xinyu.mapper.MoodReviewMapper;
+import com.xinyu.vo.AiJobVO;
+import com.xinyu.vo.MoodReviewStatsVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -34,30 +44,25 @@ import java.util.regex.Pattern;
  */
 @Service
 public class MoodReviewService {
-    /** 阶段2契约第5节：报告独立模板，不改变日记回复模板。 */
+
+    /** 阶段 2 契约第 5 节：报告独立模板，不改变日记回复模板。 */
     public static final String TEMPLATE = "mood-review-v1";
     public static final String TASK_TYPE = "MOOD_REVIEW";
+
     private static final int MAX_QUEUED = 100;
     private static final int MAX_USER_ACTIVE = 3;
     private static final int HISTORY_PAGE_SIZE = 5;
-    /** 实施方案5.3节与2026-11-14预算修订：最多60条、正文合计12000 UTF-16单元、Python最多40秒。 */
-    private static final int MAX_SENT_RECORDS = 60;
-    /** 与 Python xinyu-ai/app/reviews.py 的 MAX_TOTAL_CONTENT_UTF16 保持同值。 */
-    private static final int MAX_TOTAL_CONTENT_UTF16 = 12_000;
-    /** 与 Python app/reviews.py 及 evals/run_review_eval.py 同值；避免与用户正文省略号混淆。 */
-    private static final String TRUNCATION_MARKER = "〔中间省略〕";
-    private static final int PROVIDER_BUDGET_MS = 40_000;
-    /** 与 Python 回顾提示词示例约定一致的中文星期映射，不依赖系统 Locale。 */
-    private static final Map<DayOfWeek, String> WEEKDAYS = Map.of(
-            DayOfWeek.MONDAY, "周一",
-            DayOfWeek.TUESDAY, "周二",
-            DayOfWeek.WEDNESDAY, "周三",
-            DayOfWeek.THURSDAY, "周四",
-            DayOfWeek.FRIDAY, "周五",
-            DayOfWeek.SATURDAY, "周六",
-            DayOfWeek.SUNDAY, "周日");
-    /** 与 ReviewAiResponse.REFERENCE 同口径，从已保存正文中识别引用标记。 */
+    private static final int MAX_HISTORY_PAGE = 100_000;
+
+    /** 与 {@link AiServiceClient} 及 Python {@code main.py} 错误分类一致的安全错误码集合。 */
+    private static final Set<String> ALLOWED_ERROR_CODES = Set.of(
+            "invalid_request", "unauthorized", "provider_timeout", "provider_error",
+            "invalid_model_response", "overloaded", "execution_interrupted",
+            "capacity_exceeded", "internal_error");
+
+    /** 与 {@link ReviewAiResponse} 同口径，从已保存正文中识别引用标记。 */
     private static final Pattern CITED_REF = Pattern.compile("\\{\\{(r[1-9][0-9]*)}}");
+
     private final MoodReviewMapper reports;
     private final MoodReviewStatsService stats;
     private final Clock clock;
@@ -65,16 +70,25 @@ public class MoodReviewService {
     private final AiJobAdmission admission;
     private AiJobMapper reviewJobs;
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules()
-            .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     /** 报告引用的本人有效记录对照；content 返回当前全文且不截断。 */
     public record Source(String ref, long recordId, LocalDate date, String weekday, String moodType, String content) { }
+
     /** 对外报告仅返回正文实际引用到的有效本人来源；删除任何来源时隐藏旧信并清空 sources。 */
     public record Report(long id, int revision, String status, String body, String ps, String resultKind,
                          boolean stale, long jobId, LocalDate rangeStart, LocalDate rangeEnd,
                          int aiEnabledCount, String generatedAt, List<Source> sources) { }
+
     public record Page(MoodReviewStatsVO stats, Report report, Report active, Report failed, int aiEnabledCount) { }
+
     public record History(long id, LocalDate rangeStart, LocalDate rangeEnd, int revision, String status, int total) { }
+
+    /** worker 的发送预检；短事务结束后才可执行网络。 */
+    public record Prepared(ReviewAiRequest request, ReviewAiResponse support) { }
+
+    private record AttemptContext(MoodReview row, AiJob job, List<MoodRecord> records, boolean crisis) { }
+
     public MoodReviewService(MoodReviewMapper reports, MoodReviewStatsService stats,
                              @Qualifier("reviewClock") Clock clock, PlatformTransactionManager manager,
                              AiJobAdmission admission) {
@@ -85,12 +99,16 @@ public class MoodReviewService {
         this.admission = admission;
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    @Autowired
     public void setReviewJobs(AiJobMapper reviewJobs) {
         this.reviewJobs = reviewJobs;
     }
 
-    /** 创建或复用当前范围的任务；未结束的周、无来源和无AI授权分别拒绝。 */
+    // =====================================================================
+    // 一、用户端读写与重试入口
+    // =====================================================================
+
+    /** 创建或复用当前范围的任务；未结束的周、无来源和无 AI 授权分别拒绝。 */
     public Report generate(long userId, String type, String start, boolean regenerate) {
         return admission.save(() -> {
             // 用户锁先于所有一致性读取，等待后不会读到加锁前的 RR 快照。
@@ -99,6 +117,7 @@ public class MoodReviewService {
             if ("WEEK".equals(type) && snapshot.rangeEnd().isAfter(LocalDate.now(clock))) {
                 throw http(HttpStatus.BAD_REQUEST, "week_not_finished");
             }
+
             List<MoodRecord> records = sources(userId, snapshot.rangeStart(), snapshot.rangeEnd(), true);
             snapshot = MoodReviewStatsService.aggregate(records, snapshot.rangeStart(), snapshot.rangeEnd());
             if (records.isEmpty()) {
@@ -107,6 +126,7 @@ public class MoodReviewService {
             if (records.stream().noneMatch(record -> Boolean.TRUE.equals(record.getAiReplyEnabled()))) {
                 throw http(HttpStatus.BAD_REQUEST, "no_ai_enabled_records");
             }
+
             MoodReview active = latest(userId, type, snapshot.rangeStart(), true);
             if (active != null) {
                 return view(active, records, false);
@@ -116,9 +136,11 @@ public class MoodReviewService {
             if (!regenerate && success != null && success.fingerprint().equals(fingerprint)) {
                 return view(success, records, false);
             }
+
             requireCapacity(userId);
             int revision = reports.nextRevision(userId, type, snapshot.rangeStart());
-            long id = reports.insert(userId, type, snapshot.rangeStart(), snapshot.rangeEnd(), revision, fingerprint, encodeSnapshot(snapshot, records));
+            long id = reports.insert(userId, type, snapshot.rangeStart(), snapshot.rangeEnd(),
+                    revision, fingerprint, encodeSnapshot(snapshot, records));
             for (MoodRecord record : records) {
                 reports.insertSource(id, record.getId(), record.getContentVersion());
             }
@@ -131,15 +153,234 @@ public class MoodReviewService {
     public Page get(long userId, String type, String start) {
         return transactions.execute(status -> {
             MoodReviewStatsVO snapshot = statistics(userId, type, start);
-            MoodReview success = latest(userId, type, "WEEK".equals(type) ? snapshot.rangeStart() : null, false);
+            LocalDate successScope = "WEEK".equals(type) ? snapshot.rangeStart() : null;
+            MoodReview success = latest(userId, type, successScope, false);
             MoodReview active = latest(userId, type, snapshot.rangeStart(), true);
             List<MoodRecord> records = sources(userId, snapshot.rangeStart(), snapshot.rangeEnd(), false);
-            int aiEnabledCount = (int) records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).count();
-            boolean rangeChanged = success != null && (!success.start().equals(snapshot.rangeStart()) || !success.end().equals(snapshot.rangeEnd()));
-            Report failed = latestFailed(userId, type, snapshot.rangeStart(), records);
-            return new Page(snapshot, success == null ? null : view(success, records, rangeChanged),
-                    active == null ? null : view(active, records, false), failed, aiEnabledCount);
+
+            int aiEnabledCount = (int) records.stream()
+                    .filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled()))
+                    .count();
+            boolean rangeChanged = success != null
+                    && (!success.start().equals(snapshot.rangeStart()) || !success.end().equals(snapshot.rangeEnd()));
+
+            Report successView = success == null ? null : view(success, records, rangeChanged);
+            Report activeView = active == null ? null : view(active, records, false);
+            Report failedView = latestFailed(userId, type, snapshot.rangeStart(), records);
+            return new Page(snapshot, successView, activeView, failedView, aiEnabledCount);
         });
+    }
+
+    /** 周报历史仅返回元信息与快照条数，不含正文。 */
+    public List<History> history(long userId, int page) {
+        if (page < 1 || page > MAX_HISTORY_PAGE) {
+            throw http(HttpStatus.BAD_REQUEST, "invalid_page");
+        }
+        int offset = (page - 1) * HISTORY_PAGE_SIZE;
+        return reports.history(userId, HISTORY_PAGE_SIZE, offset).stream()
+                .map(row -> new History(
+                        row.id(),
+                        row.start(),
+                        row.end(),
+                        row.revision(),
+                        row.status(),
+                        decodeStats(row.statsJson()).total()))
+                .toList();
+    }
+
+    /** 任务查询沿用统一 VO，仍从报告来源计算删除隐藏；不返回原始模型异常。 */
+    public AiJobVO getOwned(long userId, long jobId) {
+        return transactions.execute(status -> ownedView(ownedJob(userId, jobId)));
+    }
+
+    /** 用户显式重试同一任务，复用 1a 冷却与容量门禁，不自动调用模型。 */
+    public AiJobVO retry(long userId, long jobId) {
+        return admission.save(() -> {
+            lockUser(userId);
+            AiJob observed = ownedJob(userId, jobId);
+            MoodReview row = load(observed.getTargetId());
+            List<MoodRecord> records = sources(userId, row.start(), row.end(), true);
+
+            AiJob job = lockJob(jobId);
+            if (!matches(row, job, records)) {
+                throw http(HttpStatus.CONFLICT, "source_changed");
+            }
+            if (List.of("queued", "running", "succeeded").contains(job.getStatus())) {
+                return ownedView(job);
+            }
+            if (!"failed".equals(job.getStatus())) {
+                throw http(HttpStatus.CONFLICT, "job_not_retryable");
+            }
+
+            MoodReview active = latest(userId, row.type(), row.start(), true);
+            if (active != null && active.id() != row.id()) {
+                throw http(HttpStatus.CONFLICT, "review_already_active");
+            }
+
+            int cooldown = AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount());
+            int remaining = reviewJobs.selectRetryAfterSeconds(job, cooldown);
+            if (remaining > 0) {
+                throw tooManyRequestsWithRetryAfter(remaining);
+            }
+
+            requireCapacity(userId);
+            if (reviewJobs.requeueReviewAfterCooldown(job, cooldown) != 1) {
+                throw http(HttpStatus.CONFLICT, "job_changed");
+            }
+            reports.markActive(row.id(), "queued");
+            return ownedView(job(jobId));
+        });
+    }
+
+    // =====================================================================
+    // 二、Worker 生命周期衔接（短事务预检、收尾与启动恢复）
+    // =====================================================================
+
+    /** 仅在 worker 的领取短事务中调用；领取后同步报告状态。 */
+    public AiJob claimNext() {
+        AiJob candidate = reviewJobs.selectNextReviewQueued();
+        if (candidate == null) {
+            return null;
+        }
+        String requestId = UUID.randomUUID().toString();
+        if (reviewJobs.claimReview(candidate.getId(), candidate.getAttemptCount(), requestId) != 1) {
+            return null;
+        }
+        reports.markActive(candidate.getTargetId(), "running");
+        return reviewJobs.selectForUpdate(candidate.getId());
+    }
+
+    /** 预检全部来源，先危机检查再构造最小授权请求；来源变化返回 null 并失效任务。 */
+    public Prepared prepare(long jobId, int attempt, String requestId) {
+        return transactions.execute(status -> {
+            AttemptContext context = lockAndVerifyAttempt(jobId, attempt, requestId);
+            if (context == null) {
+                return null;
+            }
+
+            MoodReview row = context.row();
+            ReviewAiRequest request = buildRequest(row, context.job(), context.records(), context.crisis());
+
+            // 保存本次真正发出的子集：抽样顺序由 create_time,id 稳定确定，别名按子集从 r1 编号。
+            reports.resetSentSources(row.id());
+            if (!context.crisis()) {
+                for (MoodRecord record : MoodReviewPayloadBuilder.sampled(context.records())) {
+                    reports.markSentSource(row.id(), record.getId());
+                }
+            }
+
+            ReviewAiResponse support = context.crisis()
+                    ? new ReviewAiResponse(requestId, request.jobId(), attempt, request.sourceVersion(),
+                            MoodReviewSafety.SUPPORT_TEXT, null, "SUPPORT", false, TEMPLATE, null)
+                    : null;
+            return new Prepared(request, support);
+        });
+    }
+
+    /** 来源范围先锁、任务后锁；结果校验及两表终态在一个事务提交，拒绝迟到结果。 */
+    public boolean complete(long jobId, int attempt, String requestId, ReviewAiResponse response) {
+        return transactions.execute(status -> {
+            AttemptContext context = lockAndVerifyAttempt(jobId, attempt, requestId);
+            if (context == null) {
+                return false;
+            }
+
+            MoodReview row = context.row();
+            AiJob locked = context.job();
+            try {
+                if (response == null) {
+                    throw new IllegalArgumentException("invalid_model_response");
+                }
+                ReviewAiRequest expected = buildRequest(row, locked, context.records(), context.crisis());
+                response.validate(expected);
+                if (context.crisis()
+                        && (!"SUPPORT".equals(response.resultKind())
+                                || !MoodReviewSafety.SUPPORT_TEXT.equals(response.body()))) {
+                    throw new IllegalArgumentException("invalid_model_response");
+                }
+            } catch (IllegalArgumentException invalid) {
+                finish(locked, "failed", "invalid_model_response", null);
+                return false;
+            }
+
+            if (!finish(locked, "succeeded", null, response)) {
+                return false;
+            }
+            reports.saveResult(row.id(), response);
+            return true;
+        });
+    }
+
+    /** 在 worker 的失败短事务中以尝试身份条件收尾，不推测是否调用模型。 */
+    public boolean fail(long id, int attempt, String requestId, String code) {
+        AiJob job = job(id);
+        if (!current(job, attempt, requestId)) {
+            return false;
+        }
+        String safe = ALLOWED_ERROR_CODES.contains(code == null ? "" : code) ? code : "internal_error";
+        return finish(job, "failed", safe, null);
+    }
+
+    /** 在唯一 worker 启动恢复事务中同步两表，保留历史成功报告。 */
+    public int recoverInterrupted() {
+        int changed = reviewJobs.failInterruptedReviews();
+        reports.recoverInterrupted();
+        return changed;
+    }
+
+    // =====================================================================
+    // 三、包内纯函数委托与内部辅助
+    // =====================================================================
+
+    static String weekday(DayOfWeek day) {
+        return MoodReviewPayloadBuilder.weekday(day);
+    }
+
+    static List<Integer> allocateBudgets(List<Integer> lengths, int totalBudget) {
+        return MoodReviewPayloadBuilder.allocateBudgets(lengths, totalBudget);
+    }
+
+    static String clip(String content, int budget) {
+        return MoodReviewPayloadBuilder.clip(content, budget);
+    }
+
+    /** id/version 集合按 id 排序，不受日内记录顺序影响。 */
+    static String fingerprint(List<MoodRecord> records) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            records.stream()
+                    .sorted(Comparator.comparing(MoodRecord::getId))
+                    .forEach(record -> digest.update(
+                            (record.getId() + ":" + record.getContentVersion() + "\n").getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException unavailable) {
+            throw new IllegalStateException("SHA-256 unavailable", unavailable);
+        }
+    }
+
+    private AttemptContext lockAndVerifyAttempt(long jobId, int attempt, String requestId) {
+        AiJob observed = job(jobId);
+        if (!current(observed, attempt, requestId)) {
+            return null;
+        }
+
+        MoodReview row = load(observed.getTargetId());
+        List<MoodRecord> records = sources(row.userId(), row.start(), row.end(), true);
+        AiJob locked = lockJob(jobId);
+        if (!current(locked, attempt, requestId)) {
+            return null;
+        }
+        if (!matches(row, locked, records)) {
+            finish(locked, "superseded", null, null);
+            return null;
+        }
+
+        boolean crisis = records.stream().anyMatch(record -> MoodReviewSafety.matches(record.getContent()));
+        return new AttemptContext(row, locked, records, crisis);
+    }
+
+    private ReviewAiRequest buildRequest(MoodReview row, AiJob job, List<MoodRecord> records, boolean crisis) {
+        return MoodReviewPayloadBuilder.buildRequest(row, job, records, decodeStats(row.statsJson()), crisis);
     }
 
     private Report latestFailed(long userId, String type, LocalDate start, List<MoodRecord> records) {
@@ -154,215 +395,23 @@ public class MoodReviewService {
         return candidate.stale() ? null : candidate;
     }
 
-    /** 周报历史仅返回元信息与快照条数，不含正文。 */
-    public List<History> history(long userId, int page) {
-        if (page < 1 || page > 100_000) {
-            throw http(HttpStatus.BAD_REQUEST, "invalid_page");
-        }
-        return reports.history(userId, HISTORY_PAGE_SIZE, (page - 1) * HISTORY_PAGE_SIZE).stream()
-                .map(row -> new History(row.id(), row.start(), row.end(), row.revision(), row.status(),
-                        decodeStats(row.statsJson()).total())).toList();
-    }
-
-    /** worker 的发送预检；短事务结束后才可执行网络。 */
-    public record Prepared(com.xinyu.dto.ReviewAiRequest request, com.xinyu.dto.ReviewAiResponse support) { }
-
-    /** 预检全部来源，先危机检查再构造最小授权请求；来源变化返回 null 并失效任务。 */
-    public Prepared prepare(long jobId, int attempt, String requestId) {
-        return transactions.execute(status -> {
-            AiJob observed = job(jobId);
-            if (!current(observed, attempt, requestId)) {
-                return null;
-            }
-            MoodReview row = load(observed.getTargetId());
-            List<MoodRecord> records = sources(row.userId(), row.start(), row.end(), true);
-            AiJob locked = lockJob(jobId);
-            if (!current(locked, attempt, requestId)) {
-                return null;
-            }
-            if (!matches(row, locked, records)) {
-                finish(locked, "superseded", null, null);
-                return null;
-            }
-            boolean crisis = records.stream().anyMatch(record -> MoodReviewSafety.matches(record.getContent()));
-            com.xinyu.dto.ReviewAiRequest request = buildRequest(row, locked, records, crisis);
-            // 保存本次真正发出的子集：抽样顺序由 create_time,id 稳定确定，别名按子集从 r1 编号。
-            reports.resetSentSources(row.id());
-            if (!crisis) {
-                for (MoodRecord record : sampled(records)) {
-                    reports.markSentSource(row.id(), record.getId());
-                }
-            }
-            com.xinyu.dto.ReviewAiResponse support = crisis
-                    ? new com.xinyu.dto.ReviewAiResponse(requestId, request.jobId(), attempt, request.sourceVersion(),
-                            MoodReviewSafety.SUPPORT_TEXT, null, "SUPPORT", false, TEMPLATE, null)
-                    : null;
-            return new Prepared(request, support);
-        });
-    }
-
-    /** 来源范围先锁、任务后锁；结果校验及两表终态在一个事务提交，拒绝迟到结果。 */
-    public boolean complete(long jobId, int attempt, String requestId, com.xinyu.dto.ReviewAiResponse response) {
-        return transactions.execute(status -> {
-            AiJob observed = job(jobId);
-            if (!current(observed, attempt, requestId)) {
-                return false;
-            }
-            MoodReview row = load(observed.getTargetId());
-            List<MoodRecord> records = sources(row.userId(), row.start(), row.end(), true);
-            AiJob locked = lockJob(jobId);
-            if (!current(locked, attempt, requestId)) {
-                return false;
-            }
-            if (!matches(row, locked, records)) {
-                finish(locked, "superseded", null, null);
-                return false;
-            }
-            boolean crisis = records.stream().anyMatch(record -> MoodReviewSafety.matches(record.getContent()));
-            try {
-                if (response == null) {
-                    throw new IllegalArgumentException("invalid_model_response");
-                }
-                response.validate(buildRequest(row, locked, records, crisis));
-                if (crisis && (!"SUPPORT".equals(response.resultKind()) || !MoodReviewSafety.SUPPORT_TEXT.equals(response.body()))) {
-                    throw new IllegalArgumentException("invalid_model_response");
-                }
-            } catch (IllegalArgumentException invalid) {
-                finish(locked, "failed", "invalid_model_response", null);
-                return false;
-            }
-            if (!finish(locked, "succeeded", null, response)) {
-                return false;
-            }
-            reports.saveResult(row.id(), response);
-            return true;
-        });
-    }
-
     private boolean matches(MoodReview row, AiJob job, List<MoodRecord> records) {
-        return row != null && row.userId() == job.getUserId() && row.revision() == job.getTargetVersion()
+        return row != null
+                && row.userId() == job.getUserId()
+                && row.revision() == job.getTargetVersion()
                 && row.fingerprint().equals(fingerprint(records));
     }
 
-    private com.xinyu.dto.ReviewAiRequest buildRequest(MoodReview row, AiJob job, List<MoodRecord> records, boolean crisis) {
-        List<com.xinyu.dto.ReviewAiRequest.Entry> entries = new ArrayList<>();
-        if (!crisis) {
-            List<MoodRecord> selected = sampled(records);
-            List<Integer> lengths = selected.stream().map(record -> record.getContent().length()).toList();
-            List<Integer> budgets = allocateBudgets(lengths, MAX_TOTAL_CONTENT_UTF16);
-            for (int index = 0; index < selected.size(); index++) {
-                MoodRecord record = selected.get(index);
-                String content = clip(record.getContent(), budgets.get(index));
-                entries.add(new com.xinyu.dto.ReviewAiRequest.Entry("r" + (index + 1),
-                        record.getCreateTime().toLocalDate().toString(), weekday(record.getCreateTime().getDayOfWeek()),
-                        record.getMoodType(), content));
-            }
-        }
-        int enabled = (int) records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).count();
-        return new com.xinyu.dto.ReviewAiRequest(job.getRequestId(), job.getId().toString(), job.getAttemptCount(),
-                job.getTargetVersion().toString(), row.type(), List.copyOf(entries), enabled, decodeStats(row.statsJson()), PROVIDER_BUDGET_MS);
-    }
-
-    static String weekday(DayOfWeek day) {
-        return WEEKDAYS.get(day);
-    }
-
-    /** 阶段2第5.3节：最多60条，超过时等距取样，含首尾。 */
-    private static List<MoodRecord> sampled(List<MoodRecord> records) {
-        List<MoodRecord> enabled = records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).toList();
-        if (enabled.size() <= MAX_SENT_RECORDS) {
-            return enabled;
-        }
-        List<MoodRecord> sample = new ArrayList<>();
-        for (int index = 0; index < MAX_SENT_RECORDS; index++) {
-            sample.add(enabled.get(index * (enabled.size() - 1) / (MAX_SENT_RECORDS - 1)));
-        }
-        return sample;
-    }
-
-    /**
-     * 水位分配（与 evals/run_review_eval.py 保持零偏差）：
-     * 按 (UTF-16 长度, 原下标) 稳定升序逐条分派 floor(剩余预算 / 剩余条数)，短记录留余量顺延。
-     * 在最多 60 条且总预算 12000 下，单条最小份额 >= 12000/60 = 200 > 标记长度 6，不会出现 <= 6 的份额。
-     */
-    static List<Integer> allocateBudgets(List<Integer> lengths, int totalBudget) {
-        int count = lengths.size();
-        Integer[] order = new Integer[count];
-        for (int i = 0; i < count; i++) {
-            order[i] = i;
-        }
-        java.util.Arrays.sort(order, java.util.Comparator.<Integer>comparingInt(lengths::get).thenComparingInt(i -> i));
-
-        int[] allocated = new int[count];
-        int remainingBudget = totalBudget;
-        for (int rank = 0; rank < count; rank++) {
-            int idx = order[rank];
-            int share = remainingBudget / (count - rank);
-            int granted = Math.min(lengths.get(idx), share);
-            allocated[idx] = granted;
-            remainingBudget -= granted;
-        }
-        List<Integer> result = new ArrayList<>(count);
-        for (int value : allocated) {
-            result.add(value);
-        }
-        return result;
-    }
-
-    /**
-     * 保留首尾（前约 2/3 + 标记 + 后约 1/3，标记计入份额），两端都不切断 UTF-16 代理对。
-     */
-    static String clip(String content, int budget) {
-        if (content.length() <= budget) {
-            return content;
-        }
-        if (budget <= TRUNCATION_MARKER.length()) {
-            return TRUNCATION_MARKER.substring(0, Math.max(0, budget));
-        }
-        int keep = budget - TRUNCATION_MARKER.length();
-        int headLimit = (keep * 2) / 3;
-        int tailLimit = keep - headLimit;
-        int headEnd = (headLimit > 0 && Character.isHighSurrogate(content.charAt(headLimit - 1)))
-                ? headLimit - 1
-                : headLimit;
-        int tailStart = content.length() - tailLimit;
-        if (tailStart < content.length() && Character.isLowSurrogate(content.charAt(tailStart))) {
-            tailStart++;
-        }
-        return content.substring(0, headEnd) + TRUNCATION_MARKER + content.substring(tailStart);
-    }
-
-    /** 仅在 worker 的领取短事务中调用；领取后同步报告状态。 */
-    public AiJob claimNext() {
-        AiJob candidate = reviewJobs.selectNextReviewQueued();
-        if (candidate == null) {
-            return null;
-        }
-        if (reviewJobs.claimReview(candidate.getId(), candidate.getAttemptCount(), java.util.UUID.randomUUID().toString()) != 1) {
-            return null;
-        }
-        reports.markActive(candidate.getTargetId(), "running");
-        return reviewJobs.selectForUpdate(candidate.getId());
-    }
-
-    /** 在 worker 的失败短事务中以尝试身份条件收尾，不推测是否调用模型。 */
-    public boolean fail(long id, int attempt, String requestId, String code) {
-        AiJob job = job(id);
-        if (!current(job, attempt, requestId)) {
-            return false;
-        }
-        String safe = java.util.Set.of("invalid_request", "unauthorized", "provider_timeout", "provider_error",
-                "invalid_model_response", "overloaded", "execution_interrupted", "capacity_exceeded", "internal_error")
-                .contains(code == null ? "" : code) ? code : "internal_error";
-        return finish(job, "failed", safe, null);
-    }
-
-    private boolean finish(AiJob job, String state, String error, com.xinyu.dto.ReviewAiResponse response) {
-        int changed = reviewJobs.finishReviewAttempt(job, state, error, response == null ? null : response.resultKind(),
-                response == null ? null : response.modelCalled(), response == null ? null : response.modelName());
+    private boolean finish(AiJob job, String state, String error, ReviewAiResponse response) {
+        String resultKind = response == null ? null : response.resultKind();
+        Boolean modelCalled = response == null ? null : response.modelCalled();
+        String modelName = response == null ? null : response.modelName();
+        int changed = reviewJobs.finishReviewAttempt(job, state, error, resultKind, modelCalled, modelName);
         if (changed == 1) {
-            reports.finish(job.getTargetId(), "superseded".equals(state) ? "failed" : state,
-                    error == null && "superseded".equals(state) ? "source_changed" : error);
+            boolean superseded = "superseded".equals(state);
+            String reportState = superseded ? "failed" : state;
+            String reportError = error == null && superseded ? "source_changed" : error;
+            reports.finish(job.getTargetId(), reportState, reportError);
         }
         return changed == 1;
     }
@@ -376,62 +425,11 @@ public class MoodReviewService {
     }
 
     private static boolean current(AiJob job, int attempt, String requestId) {
-        return job != null && TASK_TYPE.equals(job.getTaskType()) && "running".equals(job.getStatus())
-                && job.getAttemptCount() == attempt && Objects.equals(job.getRequestId(), requestId);
-    }
-
-    /** 在唯一 worker 启动恢复事务中同步两表，保留历史成功报告。 */
-    public int recoverInterrupted() {
-        int changed = reviewJobs.failInterruptedReviews();
-        reports.recoverInterrupted();
-        return changed;
-    }
-
-    /** 任务查询沿用统一 VO，仍从报告来源计算删除隐藏；不返回原始模型异常。 */
-    public com.xinyu.vo.AiJobVO getOwned(long userId, long jobId) {
-        return transactions.execute(status -> ownedView(ownedJob(userId, jobId)));
-    }
-
-    /** 用户显式重试同一任务，复用1a冷却与容量门禁，不自动调用模型。 */
-    public com.xinyu.vo.AiJobVO retry(long userId, long jobId) {
-        return admission.save(() -> {
-            lockUser(userId);
-            AiJob observed = ownedJob(userId, jobId);
-            MoodReview row = load(observed.getTargetId());
-            List<MoodRecord> records = sources(userId, row.start(), row.end(), true);
-            AiJob job = lockJob(jobId);
-            if (!matches(row, job, records)) {
-                throw http(HttpStatus.CONFLICT, "source_changed");
-            }
-            if (List.of("queued", "running", "succeeded").contains(job.getStatus())) {
-                return ownedView(job);
-            }
-            if (!"failed".equals(job.getStatus())) {
-                throw http(HttpStatus.CONFLICT, "job_not_retryable");
-            }
-            MoodReview active = latest(userId, row.type(), row.start(), true);
-            if (active != null && active.id() != row.id()) {
-                throw http(HttpStatus.CONFLICT, "review_already_active");
-            }
-            int cooldown = AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount());
-            int remaining = reviewJobs.selectRetryAfterSeconds(job, cooldown);
-            if (remaining > 0) {
-                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "review_cooldown") {
-                    @Override
-                    public org.springframework.http.HttpHeaders getHeaders() {
-                        var headers = new org.springframework.http.HttpHeaders();
-                        headers.set("Retry-After", Integer.toString(remaining));
-                        return headers;
-                    }
-                };
-            }
-            requireCapacity(userId);
-            if (reviewJobs.requeueReviewAfterCooldown(job, cooldown) != 1) {
-                throw http(HttpStatus.CONFLICT, "job_changed");
-            }
-            reports.markActive(row.id(), "queued");
-            return ownedView(job(jobId));
-        });
+        return job != null
+                && TASK_TYPE.equals(job.getTaskType())
+                && "running".equals(job.getStatus())
+                && job.getAttemptCount() == attempt
+                && Objects.equals(job.getRequestId(), requestId);
     }
 
     private AiJob ownedJob(long userId, long jobId) {
@@ -445,15 +443,30 @@ public class MoodReviewService {
         return job;
     }
 
-    private com.xinyu.vo.AiJobVO ownedView(AiJob job) {
+    private AiJobVO ownedView(AiJob job) {
         MoodReview row = load(job.getTargetId());
         Report report = view(row, sources(row.userId(), row.start(), row.end(), false), false);
+        boolean succeeded = "succeeded".equals(job.getStatus());
         boolean failed = "failed".equals(job.getStatus());
-        int remaining = failed ? reviewJobs.selectRetryAfterSeconds(job, AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount())) : 0;
-        return new com.xinyu.vo.AiJobVO(job.getId(), job.getTargetId(), job.getTargetVersion(), job.getStatus(),
-                job.getAttemptCount(), "succeeded".equals(job.getStatus()) ? job.getResultKind() : null,
-                "succeeded".equals(job.getStatus()) ? report.body() : null, failed ? job.getLastErrorCode() : null,
-                failed && remaining == 0 && !report.stale(), remaining);
+        int remaining = failed
+                ? reviewJobs.selectRetryAfterSeconds(job, AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount()))
+                : 0;
+
+        String resultKind = succeeded ? job.getResultKind() : null;
+        String replyBody = succeeded ? report.body() : null;
+        String errorCode = failed ? job.getLastErrorCode() : null;
+        boolean retryable = failed && remaining == 0 && !report.stale();
+        return new AiJobVO(
+                job.getId(),
+                job.getTargetId(),
+                job.getTargetVersion(),
+                job.getStatus(),
+                job.getAttemptCount(),
+                resultKind,
+                replyBody,
+                errorCode,
+                retryable,
+                remaining);
     }
 
     private MoodReviewStatsVO statistics(long userId, String type, String start) {
@@ -492,28 +505,30 @@ public class MoodReviewService {
         return reports.sources(userId, start, end, lock);
     }
 
-    /** id/version 集合按 id 排序，不受日内记录顺序影响。 */
-    static String fingerprint(List<MoodRecord> records) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            records.stream().sorted(java.util.Comparator.comparing(MoodRecord::getId)).forEach(record ->
-                    digest.update((record.getId() + ":" + record.getContentVersion() + "\n").getBytes(StandardCharsets.UTF_8)));
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (java.security.NoSuchAlgorithmException unavailable) {
-            throw new IllegalStateException("SHA-256 unavailable", unavailable);
-        }
-    }
-
     private Report view(MoodReview row, List<MoodRecord> current, boolean rangeChanged) {
         boolean stale = rangeChanged || !row.fingerprint().equals(fingerprint(current));
         int deleted = reports.deletedSourceCount(row.userId(), row.id());
         long jobId = reports.jobId(row.id(), row.revision());
         int enabled = enabledTotal(row.statsJson());
+
         boolean hidden = deleted > 0;
+        String visibleBody = hidden ? null : row.body();
+        String visiblePs = hidden ? null : row.ps();
         List<Source> citedSources = hidden ? List.of() : citedSources(row);
-        return new Report(row.id(), row.revision(), row.status(), hidden ? null : row.body(),
-                hidden ? null : row.ps(), row.kind(), stale || hidden, jobId,
-                row.start(), row.end(), enabled, row.finishedAt(), citedSources);
+        return new Report(
+                row.id(),
+                row.revision(),
+                row.status(),
+                visibleBody,
+                visiblePs,
+                row.kind(),
+                stale || hidden,
+                jobId,
+                row.start(),
+                row.end(),
+                enabled,
+                row.finishedAt(),
+                citedSources);
     }
 
     private List<Source> citedSources(MoodReview row) {
@@ -524,6 +539,7 @@ public class MoodReviewService {
         if (cited.isEmpty()) {
             return List.of();
         }
+
         List<MoodRecord> sent = reports.sentSources(row.userId(), row.id());
         List<Source> result = new ArrayList<>();
         for (int index = 0; index < sent.size(); index++) {
@@ -532,8 +548,13 @@ public class MoodReviewService {
                 continue;
             }
             MoodRecord record = sent.get(index);
-            result.add(new Source(ref, record.getId(), record.getCreateTime().toLocalDate(),
-                    weekday(record.getCreateTime().getDayOfWeek()), record.getMoodType(), record.getContent()));
+            result.add(new Source(
+                    ref,
+                    record.getId(),
+                    record.getCreateTime().toLocalDate(),
+                    weekday(record.getCreateTime().getDayOfWeek()),
+                    record.getMoodType(),
+                    record.getContent()));
         }
         return List.copyOf(result);
     }
@@ -550,7 +571,7 @@ public class MoodReviewService {
     }
 
     private String encodeSnapshot(MoodReviewStatsVO snapshot, List<MoodRecord> records) {
-        com.fasterxml.jackson.databind.node.ObjectNode value = json.valueToTree(snapshot);
+        ObjectNode value = json.valueToTree(snapshot);
         int enabled = (int) records.stream().filter(record -> Boolean.TRUE.equals(record.getAiReplyEnabled())).count();
         value.put("aiEnabledTotal", enabled);
         return encode(value);
@@ -559,7 +580,7 @@ public class MoodReviewService {
     private int enabledTotal(String snapshot) {
         try {
             return json.readTree(snapshot).path("aiEnabledTotal").asInt();
-        } catch (java.io.IOException invalid) {
+        } catch (IOException invalid) {
             throw new IllegalStateException("invalid_review_snapshot", invalid);
         }
     }
@@ -567,7 +588,7 @@ public class MoodReviewService {
     private String encode(Object value) {
         try {
             return json.writeValueAsString(value);
-        } catch (java.io.IOException invalid) {
+        } catch (IOException invalid) {
             throw new IllegalStateException("invalid_review_snapshot", invalid);
         }
     }
@@ -575,9 +596,20 @@ public class MoodReviewService {
     private MoodReviewStatsVO decodeStats(String value) {
         try {
             return json.readValue(value, MoodReviewStatsVO.class);
-        } catch (java.io.IOException invalid) {
+        } catch (IOException invalid) {
             throw new IllegalStateException("invalid_review_snapshot", invalid);
         }
+    }
+
+    private static ResponseStatusException tooManyRequestsWithRetryAfter(int remaining) {
+        return new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "review_cooldown") {
+            @Override
+            public HttpHeaders getHeaders() {
+                var headers = new HttpHeaders();
+                headers.set("Retry-After", Integer.toString(remaining));
+                return headers;
+            }
+        };
     }
 
     private static ResponseStatusException http(HttpStatus status, String code) {
