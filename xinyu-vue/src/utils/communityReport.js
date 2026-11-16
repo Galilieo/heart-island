@@ -1,5 +1,5 @@
 // 社区举报与审核共用的原因字典、状态文案映射及表单校验规则。
-// 对应后端 CommunityReportConstants 与原型 4 个画面。
+// 对应后端 CommunityReportConstants.java（原因枚举、长度/摘录上限）与原型 4 个画面。
 
 export const REPORT_REASONS = [
   { value: 'ATTACK', label: '人身攻击或骚扰' },
@@ -12,8 +12,23 @@ export const REPORT_REASONS = [
 
 export const HIDE_REASONS = REPORT_REASONS.slice(0, 4)
 
+/** 与后端 CommunityReportConstants.MAX_DETAIL_LENGTH 保持一致。 */
 export const MAX_REPORT_DETAIL_LENGTH = 200
+/** 与后端 CommunityReportConstants.MAX_HANDLE_NOTE_LENGTH 保持一致。 */
 export const MAX_HANDLE_NOTE_LENGTH = 200
+/** 与后端 CommunityReportConstants.EXCERPT_LIMIT 保持一致。 */
+export const EXCERPT_LIMIT = 60
+
+/**
+ * 举报摘要截断：去首尾空白后超过上限时追加省略号。
+ */
+export function formatExcerpt(content, limit = EXCERPT_LIMIT) {
+  const raw = String(content || '').trim()
+  if (!raw) {
+    return ''
+  }
+  return raw.length > limit ? `${raw.slice(0, limit)}…` : raw
+}
 
 const REASON_MAP = Object.fromEntries(REPORT_REASONS.map((item) => [item.value, item.label]))
 

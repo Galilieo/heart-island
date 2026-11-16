@@ -57,27 +57,38 @@ test('举报表单校验覆盖未选原因、OTHER 缺说明和 200 字上限', 
   assert.equal(reportUtils.validateReportForm({ reason: 'OTHER', detail: '包含引流广告' }), '')
 })
 
-test('我的举报与内容状态文案映射覆盖全部枚举', () => {
+test('myReportResultMeta 覆盖全部举报状态', () => {
   assert.deepEqual(reportUtils.myReportResultMeta('PENDING'), { text: '处理中', tone: 'warn' })
   assert.deepEqual(reportUtils.myReportResultMeta('HIDDEN'), { text: '已处理 · 内容已隐藏', tone: 'neutral' })
   assert.deepEqual(reportUtils.myReportResultMeta('DISMISSED'), { text: '已处理 · 未发现违规', tone: 'success' })
   assert.deepEqual(reportUtils.myReportResultMeta('CLOSED'), { text: '已处理 · 内容已被作者删除', tone: 'neutral' })
+})
 
+test('contentStatusMeta 覆盖全部内容状态', () => {
   assert.equal(reportUtils.contentStatusMeta(1).text, '正常')
   assert.equal(reportUtils.contentStatusMeta(2).text, '已隐藏')
   assert.equal(reportUtils.contentStatusMeta(0).text, '作者已删除')
 })
 
-test('submitReport 成功后标记已举报状态，409/429 返回友好失败对象', async () => {
+test('formatExcerpt 对超长内容按 60 字截断并保留空白兜底', () => {
+  assert.equal(reportUtils.formatExcerpt('   '), '')
+  assert.equal(reportUtils.formatExcerpt('短内容'), '短内容')
+  assert.equal(reportUtils.formatExcerpt('字'.repeat(65)), `${'字'.repeat(60)}…`)
+})
+
+test('submitReport 成功后标记已举报状态', async () => {
   request.defaults.adapter = async (config) => ok(config, true, '已收到举报，会尽快处理')
   const store = useCommunityStore()
   const successRes = await store.submitReport({ targetType: 'POST', targetId: '11', reason: 'AD' })
   assert.equal(successRes.ok, true)
   assert.equal(store.reportedTargets['POST:11'], 'PENDING')
+})
 
+test('submitReport 遇到 409 重复举报返回友好失败对象', async () => {
   request.defaults.adapter = async (config) => {
     throw httpError(config, 409, '你已经举报过这条内容了')
   }
+  const store = useCommunityStore()
   const dupRes = await store.submitReport({ targetType: 'POST', targetId: '11', reason: 'AD' })
   assert.equal(dupRes.ok, false)
   assert.equal(dupRes.status, 409)

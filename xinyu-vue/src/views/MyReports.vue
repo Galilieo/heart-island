@@ -24,6 +24,7 @@ const {
   myReportsPages,
   myReportsLoading
 } = storeToRefs(communityStore)
+const { myReportsPageSize } = communityStore
 
 onMounted(() => {
   communityStore.fetchMyReports(1)
@@ -84,11 +85,11 @@ function goBack() {
         </BaseCard>
 
         <BasePagination
-          v-if="myReportsTotal > 10"
+          v-if="myReportsTotal > myReportsPageSize"
           :page-num="Number(myReportsPage)"
           :pages="Number(myReportsPages)"
           :total="Number(myReportsTotal)"
-          :page-size="10"
+          :page-size="myReportsPageSize"
           @change="handlePageChange"
         />
       </div>

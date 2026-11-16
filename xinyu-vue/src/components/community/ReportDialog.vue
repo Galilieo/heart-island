@@ -6,6 +6,7 @@ import BaseTextarea from '../ui/BaseTextarea.vue'
 import {
   REPORT_REASONS,
   MAX_REPORT_DETAIL_LENGTH,
+  formatExcerpt,
   validateReportForm
 } from '../../utils/communityReport'
 
@@ -25,11 +26,7 @@ const localError = ref('')
 const isSafety = computed(() => reason.value === 'SAFETY')
 const isOther = computed(() => reason.value === 'OTHER')
 const errorMessage = computed(() => localError.value || props.serverError)
-const targetExcerpt = computed(() => {
-  const raw = String(props.target?.excerpt || '').trim()
-  if (!raw) return ''
-  return raw.length > 60 ? `${raw.slice(0, 60)}…` : raw
-})
+const targetExcerpt = computed(() => formatExcerpt(props.target?.excerpt))
 
 watch(
   () => props.modelValue,

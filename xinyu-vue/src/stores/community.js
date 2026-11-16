@@ -255,6 +255,7 @@ export const useCommunityStore = defineStore('community', () => {
     myReports,
     myReportsTotal,
     myReportsPage,
+    myReportsPageSize,
     myReportsPages,
     myReportsLoading,
     filters,
