@@ -198,22 +198,26 @@ export const useAdminStore = defineStore('admin', () => {
         }
     }
 
-    async function updatePostStatus(id, status) {
-        const res = await adminApi.updatePostStatus(id, status)
-        if (res.ok) {
+    async function updatePostStatus(id, status, hideReason) {
+        const res = await adminApi.updatePostStatus(id, status, hideReason)
+        if (res.ok || res.status === 409) {
             await fetchPosts()
         }
 
         return res
     }
 
-    async function removePost(id) {
-        const res = await adminApi.removePost(id)
-        if (res.ok) {
+    async function removePost(id, hideReason) {
+        const res = await adminApi.removePost(id, hideReason)
+        if (res.ok || res.status === 409) {
             await fetchPosts()
         }
 
         return res
+    }
+
+    function fetchPostDetail(id) {
+        return adminApi.postDetail(id)
     }
 
     function searchPosts() {
@@ -276,24 +280,28 @@ export const useAdminStore = defineStore('admin', () => {
         }
     }
 
-    async function updateReplyStatus(id, status) {
-        const res = await adminApi.updateReplyStatus(id, status)
+    async function updateReplyStatus(id, status, hideReason) {
+        const res = await adminApi.updateReplyStatus(id, status, hideReason)
 
-        if (res.ok) {
+        if (res.ok || res.status === 409) {
             await fetchReplies()
         }
 
         return res
     }
 
-    async function removeReply(id) {
-        const res = await adminApi.removeReply(id)
+    async function removeReply(id, hideReason) {
+        const res = await adminApi.removeReply(id, hideReason)
 
-        if (res.ok) {
+        if (res.ok || res.status === 409) {
             await fetchReplies()
         }
 
         return res
+    }
+
+    function fetchReplyDetail(id) {
+        return adminApi.replyDetail(id)
     }
 
     function searchReplies() {
@@ -486,6 +494,7 @@ export const useAdminStore = defineStore('admin', () => {
         postPagination,
         postPages,
         fetchPosts,
+        fetchPostDetail,
         updatePostStatus,
         removePost,
         searchPosts,
@@ -497,6 +506,7 @@ export const useAdminStore = defineStore('admin', () => {
         replyPagination,
         replyPages,
         fetchReplies,
+        fetchReplyDetail,
         updateReplyStatus,
         removeReply,
         searchReplies,

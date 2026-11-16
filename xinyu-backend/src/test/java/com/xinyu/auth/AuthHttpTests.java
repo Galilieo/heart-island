@@ -38,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({JwtUtil.class, AuthWebConfig.class, CorsConfig.class, JacksonConfig.class})
 @MockitoBean(types = {MoodRecordService.class, MoodReviewService.class, AiJobService.class,
         CommunityPostService.class, CommunityReplyService.class, TopicService.class, AiReplyLogService.class,
-        UserMapper.class, CommunityPostMapper.class, CommunityReplyMapper.class, AiReplyMapper.class})
+        UserMapper.class, CommunityPostMapper.class, CommunityReplyMapper.class, ContentReportMapper.class,
+        AiReplyMapper.class})
 class AuthHttpTests {
     @Autowired MockMvc mvc;
     @Autowired JwtUtil jwtUtil;

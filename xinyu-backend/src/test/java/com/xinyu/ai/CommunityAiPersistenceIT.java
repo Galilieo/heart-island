@@ -90,7 +90,11 @@ class CommunityAiPersistenceIT {
         jdbc.update("INSERT INTO community_post(user_id,topic_id,mood_type,content,ai_reply) "
                 + "VALUES (1,1,'平静','迁移前内容','迁移前回复')");
         Path migration = Path.of("../sql/migrations/20261111_01_community_ai_generation.sql").toAbsolutePath();
-        new ResourceDatabasePopulator(new FileSystemResource(migration)).execute(source);
+        Path reportMigration = Path.of("../sql/migrations/20261114_01_community_report.sql").toAbsolutePath();
+        new ResourceDatabasePopulator(
+                new FileSystemResource(migration),
+                new FileSystemResource(reportMigration)
+        ).execute(source);
         var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id FROM community_post");
         assertThat(legacy.get("content")).isEqualTo("迁移前内容");
         assertThat(legacy.get("ai_reply")).isEqualTo("迁移前回复");
@@ -244,11 +248,15 @@ class CommunityAiPersistenceIT {
         upstream.expect(anything()).andRespond(request -> {
             if (action.startsWith("删除")) {
                 assertThat(posts.delete(id, 1L)).isTrue();
+                if (action.endsWith("恢复")) {
+                    // 作者删除（status=0）不可由管理员恢复
+                    assertThat(posts.updateAdminStatus(id, 1, null)).isNull();
+                }
             } else {
-                assertThat(posts.updateAdminStatus(id, 0)).isNotNull();
-            }
-            if (action.endsWith("恢复")) {
-                assertThat(posts.updateAdminStatus(id, 1)).isNotNull();
+                assertThat(posts.updateAdminStatus(id, 2, "AD")).isNotNull();
+                if (action.endsWith("恢复")) {
+                    assertThat(posts.updateAdminStatus(id, 1, null)).isNotNull();
+                }
             }
             return generatedReply("过期回复").createResponse(request);
         });
@@ -256,7 +264,7 @@ class CommunityAiPersistenceIT {
         assertThat(posts.update(edit(id, true), 1L)).isTrue();
 
         var saved = jdbc.queryForMap("SELECT status,ai_reply,ai_generation_id FROM community_post WHERE id=?", id);
-        int expectedStatus = action.endsWith("恢复") ? 1 : 0;
+        int expectedStatus = "隐藏后恢复".equals(action) ? 1 : ("隐藏".equals(action) ? 2 : 0);
         assertThat(((Number) saved.get("status")).intValue()).isEqualTo(expectedStatus);
         assertThat(saved.get("ai_reply")).isNull();
         assertThat(saved.get("ai_generation_id")).isNull();

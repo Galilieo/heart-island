@@ -6,7 +6,7 @@ defineProps({
   tone: {
     type: String,
     default: 'ok',
-    validator: (value) => ['ok', 'bad'].includes(value)
+    validator: (value) => ['ok', 'bad', 'muted'].includes(value)
   }
 })
 </script>
@@ -31,6 +31,10 @@ defineProps({
 
 .admin-status--bad {
   color: var(--danger-ink);
+}
+
+.admin-status--muted {
+  color: var(--ink-3);
 }
 
 .admin-status__dot {

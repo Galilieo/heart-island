@@ -2,12 +2,14 @@ package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.xinyu.common.CommunityReportConstants;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.Favorite;
 import com.xinyu.entity.PostLike;
 import com.xinyu.mapper.CommunityPostMapper;
+import com.xinyu.mapper.ContentReportMapper;
 import com.xinyu.mapper.FavoriteMapper;
 import com.xinyu.mapper.PostLikeMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xinyu.vo.AdminPostDetailVO;
 import com.xinyu.vo.AdminPostVO;
 import com.xinyu.entity.Topic;
 import com.xinyu.mapper.TopicMapper;
@@ -47,6 +50,9 @@ public class CommunityPostService {
     @Autowired
     private AiReplyLogService aiReplyLogService;
 
+    @Autowired(required = false)
+    private ContentReportMapper contentReportMapper;
+
     public List<CommunityPost> listByTopicId(Long topicId, Long userId, Boolean mine, String sort) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
 
@@ -71,9 +77,7 @@ public class CommunityPostService {
         List<CommunityPost> posts = communityPostMapper.selectList(queryWrapper);
 
         for (CommunityPost post : posts) {
-            post.setLiked(isLiked(post.getId(), userId));
-            post.setFavorited(isFavorited(post.getId(), userId));
-            post.setMine(userId != null && userId.equals(post.getUserId()));
+            populateViewerState(post, userId, null);
         }
 
         return posts;
@@ -126,6 +130,7 @@ public class CommunityPostService {
                         post.getReplyCount(),
                         post.getLikeCount(),
                         post.getStatus(),
+                        post.getHideReason(),
                         post.getCreateTime(),
                         post.getUpdateTime()
                 ))
@@ -134,26 +139,75 @@ public class CommunityPostService {
         return voPage;
     }
 
-    public CommunityPost updateAdminStatus(Long id,Integer status){
+    /** 管理员查看帖子详情（含小芽回复全文与待处理举报摘要）。 */
+    public AdminPostDetailVO getAdminDetail(Long id) {
         CommunityPost post = communityPostMapper.selectById(id);
-
-        if(post == null){
+        if (post == null) {
             return null;
         }
+
+        Topic topic = post.getTopicId() == null ? null : topicMapper.selectById(post.getTopicId());
+        PendingReportSummary pending = PendingReportSummary.load(
+                contentReportMapper, CommunityReportConstants.TARGET_POST, id);
+
+        AdminPostDetailVO detail = new AdminPostDetailVO();
+        detail.setId(String.valueOf(post.getId()));
+        detail.setUserId(String.valueOf(post.getUserId()));
+        detail.setTopicId(post.getTopicId());
+        detail.setTopicName(topic == null ? null : topic.getName());
+        detail.setMoodType(post.getMoodType());
+        detail.setContent(post.getContent());
+        detail.setAiReply(post.getAiReply());
+        detail.setAnonymousName(post.getAnonymousName());
+        detail.setReplyCount(post.getReplyCount());
+        detail.setLikeCount(post.getLikeCount());
+        detail.setStatus(post.getStatus());
+        detail.setHideReason(post.getHideReason());
+        detail.setPendingReportCount(pending.count());
+        detail.setPendingReasons(pending.reasons());
+        detail.setCreateTime(post.getCreateTime());
+        detail.setUpdateTime(post.getUpdateTime());
+        return detail;
+    }
+
+    public CommunityPost updateAdminStatus(Long id, Integer status) {
+        return updateAdminStatus(id, status, null);
+    }
+
+    public CommunityPost updateAdminStatus(Long id, Integer status, String hideReason) {
+        if (updateAdminStatusWithOutcome(id, status, hideReason) != AdminStatusResult.UPDATED) {
+            return null;
+        }
+        return communityPostMapper.selectById(id);
+    }
+
+    /** 带前置状态条件更新帖子（1->2 隐藏并清生成标识；2->1 恢复并清隐藏原因）。 */
+    public AdminStatusResult updateAdminStatusWithOutcome(Long id, Integer status, String hideReason) {
+        if (status == null || (status != CommunityReportConstants.STATUS_ADMIN_HIDDEN
+                && status != CommunityReportConstants.STATUS_VISIBLE)) {
+            return AdminStatusResult.CONFLICT;
+        }
+
+        int expectedStatus = status == CommunityReportConstants.STATUS_ADMIN_HIDDEN
+                ? CommunityReportConstants.STATUS_VISIBLE
+                : CommunityReportConstants.STATUS_ADMIN_HIDDEN;
 
         UpdateWrapper<CommunityPost> change = new UpdateWrapper<>();
-        change.eq("id", id).set("status", status);
-        if (status == 0) {
+        change.eq("id", id).eq("status", expectedStatus).set("status", status);
+        if (status == CommunityReportConstants.STATUS_ADMIN_HIDDEN) {
             // 隐藏即使随后恢复，也不允许此前进行中的生成重新回写。
-            change.set("ai_generation_id", null);
-            post.setAiGenerationId(null);
-        }
-        if (communityPostMapper.update(null, change) <= 0) {
-            return null;
+            change.set("hide_reason", hideReason).set("ai_generation_id", null);
+        } else {
+            change.set("hide_reason", null);
         }
 
-        post.setStatus(status);
-        return post;
+        if (communityPostMapper.update(null, change) > 0) {
+            return AdminStatusResult.UPDATED;
+        }
+
+        return communityPostMapper.selectById(id) == null
+                ? AdminStatusResult.NOT_FOUND
+                : AdminStatusResult.CONFLICT;
     }
     /**
      * 查询当前用户收藏的帖子，按收藏时间倒序。
@@ -175,9 +229,7 @@ public class CommunityPostService {
                 continue;
             }
 
-            post.setLiked(isLiked(post.getId(), userId));
-            post.setFavorited(true);
-            post.setMine(userId != null && userId.equals(post.getUserId()));
+            populateViewerState(post, userId, true);
             result.add(post);
         }
 
@@ -236,7 +288,7 @@ public class CommunityPostService {
             return false;
         }
 
-        if (!post.isVisible()) {
+        if (post.getStatus() == null || post.getStatus() == CommunityReportConstants.STATUS_AUTHOR_DELETED) {
             return false;
         }
 
@@ -244,10 +296,12 @@ public class CommunityPostService {
             return false;
         }
 
-        // 仅更新删除状态与生成标识，避免整实体回写覆盖并发编辑或互动计数。
+        // 仅更新删除状态与生成标识，避免整实体回写覆盖并发编辑或互动计数；允许作者删除正常或已隐藏帖子。
         UpdateWrapper<CommunityPost> removal = new UpdateWrapper<>();
-        removal.eq("id", id).eq("user_id", userId).eq("status", 1);
-        removal.set("status", 0).set("ai_generation_id", null);
+        removal.eq("id", id)
+                .eq("user_id", userId)
+                .in("status", CommunityReportConstants.STATUS_VISIBLE, CommunityReportConstants.STATUS_ADMIN_HIDDEN);
+        removal.set("status", CommunityReportConstants.STATUS_AUTHOR_DELETED).set("ai_generation_id", null);
         return communityPostMapper.update(null, removal) > 0;
     }
 
@@ -258,11 +312,7 @@ public class CommunityPostService {
 
         CommunityPost post = communityPostMapper.selectById(dto.getId());
 
-        if (post == null) {
-            return false;
-        }
-
-        if (!post.isVisible()) {
+        if (post == null || !post.isVisible()) {
             return false;
         }
 
@@ -402,18 +452,36 @@ public class CommunityPostService {
 
         return favoriteMapper.selectCount(queryWrapper) > 0;
     }
-    public CommunityPost detail(Long id,Long userId){
+    public CommunityPost detail(Long id, Long userId) {
         CommunityPost post = communityPostMapper.selectById(id);
-
-        if (post == null || !post.isVisible()) {
+        if (post == null || post.getStatus() == null
+                || post.getStatus() == CommunityReportConstants.STATUS_AUTHOR_DELETED) {
             return null;
         }
 
-        post.setLiked(isLiked(post.getId(), userId));
-        post.setFavorited(isFavorited(post.getId(), userId));
-        post.setMine(userId != null && userId.equals(post.getUserId()));
+        if (!post.isVisible()) {
+            boolean isAuthor = userId != null && userId.equals(post.getUserId());
+            if (post.getStatus() != CommunityReportConstants.STATUS_ADMIN_HIDDEN || !isAuthor) {
+                return null;
+            }
+            post.setHidden(true);
+        } else {
+            post.setHidden(false);
+            post.setHideReason(null);
+        }
+
+        populateViewerState(post, userId, null);
 
         return post;
+    }
+
+    private void populateViewerState(CommunityPost post, Long userId, Boolean fixedFavorited) {
+        post.setLiked(isLiked(post.getId(), userId));
+        post.setFavorited(fixedFavorited != null ? fixedFavorited : isFavorited(post.getId(), userId));
+        post.setMine(userId != null && userId.equals(post.getUserId()));
+        if (post.getHidden() == null) {
+            post.setHidden(Integer.valueOf(CommunityReportConstants.STATUS_ADMIN_HIDDEN).equals(post.getStatus()));
+        }
     }
 
     /**

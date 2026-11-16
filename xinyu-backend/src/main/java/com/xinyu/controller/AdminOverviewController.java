@@ -55,12 +55,12 @@ public class AdminOverviewController {
 
         Long postTotal = communityPostMapper.selectCount(null);
         Long postHidden = communityPostMapper.selectCount(
-                new QueryWrapper<CommunityPost>().eq("status", 0)
+                new QueryWrapper<CommunityPost>().eq("status", 2)
         );
 
         Long replyTotal = communityReplyMapper.selectCount(null);
         Long replyHidden = communityReplyMapper.selectCount(
-                new QueryWrapper<CommunityReply>().eq("status", 0)
+                new QueryWrapper<CommunityReply>().eq("status", 2)
         );
 
         Long aiReplyTotal = aiReplyMapper.selectCount(null);

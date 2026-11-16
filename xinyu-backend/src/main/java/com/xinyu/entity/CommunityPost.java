@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.xinyu.common.CommunityReportConstants;
 
 import java.time.LocalDateTime;
 
@@ -14,6 +15,7 @@ public class CommunityPost {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    /** 作者用户ID仅用于服务端权限校验与后台管理视角，不向社区接口响应输出。 */
     @JsonIgnore
     private Long userId;
 
@@ -37,6 +39,8 @@ public class CommunityPost {
 
     private Integer status;
 
+    private String hideReason;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
@@ -49,6 +53,14 @@ public class CommunityPost {
 
     @TableField(exist = false)
     private Boolean mine;
+
+    @TableField(exist = false)
+    private Boolean hidden;
+
+    @JsonIgnore
+    public boolean isVisible() {
+        return Integer.valueOf(CommunityReportConstants.STATUS_VISIBLE).equals(status);
+    }
 
     public Long getId() {
         return id;
@@ -112,6 +124,14 @@ public class CommunityPost {
 
     public Boolean getMine() {
         return mine;
+    }
+
+    public String getHideReason() {
+        return hideReason;
+    }
+
+    public Boolean getHidden() {
+        return hidden;
     }
 
     public void setId(Long id) {
@@ -178,9 +198,11 @@ public class CommunityPost {
         this.mine = mine;
     }
 
-    /** 仅 status=1 视为对社区公开可见的正常内容。 */
-    @JsonIgnore
-    public boolean isVisible() {
-        return Integer.valueOf(1).equals(status);
+    public void setHideReason(String hideReason) {
+        this.hideReason = hideReason;
+    }
+
+    public void setHidden(Boolean hidden) {
+        this.hidden = hidden;
     }
 }

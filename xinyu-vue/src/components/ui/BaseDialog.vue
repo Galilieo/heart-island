@@ -12,10 +12,13 @@ const props = defineProps({
     validator: (v) => ['sm', 'md', 'lg', 'xl'].includes(v)
   },
   closable: { type: Boolean, default: true },
-  persistent: Boolean
+  persistent: Boolean,
+  mobileSheet: Boolean
 })
 
 const emit = defineEmits(['update:modelValue', 'close'])
+
+let previousFocused = null
 
 function close() {
   if (!props.closable) return
@@ -31,11 +34,16 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
+      previousFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
       document.addEventListener('keydown', onKeydown)
       document.body.style.overflow = 'hidden'
     } else {
       document.removeEventListener('keydown', onKeydown)
       document.body.style.overflow = ''
+      if (previousFocused && typeof previousFocused.focus === 'function') {
+        previousFocused.focus()
+      }
+      previousFocused = null
     }
   }
 )
@@ -52,6 +60,7 @@ onUnmounted(() => {
       <div
         v-if="modelValue"
         class="dlg-mask"
+        :class="{ 'dlg-mask--sheet': mobileSheet }"
         role="dialog"
         aria-modal="true"
         @click.self="persistent ? null : close()"
@@ -162,5 +171,19 @@ onUnmounted(() => {
 @keyframes dlg-pop {
   from { transform: translateY(8px) scale(0.96); opacity: 0; }
   to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .dlg-mask--sheet {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .dlg-mask--sheet .dlg-card {
+    max-width: none;
+    max-height: 88vh;
+    border-radius: var(--radius-3) var(--radius-3) 0 0;
+    border-bottom: none;
+  }
 }
 </style>

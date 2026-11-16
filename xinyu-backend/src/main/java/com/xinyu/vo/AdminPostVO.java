@@ -13,6 +13,7 @@ public class AdminPostVO {
     private Integer replyCount;
     private Integer likeCount;
     private Integer status;
+    private String hideReason;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -22,6 +23,13 @@ public class AdminPostVO {
     public AdminPostVO(String id, String userId, Long topicId, String moodType, String content,
                        String anonymousName, Integer replyCount, Integer likeCount, Integer status,
                        LocalDateTime createTime, LocalDateTime updateTime) {
+        this(id, userId, topicId, moodType, content, anonymousName, replyCount, likeCount,
+                status, null, createTime, updateTime);
+    }
+
+    public AdminPostVO(String id, String userId, Long topicId, String moodType, String content,
+                       String anonymousName, Integer replyCount, Integer likeCount, Integer status,
+                       String hideReason, LocalDateTime createTime, LocalDateTime updateTime) {
         this.id = id;
         this.userId = userId;
         this.topicId = topicId;
@@ -31,6 +39,7 @@ public class AdminPostVO {
         this.replyCount = replyCount;
         this.likeCount = likeCount;
         this.status = status;
+        this.hideReason = hideReason;
         this.createTime = createTime;
         this.updateTime = updateTime;
     }
@@ -113,6 +122,14 @@ public class AdminPostVO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public String getHideReason() {
+        return hideReason;
+    }
+
+    public void setHideReason(String hideReason) {
+        this.hideReason = hideReason;
     }
 
     public void setCreateTime(LocalDateTime createTime) {

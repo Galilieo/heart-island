@@ -1,14 +1,18 @@
 package com.xinyu.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xinyu.common.CommunityReportConstants;
 import com.xinyu.common.Result;
-import com.xinyu.entity.CommunityPost;
+import com.xinyu.service.AdminStatusResult;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
+import com.xinyu.vo.AdminPostDetailVO;
 import com.xinyu.vo.AdminPostVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/admin/post")
@@ -67,10 +71,9 @@ public class AdminPostController {
         return Result.success("查询成功", page);
     }
 
-    @PutMapping("/{id}/status")
-    public Result<Boolean> updateStatus(@RequestHeader(value = "token", required = false) String token,
-                                        @PathVariable Long id,
-                                        @RequestParam Integer status) {
+    @GetMapping("/{id}")
+    public Result<AdminPostDetailVO> detail(@RequestHeader(value = "token", required = false) String token,
+                                            @PathVariable Long id) {
         Long adminId = getAdminId(token);
 
         if (adminId == null) {
@@ -78,25 +81,38 @@ public class AdminPostController {
         }
 
         if (id == null) {
-            return Result.error("帖子id不能为空");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "帖子id不能为空");
         }
 
-        if (status == null || (status != 0 && status != 1)) {
-            return Result.error("帖子状态只能是0或1");
+        AdminPostDetailVO detail = communityPostService.getAdminDetail(id);
+        if (detail == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "帖子不存在");
         }
 
-        CommunityPost post = communityPostService.updateAdminStatus(id, status);
+        return Result.success("查询成功", detail);
+    }
 
-        if (post == null) {
-            return Result.error("帖子不存在");
+    @PutMapping("/{id}/status")
+    public Result<Boolean> updateStatus(@RequestHeader(value = "token", required = false) String token,
+                                        @PathVariable Long id,
+                                        @RequestParam Integer status,
+                                        @RequestParam(required = false) String hideReason) {
+        Long adminId = getAdminId(token);
+
+        if (adminId == null) {
+            return Result.error("权限不足");
         }
 
-        return Result.success("修改成功", true);
+        String normalizedReason = AdminContentStatusHelper.validateAndNormalizeStatusUpdate(
+                id, status, hideReason, "帖子");
+        AdminStatusResult outcome = communityPostService.updateAdminStatusWithOutcome(id, status, normalizedReason);
+        return AdminContentStatusHelper.toResult(outcome, "帖子", "修改成功");
     }
 
     @DeleteMapping("/{id}")
     public Result<Boolean> delete(@RequestHeader(value = "token", required = false) String token,
-                                  @PathVariable Long id) {
+                                  @PathVariable Long id,
+                                  @RequestParam(required = false) String hideReason) {
         Long adminId = getAdminId(token);
 
         if (adminId == null) {
@@ -104,16 +120,13 @@ public class AdminPostController {
         }
 
         if (id == null) {
-            return Result.error("帖子id不能为空");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "帖子id不能为空");
         }
 
-        CommunityPost post = communityPostService.updateAdminStatus(id, 0);
-
-        if (post == null) {
-            return Result.error("帖子不存在");
-        }
-
-        return Result.success("删除成功", true);
+        String normalizedReason = AdminContentStatusHelper.validateHideReason(hideReason);
+        AdminStatusResult outcome = communityPostService.updateAdminStatusWithOutcome(
+                id, CommunityReportConstants.STATUS_ADMIN_HIDDEN, normalizedReason);
+        return AdminContentStatusHelper.toResult(outcome, "帖子", "已隐藏");
     }
 
     private Long getAdminId(String token) {

@@ -1,6 +1,6 @@
 // 管理员相关接口：用户管理、后续帖子审核、话题管理等。
 // api 层只负责“请求哪个后端接口”，不负责页面展示。
-import { request, unwrap } from './_helpers'
+import { request, unwrap, unwrapHttp } from './_helpers'
 
 export const adminApi = {
 
@@ -20,32 +20,38 @@ export const adminApi = {
     return unwrap(request.get('/admin/post/page', { params }))
   },
 
+  postDetail(id) {
+    return unwrapHttp(request.get(`/admin/post/${id}`))
+  },
+
   aiReplyPage(params = {}) {
     return unwrap(request.get('/admin/ai-replies/page', { params }))
   },
 
-  updatePostStatus(id, status) {
-    return unwrap(request.put(`/admin/post/${id}/status`, null, {
-      params: { status }
-    }))
+  updatePostStatus(id, status, hideReason) {
+    const params = hideReason ? { status, hideReason } : { status }
+    return unwrapHttp(request.put(`/admin/post/${id}/status`, null, { params }))
   },
 
-  removePost(id) {
-    return unwrap(request.delete(`/admin/post/${id}`))
+  removePost(id, hideReason) {
+    return unwrapHttp(request.delete(`/admin/post/${id}`, { params: { hideReason } }))
   },
 
   replyPage(params = {}) {
     return unwrap(request.get('/admin/reply/page', { params }))
   },
 
-  updateReplyStatus(id, status) {
-    return unwrap(request.put(`/admin/reply/${id}/status`, null, {
-      params: { status }
-    }))
+  replyDetail(id) {
+    return unwrapHttp(request.get(`/admin/reply/${id}`))
   },
-  
-  removeReply(id) {
-    return unwrap(request.delete(`/admin/reply/${id}`))
+
+  updateReplyStatus(id, status, hideReason) {
+    const params = hideReason ? { status, hideReason } : { status }
+    return unwrapHttp(request.put(`/admin/reply/${id}/status`, null, { params }))
+  },
+
+  removeReply(id, hideReason) {
+    return unwrapHttp(request.delete(`/admin/reply/${id}`, { params: { hideReason } }))
   },
 
   topicList(params = {}) {

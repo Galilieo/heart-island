@@ -16,4 +16,24 @@ export async function unwrap(promise) {
   return { ok: false, message: body?.message || '请求失败', data: body?.data }
 }
 
+/**
+ * 在 unwrap 基础上把带 HTTP 响应体（如 400 / 404 / 409 / 429）的业务错误转成 { ok: false }，
+ * 无响应的网络或超时异常仍保持抛出。
+ */
+export async function unwrapHttp(promise) {
+  try {
+    return await unwrap(promise)
+  } catch (error) {
+    if (error?.response) {
+      return {
+        ok: false,
+        status: error.response.status,
+        message: error.userMessage || error.response.data?.message || '请求失败',
+        data: error.response.data?.data ?? null
+      }
+    }
+    throw error
+  }
+}
+
 export { request }

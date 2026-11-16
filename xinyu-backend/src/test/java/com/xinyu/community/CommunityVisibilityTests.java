@@ -34,7 +34,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 4.1 统一按正常状态（status=1）判断可见性回归测试。
+ * 4.1 / 4.2 可见性与状态回归测试：确保 status=2（已隐藏）对所有社区交互入口不可用，
+ * 仅允许作者本人删除且不再重复扣减回复数。
  */
 @ExtendWith(MockitoExtension.class)
 class CommunityVisibilityTests {
@@ -78,9 +79,9 @@ class CommunityVisibilityTests {
     }
 
     @Test
-    void nonVisiblePostRejectsInteractionsAndFavorites() {
-        CommunityPost nonVisible = post(0);
-        when(communityPostMapper.selectById(POST_ID)).thenReturn(nonVisible);
+    void hiddenPostRejectsLikeFavoriteEditAndNonAuthorDetail() {
+        CommunityPost hiddenPost = post(2);
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(hiddenPost);
 
         Favorite fav = new Favorite();
         fav.setPostId(POST_ID);
@@ -88,48 +89,70 @@ class CommunityVisibilityTests {
         when(favoriteMapper.selectList(any())).thenReturn(List.of(fav));
 
         assertThat(postService.like(POST_ID, OTHER_USER_ID)).isFalse();
-        assertThat(postService.unlike(POST_ID, OTHER_USER_ID)).isFalse();
-        assertThat(postService.favorite(POST_ID, OTHER_USER_ID)).isFalse();
-        assertThat(postService.unfavorite(POST_ID, OTHER_USER_ID)).isFalse();
         verify(postLikeMapper, never()).insert(any(com.xinyu.entity.PostLike.class));
-        verify(postLikeMapper, never()).delete(any());
-        verify(favoriteMapper, never()).insert(any(Favorite.class));
-        verify(favoriteMapper, never()).delete(any());
         verify(communityPostMapper, never()).adjustLikeCount(anyLong(), anyInt());
+
+        assertThat(postService.favorite(POST_ID, OTHER_USER_ID)).isFalse();
+        verify(favoriteMapper, never()).insert(any(Favorite.class));
 
         CommunityPostUpdateDTO editDto = new CommunityPostUpdateDTO();
         editDto.setId(POST_ID);
         editDto.setTopicId(1L);
         editDto.setMoodType("平静");
-        editDto.setContent("试图修改非正常帖子");
+        editDto.setContent("试图修改被隐藏帖子");
         assertThat(postService.update(editDto, AUTHOR_ID)).isFalse();
 
         assertThat(postService.listFavorites(OTHER_USER_ID)).isEmpty();
+        assertThat(postService.unlike(POST_ID, OTHER_USER_ID)).isFalse();
+        assertThat(postService.unfavorite(POST_ID, OTHER_USER_ID)).isFalse();
+        verify(postLikeMapper, never()).delete(any());
+        verify(favoriteMapper, never()).delete(any());
         assertThat(postService.detail(POST_ID, OTHER_USER_ID)).isNull();
         assertThat(postService.detail(POST_ID, null)).isNull();
     }
 
     @Test
-    void nonVisiblePostRejectsNewRepliesAndReplyListRequiresVisiblePost() {
+    void replyListRejectsMissingPostIdAndUpdateRejectsReplyUnderHiddenPost() {
         assertThat(replyService.listByPostId(null, OTHER_USER_ID)).isEmpty();
         verify(communityReplyMapper, never()).selectList(any());
 
-        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(0));
-        assertThat(replyService.listByPostId(POST_ID, OTHER_USER_ID)).isEmpty();
-
-        CommunityReplyAddDTO dto = new CommunityReplyAddDTO();
-        dto.setPostId(POST_ID);
-        dto.setContent("尝试回复不可见帖子");
-        assertThat(replyService.add(dto, OTHER_USER_ID)).isFalse();
-
         when(communityReplyMapper.selectById(REPLY_ID)).thenReturn(reply(1));
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
         CommunityReplyUpdateDTO editDto = new CommunityReplyUpdateDTO();
         editDto.setId(REPLY_ID);
-        editDto.setContent("主帖不可见时改回复");
+        editDto.setContent("帖子隐藏后仍试图改回复");
         assertThat(replyService.update(editDto, AUTHOR_ID)).isFalse();
+        verify(communityReplyMapper, never()).update(any(), any());
+    }
+
+    @Test
+    void hiddenAndDeletedPostsRejectNewReplies() {
+        CommunityReplyAddDTO dto = new CommunityReplyAddDTO();
+        dto.setPostId(POST_ID);
+        dto.setContent("尝试回复被隐藏帖子");
+
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
+        assertThat(replyService.add(dto, OTHER_USER_ID)).isFalse();
+
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post(0));
+        assertThat(replyService.add(dto, OTHER_USER_ID)).isFalse();
 
         verify(communityReplyMapper, never()).insert(any(CommunityReply.class));
-        verify(communityReplyMapper, never()).update(any(), any());
+        verify(communityPostMapper, never()).adjustReplyCount(anyLong(), anyInt());
+    }
+
+    @Test
+    void hiddenReplyRejectsAuthorEditAndDeleteDoesNotDecrementReplyCountAgain() {
+        CommunityReply hiddenReply = reply(2);
+        when(communityReplyMapper.selectById(REPLY_ID)).thenReturn(hiddenReply);
+
+        CommunityReplyUpdateDTO editDto = new CommunityReplyUpdateDTO();
+        editDto.setId(REPLY_ID);
+        editDto.setContent("试图修改被隐藏回复");
+        assertThat(replyService.update(editDto, AUTHOR_ID)).isFalse();
+
+        when(communityReplyMapper.update(any(), any())).thenReturn(1);
+        assertThat(replyService.delete(REPLY_ID, AUTHOR_ID)).isTrue();
         verify(communityPostMapper, never()).adjustReplyCount(anyLong(), anyInt());
     }
 

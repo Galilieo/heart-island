@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.xinyu.common.CommunityReportConstants;
 
 import java.time.LocalDateTime;
 
@@ -16,6 +17,7 @@ public class CommunityReply {
 
     private Long postId;
 
+    /** 作者用户ID仅用于服务端权限校验与后台管理视角，不向社区接口响应输出。 */
     @JsonIgnore
     private Long userId;
 
@@ -25,12 +27,22 @@ public class CommunityReply {
 
     private Integer status;
 
+    private String hideReason;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
 
     @TableField(exist = false)
     private Boolean mine;
+
+    @TableField(exist = false)
+    private Boolean hidden;
+
+    @JsonIgnore
+    public boolean isVisible() {
+        return Integer.valueOf(CommunityReportConstants.STATUS_VISIBLE).equals(status);
+    }
 
     public Long getId() {
         return id;
@@ -68,6 +80,14 @@ public class CommunityReply {
         return mine;
     }
 
+    public String getHideReason() {
+        return hideReason;
+    }
+
+    public Boolean getHidden() {
+        return hidden;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -102,5 +122,13 @@ public class CommunityReply {
 
     public void setMine(Boolean mine) {
         this.mine = mine;
+    }
+
+    public void setHideReason(String hideReason) {
+        this.hideReason = hideReason;
+    }
+
+    public void setHidden(Boolean hidden) {
+        this.hidden = hidden;
     }
 }
