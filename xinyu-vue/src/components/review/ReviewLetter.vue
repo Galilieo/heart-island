@@ -249,6 +249,7 @@ watch(
         </p>
 
         <div class="review-letter__body">
+          <!-- 行内紧贴排版：刻意不换行以免标签间生成多余空格文本节点 -->
           <p v-for="(segments, pIdx) in bodyParagraphs" :key="pIdx" class="review-letter__p">
             <template v-for="(seg, sIdx) in segments" :key="sIdx"><template v-if="seg.type === 'text'">{{ seg.text }}</template><span v-else class="nw">{{ seg.prefix }}<button
                 v-for="refItem in seg.refs"
@@ -262,6 +263,7 @@ watch(
           </p>
         </div>
 
+        <!-- 行内紧贴排版：同正文段落，保持 P.S. 引用标签无前置空白 -->
         <p v-if="psSegments.length" class="review-letter__ps">
           <span class="review-letter__ps-label">P.S. </span><template v-for="(seg, sIdx) in psSegments" :key="sIdx"><template v-if="seg.type === 'text'">{{ seg.text }}</template><span v-else class="nw">{{ seg.prefix }}<button
               v-for="refItem in seg.refs"

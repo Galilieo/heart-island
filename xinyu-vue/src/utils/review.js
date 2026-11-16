@@ -283,14 +283,14 @@ export function computeCitationPopoverLayout({ letterRect, tagRect, popWidth, po
   }
 }
 
-/** 从路由 query.record 中提取正整数记录 ID，非法值返回 null。 */
+/** 首页深链共用：从路由 query.record 中提取正整数记录 ID，非法值返回 null。 */
 export function parseRecordQueryParam(value) {
   const raw = Array.isArray(value) ? value[0] : value
   const text = String(raw || '').trim()
   return /^[1-9]\d*$/.test(text) ? text : null
 }
 
-/** 生成去掉 record 参数的 query 浅拷贝，用于首页打开详情后清理 URL。 */
+/** 首页深链共用：生成去掉 record 参数的 query 浅拷贝，用于首页打开详情后清理 URL。 */
 export function stripRecordQuery(query = {}) {
   const next = { ...query }
   delete next.record

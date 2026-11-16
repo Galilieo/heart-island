@@ -5,6 +5,7 @@ import { moodApi } from '../api'
 
 const HISTORY_PAGE_SIZE = 5
 
+/** 对应后端 MoodReviewService（generate / retry）返回的业务错误码。 */
 const ERROR_MESSAGES = {
   no_records: '这段时间还没有心情记录',
   no_ai_enabled_records: '这些记录都没有开启 AI 回应',
@@ -155,7 +156,7 @@ export const useReviewStore = defineStore('review', () => {
     return weekStats.value.rangeStart === target.weekStart
   }
 
-  async function runGenerateAction(mode, weekStart, requestFn) {
+  async function runTargetAction(mode, weekStart, requestFn, onSuccess) {
     if (submitting.value) {
       return { ok: false, skipped: true }
     }
@@ -168,8 +169,8 @@ export const useReviewStore = defineStore('review', () => {
       if (!isSameTarget(target)) {
         return { ...res, stale: true }
       }
-      if (res.ok && res.data) {
-        applyReportToPage(mode === 'recent30' ? recent30Stats : weekStats, res.data)
+      if (res.ok) {
+        await onSuccess(res)
       }
       return res
     } catch (error) {
@@ -186,29 +187,40 @@ export const useReviewStore = defineStore('review', () => {
   }
 
   function generateWeek(start, { regenerate = false } = {}) {
-    return runGenerateAction('week', start, () =>
-      regenerate ? moodApi.regenerateWeekReview(start) : moodApi.generateWeekReview(start)
+    return runTargetAction(
+      'week',
+      start,
+      () => (regenerate ? moodApi.regenerateWeekReview(start) : moodApi.generateWeekReview(start)),
+      (res) => {
+        if (res.data) {
+          applyReportToPage(weekStats, res.data)
+        }
+      }
     )
   }
 
   function generateRecent30() {
-    return runGenerateAction('recent30', '', () => moodApi.generateRecent30Review())
+    return runTargetAction(
+      'recent30',
+      '',
+      () => moodApi.generateRecent30Review(),
+      (res) => {
+        if (res.data) {
+          applyReportToPage(recent30Stats, res.data)
+        }
+      }
+    )
   }
 
-  async function retryJob(jobId, mode = 'week', weekStart = '') {
-    if (submitting.value || !jobId) {
-      return { ok: false, skipped: true }
+  function retryJob(jobId, mode = 'week', weekStart = '') {
+    if (!jobId) {
+      return Promise.resolve({ ok: false, skipped: true })
     }
-    const target = snapshotTarget(mode, weekStart)
-    submitting.value = true
-    actionError.value = ''
-    pollingTimedOut.value = false
-    try {
-      const res = await moodApi.retryAiJob(jobId)
-      if (!isSameTarget(target)) {
-        return { ...res, stale: true }
-      }
-      if (res.ok) {
+    return runTargetAction(
+      mode,
+      weekStart,
+      () => moodApi.retryAiJob(jobId),
+      async (res) => {
         const targetRef = mode === 'recent30' ? recent30Stats : weekStats
         const currentFailed = targetRef.value?.failed
         if (targetRef.value && currentFailed && res.data) {
@@ -224,18 +236,7 @@ export const useReviewStore = defineStore('review', () => {
         }
         await refreshMode(mode, weekStart)
       }
-      return res
-    } catch (error) {
-      const message = formatReviewError(error)
-      if (!isSameTarget(target)) {
-        return { ok: false, stale: true, error, userMessage: message }
-      }
-      actionError.value = message
-      await refreshMode(mode, weekStart).catch(() => {})
-      return { ok: false, error, userMessage: message }
-    } finally {
-      submitting.value = false
-    }
+    )
   }
 
   function fetchAiJob(jobId, options = {}) {

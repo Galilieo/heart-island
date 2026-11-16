@@ -1,25 +1,21 @@
 <script setup>
-// 回顾页：周报/近 30 天统计、小芽来信（12 种状态）、引用来源卡片、过往周报与任务轮询。
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+// 回顾页：周报/近 30 天统计、小芽来信（12 种状态）、引用来源卡片、过往周报与任务轮询协调。
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
-import WeekGrid from '../components/review/WeekGrid.vue'
-import MoodCountBars from '../components/review/MoodCountBars.vue'
 import ReviewLetter from '../components/review/ReviewLetter.vue'
 import ReviewSourceCards from '../components/review/ReviewSourceCards.vue'
 import ReviewHistory from '../components/review/ReviewHistory.vue'
+import ReviewStatsSidebar from '../components/review/ReviewStatsSidebar.vue'
 import { useReviewStore } from '../stores/review'
 import { useUserStore } from '../stores/user'
 import { useToast } from '../composables/useToast'
-import { createAiJobPoller } from '../utils/ai-job-polling'
-import { moodTone } from '../utils/mood'
+import { useReviewPolling } from '../composables/useReviewPolling'
 import {
   canGoNextWeek,
   formatRangeLong,
-  formatRangeShort,
-  groupDaysIntoWeeks,
   mondayOf,
   resolveReviewViewState,
   shiftWeek,
@@ -51,36 +47,6 @@ const currentMonday = mondayOf(todayKey)
 const mode = ref('week')
 const weekStart = ref('')
 const loadError = ref('')
-const pageVisible = ref(typeof document === 'undefined' ? true : !document.hidden)
-
-let activePollKey = ''
-let pollingMode = 'week'
-let pollingWeekStart = ''
-
-const poller = createAiJobPoller({
-  fetchJob: (jobId, options) => reviewStore.fetchAiJob(jobId, options),
-  onUpdate: () => {},
-  onStop: (reason) => {
-    activePollKey = ''
-    if (reason === 'complete') {
-      if (pollingMode === 'week') {
-        loadWeek(pollingWeekStart)
-        reviewStore.fetchHistory(1).catch(() => {})
-      } else {
-        loadRecent30()
-      }
-      return
-    }
-    if (reason === 'limit') {
-      reviewStore.setPollingTimedOut(true)
-      return
-    }
-    if (reason === 'network') {
-      reviewStore.setPollingTimedOut(true)
-      toast.error('查询状态失败，请稍后刷新看看')
-    }
-  }
-})
 
 const activeStats = computed(() =>
   mode.value === 'week' ? weekStats.value : recent30Stats.value
@@ -88,8 +54,6 @@ const activeStats = computed(() =>
 const activeLoading = computed(() =>
   mode.value === 'week' ? weekLoading.value : recent30Loading.value
 )
-const hasRecords = computed(() => (activeStats.value?.total || 0) > 0)
-const moodCounts = computed(() => activeStats.value?.moodCounts || [])
 const isCurrentWeek = computed(
   () => Boolean(weekStart.value) && weekStart.value === currentMonday
 )
@@ -131,100 +95,35 @@ const subtitle = computed(() => {
   return isCurrentWeek.value ? `${range} · 本周还在进行中，周日之后可以生成` : range
 })
 
-const weekGroups = computed(() =>
-  recent30Stats.value ? groupDaysIntoWeeks(recent30Stats.value.days, todayKey) : []
-)
-
-const weekRangeShort = computed(() =>
-  weekStats.value
-    ? formatRangeShort(weekStats.value.rangeStart, weekStats.value.rangeEnd)
-    : ''
-)
-const recentRangeShort = computed(() =>
-  recent30Stats.value
-    ? formatRangeShort(recent30Stats.value.rangeStart, recent30Stats.value.rangeEnd)
-    : ''
-)
+const { stopPolling } = useReviewPolling({
+  mode,
+  weekStart,
+  activeStats,
+  pollingTimedOut,
+  reviewStore,
+  userStore,
+  onComplete: (pollingMode, pollingWeekStart) => {
+    if (pollingMode === 'week') {
+      loadWeek(pollingWeekStart)
+      reviewStore.fetchHistory(1).catch(() => {})
+    } else {
+      loadRecent30()
+    }
+  },
+  onNetworkError: () => {
+    toast.error('查询状态失败，请稍后刷新看看')
+  }
+})
 
 function parseQueryStart(value) {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ''
 }
 
-function stopPolling() {
-  activePollKey = ''
-  poller.stop()
-}
-
-function syncPoller() {
-  const active = activeStats.value?.active
-  const shouldPoll =
-    pageVisible.value &&
-    userStore.isLoggedIn &&
-    Boolean(active?.jobId) &&
-    !pollingTimedOut.value
-
-  if (!shouldPoll) {
-    stopPolling()
-    return
-  }
-
-  const nextKey = `${mode.value}:${active.id}:${active.revision}:${active.jobId}`
-  if (nextKey === activePollKey) {
-    return
-  }
-
-  activePollKey = nextKey
-  pollingMode = mode.value
-  pollingWeekStart = weekStart.value
-  poller.start({
-    jobId: active.jobId,
-    recordId: active.id,
-    contentVersion: active.revision
-  })
-}
-
-function handleVisibilityChange() {
-  pageVisible.value = !document.hidden
-  syncPoller()
-}
-
 onMounted(() => {
-  if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-  }
   const initialStart = parseQueryStart(route.query.start)
   loadWeek(initialStart)
   reviewStore.fetchHistory(1).catch(() => {})
 })
-
-onUnmounted(() => {
-  if (typeof document !== 'undefined') {
-    document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }
-  stopPolling()
-})
-
-watch(
-  () => [
-    mode.value,
-    weekStart.value,
-    activeStats.value?.active?.jobId,
-    activeStats.value?.active?.revision,
-    pollingTimedOut.value,
-    userStore.isLoggedIn
-  ],
-  () => syncPoller()
-)
-
-watch(
-  () => userStore.token,
-  (next, prev) => {
-    if (next !== prev) {
-      stopPolling()
-      reviewStore.reset()
-    }
-  }
-)
 
 watch(
   () => route.query.start,
@@ -357,11 +256,6 @@ function handleHistoryMore() {
   }
   reviewStore.fetchHistory(historyPage.value + 1).catch(() => {})
 }
-
-// 「按周看」把每组的心情摊平成圆点；只做展示，不据此判断哪种最多。
-function groupMoods(week) {
-  return week.days.flatMap((day) => day.moods || [])
-}
 </script>
 
 <template>
@@ -462,83 +356,12 @@ function groupMoods(week) {
             />
           </section>
 
-          <aside class="review__side">
-            <template v-if="mode === 'week' && weekStats">
-              <section class="review-card">
-                <div class="review-card__head">
-                  <h2>这一周</h2>
-                  <span>{{ weekRangeShort }}</span>
-                </div>
-                <div class="review-stat">
-                  <div>
-                    <strong>{{ weekStats.total }}<small>条</small></strong>
-                    <span>记录</span>
-                  </div>
-                  <div>
-                    <strong>{{ weekStats.daysWithRecords }}<small>/ 7 天</small></strong>
-                    <span>有记录</span>
-                  </div>
-                </div>
-                <WeekGrid
-                  :start-key="weekStats.rangeStart"
-                  :days="weekStats.days"
-                  :today-key="todayKey"
-                />
-              </section>
-
-              <section class="review-card">
-                <div class="review-card__head">
-                  <h2>心情出现的次数</h2>
-                </div>
-                <MoodCountBars v-if="moodCounts.length" :items="moodCounts" :limit="4" />
-                <p v-else class="review-card__empty">没有记录</p>
-              </section>
-            </template>
-
-            <template v-else-if="mode === 'recent30' && recent30Stats">
-              <section class="review-card">
-                <div class="review-card__head">
-                  <h2>这 30 天</h2>
-                  <span>{{ recentRangeShort }}</span>
-                </div>
-                <div class="review-stat">
-                  <div>
-                    <strong>{{ recent30Stats.total }}<small>条</small></strong>
-                    <span>记录</span>
-                  </div>
-                  <div>
-                    <strong>{{ recent30Stats.daysWithRecords }}<small>/ 30 天</small></strong>
-                    <span>有记录</span>
-                  </div>
-                </div>
-                <MoodCountBars v-if="moodCounts.length" :items="moodCounts" :limit="4" />
-                <p v-else class="review-card__empty">没有记录</p>
-              </section>
-
-              <section v-if="hasRecords" class="review-card">
-                <div class="review-card__head">
-                  <h2>按周看</h2>
-                </div>
-                <div class="review-weeks">
-                  <div
-                    v-for="week in weekGroups"
-                    :key="week.startKey"
-                    class="review-weeks__row"
-                  >
-                    <strong class="review-weeks__label">{{ week.label }}</strong>
-                    <span class="review-weeks__dots" aria-hidden="true">
-                      <i
-                        v-for="(mood, index) in groupMoods(week)"
-                        :key="index"
-                        :class="`tone--${moodTone(mood)}`"
-                      />
-                    </span>
-                    <span class="review-weeks__count">{{ week.total }} 条</span>
-                  </div>
-                </div>
-              </section>
-            </template>
-          </aside>
+          <ReviewStatsSidebar
+            :mode="mode"
+            :week-stats="weekStats"
+            :recent30-stats="recent30Stats"
+            :today-key="todayKey"
+          />
         </div>
       </div>
     </div>
@@ -692,21 +515,6 @@ function groupMoods(week) {
   bottom: 0;
 }
 
-.review-stub__state {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-}
-
-.review-stub__copy {
-  flex: 1;
-  margin: 0;
-  color: var(--ink-2);
-  font-size: var(--fs-md);
-  line-height: 1.7;
-}
-
 .review-btn {
   display: inline-flex;
   align-items: center;
@@ -720,15 +528,6 @@ function groupMoods(week) {
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-}
-
-.review-btn--primary {
-  background: var(--brand-deep);
-  color: var(--bg-card);
-}
-
-.review-btn--primary:hover {
-  background: var(--sea-deep);
 }
 
 .review-btn--secondary {
@@ -750,74 +549,6 @@ function groupMoods(week) {
   box-shadow: var(--shadow-sm);
 }
 
-.review-card h2 {
-  margin: 0;
-  color: var(--ink-2);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.review-card__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.review-card__head span {
-  color: var(--ink-3);
-  font-size: var(--fs-xs);
-}
-
-.review-card__empty {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-
-.review-stat {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-bottom: 14px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-
-.review-stat > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
-}
-
-.review-stat > div + div {
-  border-left: 1px solid var(--line);
-}
-
-.review-stat strong {
-  color: var(--ink-1);
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-.review-stat strong small {
-  margin-left: 3px;
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-}
-
-.review-stat span {
-  color: var(--ink-3);
-  font-size: var(--fs-xs);
-}
-
 .review-error {
   display: flex;
   flex-direction: column;
@@ -830,62 +561,6 @@ function groupMoods(week) {
   margin: 0;
 }
 
-/* 近 30 天「按周看」：一周一行，心情圆点摊平展示。 */
-.review-weeks {
-  display: flex;
-  flex-direction: column;
-}
-
-.review-weeks__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--fs-sm);
-}
-
-.review-weeks__row:last-child {
-  border-bottom: none;
-}
-
-.review-weeks__label {
-  flex: none;
-  width: 118px;
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-}
-
-.review-weeks__dots {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  gap: 3px;
-  min-width: 0;
-}
-
-.review-weeks__dots i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tone);
-}
-
-.review-weeks__count {
-  flex: none;
-  color: var(--ink-3);
-  font-size: var(--fs-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.tone--joy { --tone: var(--joy); }
-.tone--calm { --tone: var(--calm); }
-.tone--tension { --tone: var(--tension); }
-.tone--sad { --tone: var(--sad); }
-.tone--tired { --tone: var(--tired); }
-.tone--neutral { --tone: var(--brand); }
-
 @media (max-width: 900px) {
   .review__layout {
     grid-template-columns: minmax(0, 1fr);
@@ -896,23 +571,11 @@ function groupMoods(week) {
     min-height: 220px;
     padding: var(--stub-line-band) 18px;
   }
-
-  .review-stub__state {
-    flex-wrap: wrap;
-  }
-
-  .review-stub__copy {
-    min-width: 0;
-  }
 }
 
 @media (max-width: 768px) {
   .review__head h1 {
     font-size: var(--fs-2xl);
-  }
-
-  .review-stub__state .review-btn {
-    width: 100%;
   }
 }
 </style>
