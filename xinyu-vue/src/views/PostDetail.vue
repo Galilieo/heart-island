@@ -19,7 +19,6 @@ import PostReplyForm from '../components/community/PostReplyForm.vue'
 import PostReplyList from '../components/community/PostReplyList.vue'
 import PostEditDialog from '../components/community/PostEditDialog.vue'
 import { useCommunityStore } from '../stores/community'
-import { useUserStore } from '../stores/user'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
@@ -27,7 +26,6 @@ import { useConfirm } from '../composables/useConfirm'
 const route = useRoute()
 const router = useRouter()
 const communityStore = useCommunityStore()
-const userStore = useUserStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -173,7 +171,6 @@ onMounted(async () => {
         <PostCard
           :post="currentPost"
           :topics="topics"
-          :login-user-id="userStore.loginUser?.id"
           variant="detail"
           @toggle-like="handleLike"
           @toggle-favorite="handleFavorite"
@@ -196,7 +193,6 @@ onMounted(async () => {
         <PostReplyList
           :replies="replies"
           :loading="repliesLoading"
-          :login-user-id="userStore.loginUser?.id"
           :updating-id="updatingReplyId"
           :deleting-id="deletingReplyId"
           @edit-submit="handleEditReply"

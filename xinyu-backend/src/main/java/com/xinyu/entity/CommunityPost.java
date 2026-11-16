@@ -14,6 +14,7 @@ public class CommunityPost {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    @JsonIgnore
     private Long userId;
 
     private Long topicId;
@@ -45,6 +46,9 @@ public class CommunityPost {
 
     @TableField(exist = false)
     private Boolean favorited;
+
+    @TableField(exist = false)
+    private Boolean mine;
 
     public Long getId() {
         return id;
@@ -106,6 +110,10 @@ public class CommunityPost {
         return favorited;
     }
 
+    public Boolean getMine() {
+        return mine;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -164,5 +172,9 @@ public class CommunityPost {
 
     public void setFavorited(Boolean favorited) {
         this.favorited = favorited;
+    }
+
+    public void setMine(Boolean mine) {
+        this.mine = mine;
     }
 }

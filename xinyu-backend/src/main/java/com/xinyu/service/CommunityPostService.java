@@ -73,6 +73,7 @@ public class CommunityPostService {
         for (CommunityPost post : posts) {
             post.setLiked(isLiked(post.getId(), userId));
             post.setFavorited(isFavorited(post.getId(), userId));
+            post.setMine(userId != null && userId.equals(post.getUserId()));
         }
 
         return posts;
@@ -176,6 +177,7 @@ public class CommunityPostService {
 
             post.setLiked(isLiked(post.getId(), userId));
             post.setFavorited(true);
+            post.setMine(userId != null && userId.equals(post.getUserId()));
             result.add(post);
         }
 
@@ -403,6 +405,7 @@ public class CommunityPostService {
 
         post.setLiked(isLiked(post.getId(), userId));
         post.setFavorited(isFavorited(post.getId(), userId));
+        post.setMine(userId != null && userId.equals(post.getUserId()));
 
         return post;
     }

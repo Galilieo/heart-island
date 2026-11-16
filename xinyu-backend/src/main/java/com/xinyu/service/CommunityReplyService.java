@@ -24,6 +24,10 @@ public class CommunityReplyService {
     private CommunityPostMapper communityPostMapper;
 
     public List<CommunityReply> listByPostId(Long postId) {
+        return listByPostId(postId, null);
+    }
+
+    public List<CommunityReply> listByPostId(Long postId, Long userId) {
         QueryWrapper<CommunityReply> queryWrapper = new QueryWrapper<>();
 
         queryWrapper.eq("status", 1);
@@ -34,7 +38,11 @@ public class CommunityReplyService {
 
         queryWrapper.orderByAsc("create_time");
 
-        return communityReplyMapper.selectList(queryWrapper);
+        List<CommunityReply> replies = communityReplyMapper.selectList(queryWrapper);
+        for (CommunityReply reply : replies) {
+            reply.setMine(userId != null && userId.equals(reply.getUserId()));
+        }
+        return replies;
     }
 
     public Page<AdminReplyVO> pageAdminReplies(Integer status, Long postId, Long userId, String keyword, Long pageNum, Long pageSize) {

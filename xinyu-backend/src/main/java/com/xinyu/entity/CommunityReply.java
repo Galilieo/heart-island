@@ -1,8 +1,10 @@
 package com.xinyu.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -14,6 +16,7 @@ public class CommunityReply {
 
     private Long postId;
 
+    @JsonIgnore
     private Long userId;
 
     private String content;
@@ -25,6 +28,9 @@ public class CommunityReply {
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
+
+    @TableField(exist = false)
+    private Boolean mine;
 
     public Long getId() {
         return id;
@@ -58,6 +64,10 @@ public class CommunityReply {
         return updateTime;
     }
 
+    public Boolean getMine() {
+        return mine;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -88,5 +98,9 @@ public class CommunityReply {
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public void setMine(Boolean mine) {
+        this.mine = mine;
     }
 }

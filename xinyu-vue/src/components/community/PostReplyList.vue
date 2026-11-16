@@ -14,7 +14,6 @@ import { formatTime } from '../../utils/mood'
 const props = defineProps({
   replies: { type: Array, default: () => [] },
   loading: Boolean,
-  loginUserId: { type: [String, Number, null], default: null },
   updatingId: { type: [String, Number, null], default: null },
   deletingId: { type: [String, Number, null], default: null }
 })
@@ -48,7 +47,7 @@ const canSave = computed(
 )
 
 function isOwner(reply) {
-  return props.loginUserId && reply.userId === props.loginUserId
+  return Boolean(reply.mine)
 }
 
 function startEdit(reply) {

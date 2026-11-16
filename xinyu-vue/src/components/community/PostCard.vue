@@ -13,7 +13,6 @@ import { formatTime } from '../../utils/mood'
 const props = defineProps({
   post: { type: Object, required: true },
   topics: { type: Array, default: () => [] },
-  loginUserId: { type: [String, Number, null], default: null },
   variant: {
     type: String,
     default: 'card', // card | detail
@@ -32,9 +31,7 @@ const authorName = computed(() => {
   return props.post.anonymousName || props.post.nickname || '匿名朋友'
 })
 
-const isOwner = computed(
-  () => props.loginUserId && props.post.userId === props.loginUserId
-)
+const isOwner = computed(() => Boolean(props.post?.mine))
 
 // 有数量时统一写「抱抱 N」，无数量按是否已抱抱区分
 const likeLabel = computed(() => {

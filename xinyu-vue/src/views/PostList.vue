@@ -16,13 +16,11 @@ import TopicFilter from '../components/community/TopicFilter.vue'
 import PostCard from '../components/community/PostCard.vue'
 import PostPublishForm from '../components/community/PostPublishForm.vue'
 import { useCommunityStore } from '../stores/community'
-import { useUserStore } from '../stores/user'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
 
 const router = useRouter()
 const communityStore = useCommunityStore()
-const userStore = useUserStore()
 const toast = useToast()
 
 const { topics, posts, filters } = storeToRefs(communityStore)
@@ -176,7 +174,6 @@ onMounted(async () => {
                 :key="p.id"
                 :post="p"
                 :topics="topics"
-                :login-user-id="userStore.loginUser?.id"
                 variant="card"
                 @open="openDetail"
                 @toggle-like="handleLike"

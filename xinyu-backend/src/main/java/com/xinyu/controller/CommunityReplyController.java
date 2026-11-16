@@ -22,8 +22,15 @@ public class CommunityReplyController {
     private JwtUtil jwtUtil;
 
     @GetMapping("/list")
-    public Result<List<CommunityReply>> list(@RequestParam(required = false) Long postId) {
-        List<CommunityReply> replies = communityReplyService.listByPostId(postId);
+    public Result<List<CommunityReply>> list(@RequestParam(required = false) Long postId,
+                                             @RequestHeader(value = "token", required = false) String token) {
+        Long userId = null;
+
+        if (token != null && !token.trim().isEmpty()) {
+            userId = jwtUtil.getUserId(token);
+        }
+
+        List<CommunityReply> replies = communityReplyService.listByPostId(postId, userId);
         return Result.success(replies);
     }
 
