@@ -24,6 +24,14 @@ function emptyOverview() {
 }
 
 /**
+ * 概览计数转数字：后端 JacksonConfig 把 Long 序列化为字符串，
+ * 不转换时 "0" 会被当成有值，失败率等计算得到 NaN。缺省或非数字回落为 0。
+ */
+function toCount(value) {
+  return Number(value) || 0
+}
+
+/**
  * 后台概览、用户、话题与 AI 回复日志管理。
  */
 export function createCatalogModule() {
@@ -75,15 +83,15 @@ export function createCatalogModule() {
       const res = await adminApi.overview()
       if (res.ok) {
         overview.value = {
-          userTotal: res.data?.userTotal || 0,
-          userDisabled: res.data?.userDisabled || 0,
-          postTotal: res.data?.postTotal || 0,
-          postHidden: res.data?.postHidden || 0,
-          replyTotal: res.data?.replyTotal || 0,
-          replyHidden: res.data?.replyHidden || 0,
-          aiReplyTotal: res.data?.aiReplyTotal || 0,
-          aiReplySuccess: res.data?.aiReplySuccess || 0,
-          aiReplyFailed: res.data?.aiReplyFailed || 0,
+          userTotal: toCount(res.data?.userTotal),
+          userDisabled: toCount(res.data?.userDisabled),
+          postTotal: toCount(res.data?.postTotal),
+          postHidden: toCount(res.data?.postHidden),
+          replyTotal: toCount(res.data?.replyTotal),
+          replyHidden: toCount(res.data?.replyHidden),
+          aiReplyTotal: toCount(res.data?.aiReplyTotal),
+          aiReplySuccess: toCount(res.data?.aiReplySuccess),
+          aiReplyFailed: toCount(res.data?.aiReplyFailed),
           rateLimitBackend: res.data?.rateLimitBackend || '',
           rateLimitRejections: res.data?.rateLimitRejections || {}
         }

@@ -68,6 +68,21 @@ test('fetchOverview 携带限流后端状态与今日拒绝计数', async () => 
   }
 })
 
+test('fetchOverview 把后端字符串计数转成数字，"0" 不被当成有值', async () => {
+  const prevAdapter = request.defaults.adapter
+  // 后端 JacksonConfig 把 Long 序列化为字符串，概览计数实际以 "0"、"3" 形式返回。
+  request.defaults.adapter = async (config) => ok(config, { aiReplyTotal: '0', aiReplyFailed: '0', postTotal: '3' })
+  try {
+    const store = useAdminStore()
+    await store.fetchOverview()
+    assert.equal(store.overview.aiReplyTotal, 0)
+    assert.equal(store.overview.aiReplyFailed, 0)
+    assert.equal(store.overview.postTotal, 3)
+  } finally {
+    request.defaults.adapter = prevAdapter
+  }
+})
+
 test('fetchOverview 加载概览并在缺省字段时回落为 0', async () => {
   const prevAdapter = request.defaults.adapter
   request.defaults.adapter = async (config) => {
