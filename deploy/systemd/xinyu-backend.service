@@ -1,0 +1,25 @@
+[Unit]
+Description=Xinyu backend (single worker)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=<SERVICE_USER>
+Group=<SERVICE_GROUP>
+WorkingDirectory=<BACKEND_RELEASE_DIR>
+EnvironmentFile=<BACKEND_ENV_FILE>
+ExecStart=<JAVA_17_BINARY> -jar <BACKEND_RELEASE_DIR>/xinyu-backend.jar
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xinyu-backend
+
+[Install]
+WantedBy=multi-user.target

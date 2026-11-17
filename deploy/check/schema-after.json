@@ -1,0 +1,33 @@
+{
+  "fresh_tables": 12,
+  "migrated_tables": 12,
+  "ignored": [
+    "COMMENT",
+    "table AUTO_INCREMENT next value"
+  ],
+  "differences": {},
+  "comment_differences": {},
+  "migration_timings": [
+    {
+      "script": "20261107_01_ai_reply_job.sql",
+      "seconds": 0.0272
+    },
+    {
+      "script": "20261107_02_ai_reply_model_name.sql",
+      "seconds": 0.0206
+    },
+    {
+      "script": "20261111_01_community_ai_generation.sql",
+      "seconds": 0.0652
+    },
+    {
+      "script": "20261113_01_mood_review.sql",
+      "seconds": 0.0273
+    },
+    {
+      "script": "20261114_01_community_report.sql",
+      "seconds": 0.0401
+    }
+  ],
+  "second_initialization_equal": true
+}

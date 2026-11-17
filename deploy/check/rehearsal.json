@@ -1,0 +1,55 @@
+{
+  "ports": [
+    28080,
+    28000,
+    28100,
+    28081,
+    28379
+  ],
+  "real_model_calls": 0,
+  "checks": [
+    "synthetic_backup_restored_and_counts_equal",
+    "five_migrations_backfill_and_original_fields_preserved",
+    "seeded_migration_schema_matches_fresh",
+    "redis_then_java_worker_disabled_started",
+    "python_then_frontend_artifact_served",
+    "worker_off_keeps_queue_and_no_upstream_calls",
+    "single_worker_java_python_synthetic_http_persisted_once",
+    "host_spring_and_jvm_overrides_ignored",
+    "host_http_proxy_ignored"
+  ],
+  "artifact_sha256": {
+    "xinyu-backend.jar": "fb24901efdebf080145daceb640a34e0b7fac6dcbc2eb1ec69d2d1e5309b10b2",
+    "xinyu-ai.tar.gz": "a848326bd45d5128e2e10b9c6568a6ed86959fb45c5bb032c371d4a725707457",
+    "frontend.tar.gz": "02faa85b07faa6753b367279d7456054eca2d594fc72c2cc587a423e197be336"
+  },
+  "synthetic_backup_sha256": "c99a31e67306ee559ea91224bc3ecb9a2a7805e67eb69798708424ea6e8aa60c",
+  "smoke_before_worker": {
+    "passed": [
+      "java_health",
+      "python_health",
+      "anonymous_auth_guard",
+      "member_reads_and_admin_guard",
+      "admin_lists_and_redis",
+      "frontend_history_and_internal_denial"
+    ],
+    "member_checked": true,
+    "admin_checked": true
+  },
+  "smoke_after_worker": {
+    "passed": [
+      "java_health",
+      "python_health",
+      "anonymous_auth_guard",
+      "member_reads_and_admin_guard",
+      "admin_lists_and_redis",
+      "frontend_history_and_internal_denial"
+    ],
+    "member_checked": true,
+    "admin_checked": true
+  },
+  "synthetic_supplier_calls": 1,
+  "nginx_systemd_runtime": "macOS未安装Nginx/systemd；模板待B段按真实环境核验",
+  "owned_processes_stopped": true,
+  "owned_databases_removed": true
+}

@@ -1,0 +1,31 @@
+# 合并到 B 段核实后的现有 HTTPS server 中；保留原证书、域名和 HTTP->HTTPS 跳转。
+# 不在仓库记录实际域名、证书目录或部署路径。
+root <FRONTEND_RELEASE_DIR>;
+index index.html;
+
+# 内部服务不对公网代理，/api 前缀剥离前后均显式阻断。
+location = /internal { return 404; }
+location ^~ /internal/ { return 404; }
+location = /api/internal { return 404; }
+location ^~ /api/internal/ { return 404; }
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 3s;
+    # 大于社区前端 20 秒等待；超时不代表写入失败，不能自动重发帖子。
+    proxy_read_timeout 30s;
+    proxy_send_timeout 30s;
+    proxy_next_upstream off;
+}
+
+location = /index.html {
+    add_header Cache-Control "no-store" always;
+}
+location / {
+    try_files $uri $uri/ /index.html;
+}

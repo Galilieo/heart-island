@@ -1,0 +1,128 @@
+{
+  "fresh_tables": 10,
+  "migrated_tables": 12,
+  "ignored": [
+    "COMMENT",
+    "table AUTO_INCREMENT next value"
+  ],
+  "differences": {
+    "ai_job": [
+      "--- fresh",
+      "+++ legacy+migrations",
+      "@@ -1 +1,23 @@",
+      "-<missing>",
+      "+CREATE TABLE `ai_job` (",
+      "+  `id` bigint NOT NULL AUTO_INCREMENT,",
+      "+  `user_id` bigint NOT NULL,",
+      "+  `target_id` bigint NOT NULL,",
+      "+  `task_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL,",
+      "+  `target_version` bigint NOT NULL,",
+      "+  `status` varchar(24) COLLATE utf8mb4_unicode_ci NOT NULL,",
+      "+  `attempt_count` int NOT NULL DEFAULT '0',",
+      "+  `request_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `template_version` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `model_name` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `result_kind` varchar(24) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `model_called` tinyint DEFAULT NULL,",
+      "+  `last_error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+      "+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+      "+  `started_at` datetime DEFAULT NULL,",
+      "+  `finished_at` datetime DEFAULT NULL,",
+      "+  PRIMARY KEY (`id`),",
+      "+  UNIQUE KEY `uk_ai_job_target_version` (`task_type`,`target_id`,`target_version`),",
+      "+  KEY `idx_ai_job_status_id` (`status`,`id`),",
+      "+  KEY `idx_ai_job_user_status` (`user_id`,`status`)",
+      "+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    ],
+    "community_post": [
+      "--- fresh",
+      "+++ legacy+migrations",
+      "@@ -10,6 +10,7 @@",
+      "   `reply_count` int NOT NULL DEFAULT '0',",
+      "   `like_count` int NOT NULL DEFAULT '0',",
+      "   `status` tinyint NOT NULL DEFAULT '1',",
+      "+  `hide_reason` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+      "   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+      "   PRIMARY KEY (`id`),"
+    ],
+    "community_reply": [
+      "--- fresh",
+      "+++ legacy+migrations",
+      "@@ -5,6 +5,7 @@",
+      "   `content` text COLLATE utf8mb4_unicode_ci NOT NULL,",
+      "   `anonymous_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '匿名岛民',",
+      "   `status` tinyint NOT NULL DEFAULT '1',",
+      "+  `hide_reason` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+      "   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+      "   PRIMARY KEY (`id`),"
+    ],
+    "content_report": [
+      "--- fresh",
+      "+++ legacy+migrations",
+      "@@ -1 +1,23 @@",
+      "-<missing>",
+      "+CREATE TABLE `content_report` (",
+      "+  `id` bigint NOT NULL AUTO_INCREMENT,",
+      "+  `reporter_id` bigint NOT NULL,",
+      "+  `target_type` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,",
+      "+  `target_id` bigint NOT NULL,",
+      "+  `post_id` bigint NOT NULL,",
+      "+  `target_user_id` bigint NOT NULL,",
+      "+  `reason` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,",
+      "+  `detail` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `content_snapshot` text COLLATE utf8mb4_unicode_ci NOT NULL,",
+      "+  `status` varchar(12) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PENDING',",
+      "+  `hide_reason` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `handler_id` bigint DEFAULT NULL,",
+      "+  `handle_note` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,",
+      "+  `handle_time` datetime DEFAULT NULL,",
+      "+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+      "+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+      "+  PRIMARY KEY (`id`),",
+      "+  UNIQUE KEY `uk_report_reporter_target` (`reporter_id`,`target_type`,`target_id`),",
+      "+  KEY `idx_report_status_target` (`status`,`target_type`,`target_id`),",
+      "+  KEY `idx_report_reporter_time` (`reporter_id`,`create_time`),",
+      "+  CONSTRAINT `fk_content_report_reporter` FOREIGN KEY (`reporter_id`) REFERENCES `user` (`id`) ON DELETE CASCADE",
+      "+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    ],
+    "mood_record": [
+      "--- fresh",
+      "+++ legacy+migrations",
+      "@@ -7,6 +7,9 @@",
+      "   `status` tinyint NOT NULL DEFAULT '1',",
+      "   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+      "   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,",
+      "+  `content_version` bigint NOT NULL DEFAULT '1',",
+      "+  `ai_reply_enabled` tinyint NOT NULL DEFAULT '0',",
+      "+  `deleted_at` datetime DEFAULT NULL,",
+      "   PRIMARY KEY (`id`),",
+      "   KEY `idx_mood_record_user_status_time` (`user_id`,`status`,`create_time`),",
+      "   KEY `idx_mood_record_mood_type` (`mood_type`),"
+    ]
+  },
+  "migration_timings": [
+    {
+      "script": "20261107_01_ai_reply_job.sql",
+      "seconds": 0.0296
+    },
+    {
+      "script": "20261107_02_ai_reply_model_name.sql",
+      "seconds": 0.0198
+    },
+    {
+      "script": "20261111_01_community_ai_generation.sql",
+      "seconds": 0.0252
+    },
+    {
+      "script": "20261113_01_mood_review.sql",
+      "seconds": 0.0235
+    },
+    {
+      "script": "20261114_01_community_report.sql",
+      "seconds": 0.0315
+    }
+  ]
+}
