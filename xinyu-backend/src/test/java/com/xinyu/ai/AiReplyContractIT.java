@@ -73,17 +73,11 @@ class AiReplyContractIT {
 
         // 只提取建表语句；不执行初始化脚本中的CREATE DATABASE／USE／DROP，也不导入业务数据。
         String schema = Files.readString(Path.of("../sql/xinyu.sql"));
-        var tables = Pattern.compile("CREATE TABLE .*?;(?=\\s*(?:CREATE|INSERT|$))", Pattern.DOTALL)
+        var tables = Pattern.compile("CREATE TABLE .*?;", Pattern.DOTALL)
                 .matcher(schema).results().map(match -> match.group()).toList();
-        // 8→10：回顾功能（fb793fd）把 mood_review、mood_review_source 并入建库脚本时未同步本断言。
-        assertThat(tables).hasSize(10);
+        // 完整初始化已包含全部增量结构，不能再重复执行 ADD COLUMN 迁移。
+        assertThat(tables).hasSize(12);
         tables.forEach(jdbc::execute);
-        String migration = Files.readString(Path.of("../sql/migrations/20261107_01_ai_reply_job.sql"));
-        for (String statement : migration.split(";")) {
-            if (!statement.isBlank()) {
-                jdbc.execute(statement);
-            }
-        }
 
         startPython();
         startJava();
