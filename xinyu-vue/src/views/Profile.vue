@@ -99,7 +99,7 @@ const { run: submitProfile, loading: savingProfile } = useAsyncAction(
 )
 
 function handleSaveProfile() {
-  if (!nickname.value.trim()) return toast.warn('昵称不能为空')
+  if (nickname.value.trim().length > 50) return toast.warn('昵称不能超过 50 字')
   if (bio.value.length > 300) return toast.warn('签名不能超过 300 字')
   if (city.value.length > 50) return toast.warn('城市不能超过 50 字')
   submitProfile()
@@ -143,7 +143,7 @@ async function handleSavePassword() {
       <header class="profile__head">
         <img :src="avatarUrl" alt="" aria-hidden="true" width="64" height="64" class="profile__avatar" />
         <div class="profile__head-text">
-          <h1 class="profile__name">{{ userStore.loginUser?.nickname || '心屿用户' }}</h1>
+          <h1 class="profile__name">{{ userStore.displayName }}</h1>
           <p class="profile__username">@{{ username }}</p>
           <p v-if="heroMeta" class="profile__meta">{{ heroMeta }}</p>
           <p v-if="heroBio" class="profile__bio">「{{ heroBio }}」</p>
@@ -204,7 +204,7 @@ async function handleSavePassword() {
           aria-label="基本资料"
           class="profile__pane"
         >
-          <p class="profile__card-desc">昵称只在顶栏和个人页显示，社区里统一显示为「匿名岛民」。用户名不可修改，其它都可选填。</p>
+          <p class="profile__card-desc">昵称只在顶栏和个人页显示，不填就显示用户名；社区里统一显示为「匿名岛民」。用户名不可修改，其它都可选填。</p>
 
           <div class="profile__form profile__form--grid">
             <BaseInput
@@ -215,7 +215,7 @@ async function handleSavePassword() {
             <BaseInput
               v-model="nickname"
               label="昵称"
-              placeholder="给自己起个昵称"
+              placeholder="不填就显示用户名"
             />
             <BaseSelect
               v-model="gender"

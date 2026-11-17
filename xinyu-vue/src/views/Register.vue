@@ -34,7 +34,8 @@ async function handleRegister() {
   if (!password.value) return toast.warn('请输入密码')
   if (password.value.length < 6) return toast.warn('密码不能少于 6 位')
   if (password.value !== confirmPassword.value) return toast.warn('两次输入的密码不一致')
-  if (!nickname.value.trim()) return toast.warn('请输入昵称')
+  // 昵称选填，留空时顶栏和个人页显示用户名。
+  if (nickname.value.trim().length > 50) return toast.warn('昵称不能超过 50 字')
 
   const res = await submit()
   if (res.ok) {
@@ -79,8 +80,8 @@ function goLogin() {
     />
     <BaseInput
       v-model="nickname"
-      label="昵称"
-      placeholder="显示在顶栏和个人页"
+      label="昵称（选填）"
+      placeholder="不填就显示用户名"
       size="lg"
       @enter="handleRegister"
     />

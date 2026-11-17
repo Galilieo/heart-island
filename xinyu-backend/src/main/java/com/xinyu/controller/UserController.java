@@ -15,6 +15,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/user")
 public class UserController {
 
+    /** 昵称选填；填写时去掉首尾空白后不超过 user.nickname 列宽（sql/xinyu.sql VARCHAR(50)）。 */
+    private static final int MAX_NICKNAME_LENGTH = 50;
+
+    private static final String NICKNAME_TOO_LONG = "昵称不能超过50个字";
+
     @Autowired
     private UserService userService;
 
@@ -31,8 +36,8 @@ public class UserController {
             return Result.error("密码不能为空");
         }
 
-        if (user.getNickname() == null || user.getNickname().trim().isEmpty()) {
-            return Result.error("昵称不能为空");
+        if (nicknameTooLong(user.getNickname())) {
+            return Result.error(NICKNAME_TOO_LONG);
         }
 
         Boolean success = userService.register(user);
@@ -79,12 +84,8 @@ public class UserController {
     @PostMapping("/update-profile")
     public Result<UserVO> updateProfile(@RequestBody UserProfileUpdateDTO dto,
                                         @RequestHeader("token") String token) {
-        if (dto.getNickname() == null || dto.getNickname().trim().isEmpty()) {
-            return Result.error("昵称不能为空");
-        }
-
-        if (dto.getNickname().trim().length() > 50) {
-            return Result.error("昵称不能超过50个字");
+        if (nicknameTooLong(dto.getNickname())) {
+            return Result.error(NICKNAME_TOO_LONG);
         }
 
         if (dto.getGender() != null && dto.getGender().length() > 20) {
@@ -155,6 +156,11 @@ public class UserController {
         }
 
         return Result.success("查询成功", UserVO.fromUser(user));
+    }
+
+    /** 留空（null 或纯空白）合法，由服务层存为 NULL；只拦截超出列宽的填写。 */
+    private static boolean nicknameTooLong(String nickname) {
+        return nickname != null && nickname.trim().length() > MAX_NICKNAME_LENGTH;
     }
 
 

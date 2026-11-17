@@ -2,6 +2,7 @@ package com.xinyu.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.xinyu.dto.UserProfileUpdateDTO;
 import com.xinyu.entity.User;
 import com.xinyu.mapper.CommunityPostMapper;
@@ -50,6 +51,8 @@ public class UserService {
         // 注册时，把明文密码加密后再保存
         String encodePassword =passwordEncoder.encode(user.getPassword());
         user.setPassword(encodePassword);
+        // 昵称选填：留空或纯空白存 NULL，展示处回退到用户名。
+        user.setNickname(normalize(user.getNickname()));
         user.setRole("USER");
         user.setStatus(1);
 
@@ -143,13 +146,21 @@ public class UserService {
             return null;
         }
 
-        user.setNickname(dto.getNickname().trim());
+        user.setNickname(normalize(dto.getNickname()));
         user.setGender(normalize(dto.getGender()));
         user.setBirthday(dto.getBirthday());
         user.setBio(normalize(dto.getBio()));
         user.setCity(normalize(dto.getCity()));
 
-        userMapper.updateById(user);
+        // updateById 默认跳过 null 字段，清空的资料项会写不进去；这里逐列显式 set，留空也写成 NULL。
+        UpdateWrapper<User> profileUpdate = new UpdateWrapper<User>()
+                .eq("id", userId)
+                .set("nickname", user.getNickname())
+                .set("gender", user.getGender())
+                .set("birthday", user.getBirthday())
+                .set("bio", user.getBio())
+                .set("city", user.getCity());
+        userMapper.update(null, profileUpdate);
 
         return user;
     }
