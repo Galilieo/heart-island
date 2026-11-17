@@ -127,6 +127,7 @@ class AiReplyContractIT {
         // 命令行属性高于测试进程／宿主环境，固定所有依赖为隔离库与本机合成服务。
         application = new SpringApplicationBuilder(XinyuBackendApplication.class).run(
                 "--spring.config.location=optional:classpath:/isolated-db-test.yml",
+                "--spring.config.import=classpath:/application.properties",
                 "--spring.datasource.url=" + jdbcUrl,
                 "--spring.datasource.username=" + databaseUser,
                 "--spring.datasource.password=" + databasePassword,

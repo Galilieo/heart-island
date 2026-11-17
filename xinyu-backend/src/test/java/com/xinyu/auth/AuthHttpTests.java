@@ -19,10 +19,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Date;
@@ -45,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthHttpTests {
     @Autowired MockMvc mvc;
     @Autowired JwtUtil jwtUtil;
+    @Value("${JWT_SECRET}") private String jwtSecret;
     @Autowired AiJobService jobs;
     @Autowired MoodRecordService moods;
     @Autowired MoodReviewService reviews;
@@ -85,9 +86,8 @@ class AuthHttpTests {
 
     @Test
     void expiredTokenReturns401() throws Exception {
-        String secret = (String) ReflectionTestUtils.getField(JwtUtil.class, "SECRET");
         String expired = JWT.create().withClaim("userId", 11L)
-                .withExpiresAt(new Date(1)).sign(Algorithm.HMAC256(secret));
+                .withExpiresAt(new Date(1)).sign(Algorithm.HMAC256(jwtSecret));
         mvc.perform(get("/mood/list").header("token", expired))
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value(401));
     }
