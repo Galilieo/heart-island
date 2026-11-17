@@ -1,0 +1,20 @@
+{
+  "P1": {
+    "n": 10,
+    "bad": 0,
+    "bad_kinds": {},
+    "ok_interrupted": 10
+  },
+  "P2": {
+    "n": 10,
+    "bad": 0,
+    "bad_kinds": {},
+    "ok_interrupted": 10
+  },
+  "P3": {
+    "n": 10,
+    "bad": 0,
+    "bad_kinds": {},
+    "ok_interrupted": 10
+  }
+}

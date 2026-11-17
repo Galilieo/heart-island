@@ -1,0 +1,241 @@
+{
+  "new": {
+    "c1": {
+      "n": 200,
+      "save_latency": {
+        "n": 200,
+        "mean": 7.0,
+        "p50": 6,
+        "p95": 10,
+        "p99": 24,
+        "min": 3,
+        "max": 30
+      },
+      "http_ok": 200,
+      "errors": 0,
+      "error_kinds": {},
+      "terminals": {
+        "succeeded": 200
+      },
+      "visible_latency_succeeded_only": {
+        "n": 200,
+        "mean": 2008.23,
+        "p50": 2084,
+        "p95": 2122,
+        "p99": 2178,
+        "min": 1872,
+        "max": 2351
+      },
+      "upstream": {
+        "calls": 200,
+        "duration_ms": {
+          "n": 200,
+          "mean": 1303.67,
+          "p50": 1305,
+          "p95": 1305,
+          "p99": 1306,
+          "min": 1300,
+          "max": 1306
+        }
+      }
+    },
+    "c5": {
+      "n": 200,
+      "save_latency": {
+        "n": 200,
+        "mean": 7.05,
+        "p50": 7,
+        "p95": 11,
+        "p99": 15,
+        "min": 3,
+        "max": 18
+      },
+      "http_ok": 200,
+      "errors": 0,
+      "error_kinds": {},
+      "terminals": {
+        "succeeded": 200
+      },
+      "visible_latency_succeeded_only": {
+        "n": 200,
+        "mean": 3331.18,
+        "p50": 3962,
+        "p95": 4178,
+        "p99": 4182,
+        "min": 1868,
+        "max": 4189
+      },
+      "upstream": {
+        "calls": 200,
+        "duration_ms": {
+          "n": 200,
+          "mean": 1304.68,
+          "p50": 1305,
+          "p95": 1306,
+          "p99": 1306,
+          "min": 1300,
+          "max": 1306
+        }
+      }
+    },
+    "c10": {
+      "n": 200,
+      "save_latency": {
+        "n": 200,
+        "mean": 7.14,
+        "p50": 6,
+        "p95": 15,
+        "p99": 26,
+        "min": 2,
+        "max": 31
+      },
+      "http_ok": 200,
+      "errors": 0,
+      "error_kinds": {},
+      "terminals": {
+        "succeeded": 200
+      },
+      "visible_latency_succeeded_only": {
+        "n": 200,
+        "mean": 6572.4,
+        "p50": 6086,
+        "p95": 8146,
+        "p99": 8186,
+        "min": 2093,
+        "max": 8190
+      },
+      "upstream": {
+        "calls": 200,
+        "duration_ms": {
+          "n": 200,
+          "mean": 1304.6,
+          "p50": 1305,
+          "p95": 1305,
+          "p99": 1306,
+          "min": 1300,
+          "max": 1306
+        }
+      }
+    }
+  },
+  "old": {
+    "c1": {
+      "n": 200,
+      "save_latency": {
+        "n": 200,
+        "mean": 1318.69,
+        "p50": 1318,
+        "p95": 1324,
+        "p99": 1329,
+        "min": 1310,
+        "max": 1401
+      },
+      "http_ok": 200,
+      "errors": 0,
+      "error_kinds": {},
+      "terminals": {
+        "succeeded": 200
+      },
+      "visible_latency_succeeded_only": {
+        "n": 200,
+        "mean": 1318.69,
+        "p50": 1318,
+        "p95": 1324,
+        "p99": 1329,
+        "min": 1310,
+        "max": 1401
+      },
+      "upstream": {
+        "calls": 200,
+        "duration_ms": {
+          "n": 200,
+          "mean": 1303.68,
+          "p50": 1305,
+          "p95": 1305,
+          "p99": 1306,
+          "min": 1300,
+          "max": 1306
+        }
+      }
+    },
+    "c5": {
+      "n": 200,
+      "save_latency": {
+        "n": 200,
+        "mean": 1283.3,
+        "p50": 1316,
+        "p95": 1321,
+        "p99": 1328,
+        "min": 8,
+        "max": 1328
+      },
+      "http_ok": 200,
+      "errors": 0,
+      "error_kinds": {},
+      "terminals": {
+        "succeeded": 200
+      },
+      "visible_latency_succeeded_only": {
+        "n": 200,
+        "mean": 1283.3,
+        "p50": 1316,
+        "p95": 1321,
+        "p99": 1328,
+        "min": 8,
+        "max": 1328
+      },
+      "upstream": {
+        "calls": 195,
+        "duration_ms": {
+          "n": 195,
+          "mean": 1303.68,
+          "p50": 1304,
+          "p95": 1305,
+          "p99": 1306,
+          "min": 1300,
+          "max": 1306
+        }
+      }
+    },
+    "c10": {
+      "n": 200,
+      "save_latency": {
+        "n": 200,
+        "mean": 1224.87,
+        "p50": 1315,
+        "p95": 1324,
+        "p99": 1329,
+        "min": 6,
+        "max": 1332
+      },
+      "http_ok": 200,
+      "errors": 0,
+      "error_kinds": {},
+      "terminals": {
+        "succeeded": 200
+      },
+      "visible_latency_succeeded_only": {
+        "n": 200,
+        "mean": 1224.87,
+        "p50": 1315,
+        "p95": 1324,
+        "p99": 1329,
+        "min": 6,
+        "max": 1332
+      },
+      "upstream": {
+        "calls": 186,
+        "duration_ms": {
+          "n": 186,
+          "mean": 1302.84,
+          "p50": 1303,
+          "p95": 1305,
+          "p99": 1307,
+          "min": 1300,
+          "max": 1308
+        }
+      }
+    }
+  },
+  "upstream": {}
+}

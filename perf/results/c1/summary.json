@@ -1,0 +1,32 @@
+{
+  "S1_update_during_generation": {
+    "n": 50,
+    "bad": 0,
+    "bad_kinds": {}
+  },
+  "S2_update_after_complete": {
+    "n": 50,
+    "bad": 0,
+    "bad_kinds": {}
+  },
+  "S3_delete_during_generation": {
+    "n": 50,
+    "bad": 0,
+    "bad_kinds": {}
+  },
+  "S4_delete_after_complete": {
+    "n": 50,
+    "bad": 0,
+    "bad_kinds": {}
+  },
+  "S5_retry_vs_update": {
+    "n": 50,
+    "bad": 0,
+    "bad_kinds": {}
+  },
+  "S6_retry_vs_delete": {
+    "n": 50,
+    "bad": 0,
+    "bad_kinds": {}
+  }
+}

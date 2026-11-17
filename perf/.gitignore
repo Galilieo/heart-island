@@ -1,0 +1,5 @@
+__pycache__/
+bench/out/
+results/logs/
+results/b5/data_*.sql
+results/pids/

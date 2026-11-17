@@ -1,0 +1,276 @@
+{
+  "new": {
+    "truncated_json": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "provider_error": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 5.3,
+        "p50": 5,
+        "p95": 8,
+        "p99": null,
+        "min": 3,
+        "max": 8
+      }
+    },
+    "control_ok": {
+      "denom": 20,
+      "job_succeeded": 20,
+      "log_success": 20,
+      "public_any_reply": 20,
+      "public_fallback": 0,
+      "error_codes": {},
+      "save_ms": {
+        "n": 20,
+        "mean": 10.05,
+        "p50": 9,
+        "p95": 18,
+        "p99": null,
+        "min": 5,
+        "max": 24
+      }
+    },
+    "http_500": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "provider_error": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 5.25,
+        "p50": 5,
+        "p95": 9,
+        "p99": null,
+        "min": 2,
+        "max": 10
+      }
+    },
+    "invalid_json": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "invalid_model_response": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 5.95,
+        "p50": 6,
+        "p95": 10,
+        "p99": null,
+        "min": 3,
+        "max": 11
+      }
+    },
+    "empty_content": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "invalid_model_response": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 6.1,
+        "p50": 6,
+        "p95": 8,
+        "p99": null,
+        "min": 4,
+        "max": 11
+      }
+    },
+    "blank_content": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "invalid_model_response": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 5.85,
+        "p50": 6,
+        "p95": 7,
+        "p99": null,
+        "min": 4,
+        "max": 8
+      }
+    },
+    "http_429": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "provider_error": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 5.4,
+        "p50": 5,
+        "p95": 9,
+        "p99": null,
+        "min": 3,
+        "max": 14
+      }
+    },
+    "read_timeout": {
+      "denom": 20,
+      "job_succeeded": 0,
+      "log_success": 0,
+      "public_any_reply": 0,
+      "public_fallback": 0,
+      "error_codes": {
+        "provider_timeout": 20
+      },
+      "save_ms": {
+        "n": 20,
+        "mean": 7.55,
+        "p50": 7,
+        "p95": 12,
+        "p99": null,
+        "min": 3,
+        "max": 12
+      }
+    }
+  },
+  "old": {
+    "truncated_json": {
+      "denom": 20,
+      "log_success": 0,
+      "public_fallback": 20,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 1320.0,
+        "p50": 1319,
+        "p95": 1323,
+        "p99": null,
+        "min": 1315,
+        "max": 1328
+      }
+    },
+    "control_ok": {
+      "denom": 20,
+      "log_success": 20,
+      "public_fallback": 0,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 1322.5,
+        "p50": 1321,
+        "p95": 1329,
+        "p99": null,
+        "min": 1316,
+        "max": 1355
+      }
+    },
+    "http_500": {
+      "denom": 20,
+      "log_success": 0,
+      "public_fallback": 20,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 7.15,
+        "p50": 7,
+        "p95": 8,
+        "p99": null,
+        "min": 6,
+        "max": 10
+      }
+    },
+    "invalid_json": {
+      "denom": 20,
+      "log_success": 0,
+      "public_fallback": 20,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 1320.05,
+        "p50": 1321,
+        "p95": 1324,
+        "p99": null,
+        "min": 1315,
+        "max": 1326
+      }
+    },
+    "empty_content": {
+      "denom": 20,
+      "log_success": 20,
+      "public_fallback": 20,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 1320.2,
+        "p50": 1320,
+        "p95": 1323,
+        "p99": null,
+        "min": 1315,
+        "max": 1324
+      }
+    },
+    "blank_content": {
+      "denom": 20,
+      "log_success": 20,
+      "public_fallback": 20,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 1320.05,
+        "p50": 1320,
+        "p95": 1323,
+        "p99": null,
+        "min": 1314,
+        "max": 1324
+      }
+    },
+    "http_429": {
+      "denom": 20,
+      "log_success": 0,
+      "public_fallback": 20,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 6.9,
+        "p50": 7,
+        "p95": 8,
+        "p99": null,
+        "min": 6,
+        "max": 8
+      }
+    },
+    "read_timeout": {
+      "denom": 20,
+      "log_success": 20,
+      "public_fallback": 0,
+      "public_any_reply": 20,
+      "save_ms": {
+        "n": 20,
+        "mean": 50031.05,
+        "p50": 50031,
+        "p95": 50041,
+        "p99": null,
+        "min": 50015,
+        "max": 50050
+      }
+    }
+  }
+}

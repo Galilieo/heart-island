@@ -1,0 +1,5 @@
+-- EXPLAIN ANALYZE SELECT * FROM ai_job WHERE task_type='MOOD_REPLY' AND target_id=1001 AND target_version=1 AND user_id=1
+EXPLAIN
+-> Rows fetched before execution  (cost=0..0 rows=1) (actual time=41e-6..83e-6 rows=1 loops=1)\n
+
+mysql: [Warning] Using a password on the command line interface can be insecure.

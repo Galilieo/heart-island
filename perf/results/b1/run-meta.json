@@ -1,0 +1,22 @@
+{
+  "test": "b1_save_latency",
+  "profiles": [
+    {
+      "concurrency": 1,
+      "total": 200
+    },
+    {
+      "concurrency": 5,
+      "total": 200
+    },
+    {
+      "concurrency": 10,
+      "total": 200
+    }
+  ],
+  "poll_interval_ms": 200,
+  "upstream_latency_ms": 1300,
+  "users_per_profile": 20,
+  "note": "闭环并发=完整用户旅程（新版含等待任务终态）；详见脚本 docstring",
+  "written_at": "2026-11-17 13:29:49"
+}

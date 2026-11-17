@@ -1,0 +1,39 @@
+{
+  "local_backend_save_ms": {
+    "n": 60,
+    "mean": 4.22,
+    "p50": 4,
+    "p95": 5,
+    "p99": null,
+    "min": 2,
+    "max": 21
+  },
+  "redis_backend_save_ms": {
+    "n": 60,
+    "mean": 6.42,
+    "p50": 4,
+    "p95": 6,
+    "p99": null,
+    "min": 2,
+    "max": 149
+  },
+  "degrade_switch": {
+    "first_after_redis_down": {
+      "ms": 213,
+      "code": 200
+    },
+    "in_cooldown_ms": {
+      "n": 4,
+      "mean": 7.25,
+      "p50": 6,
+      "p95": 10,
+      "p99": null,
+      "min": 4,
+      "max": 10
+    },
+    "first_after_cooldown_expired": {
+      "ms": 222,
+      "code": 200
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "test": "b4_ratelimit_overhead_app",
+  "db": "xinyu_test_eval_b4_new",
+  "redis": "127.0.0.1:6390/0",
+  "redis_timeout_ms": 200,
+  "fallback_cooldown_s": 30,
+  "component_bench": "perf/bench/RateLimitBench.java",
+  "written_at": "2026-11-17 15:17:17"
+}

@@ -1,0 +1,20 @@
+{
+  "test": "b2_fault_matrix",
+  "faults": [
+    "empty_content",
+    "blank_content",
+    "truncated_json",
+    "invalid_json",
+    "http_500",
+    "http_429",
+    "read_timeout"
+  ],
+  "n_per_fault": 20,
+  "control": 20,
+  "read_timeout_upstream_sleep_ms": 50000,
+  "dbs": [
+    "xinyu_test_eval_b2_new",
+    "xinyu_test_eval_b2_old"
+  ],
+  "written_at": "2026-11-17 13:51:58"
+}

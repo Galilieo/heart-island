@@ -1,0 +1,272 @@
+[
+  {
+    "tag": "L30",
+    "rpm_target": 30,
+    "minutes": 5,
+    "sent": 150,
+    "http_ok": 150,
+    "client_errors": 0,
+    "save_latency": {
+      "n": 150,
+      "mean": 13.15,
+      "p50": 11,
+      "p95": 19,
+      "p99": 43,
+      "min": 5,
+      "max": 224
+    },
+    "upstream_calls": 150,
+    "queue_wait_ms": {
+      "n": 150,
+      "mean": 521.93,
+      "p50": 525,
+      "p95": 976,
+      "p99": 1007,
+      "min": 11,
+      "max": 1009
+    },
+    "exec_duration_ms": {
+      "n": 150,
+      "mean": 1303.67,
+      "p50": 1304,
+      "p95": 1305,
+      "p99": 1306,
+      "min": 1300,
+      "max": 1306
+    },
+    "max_queue_depth": 2,
+    "java_cpu_max": 92.7,
+    "java_rss_max_mb": 361.6,
+    "py_cpu_max": 0,
+    "py_rss_max_mb": 18.1,
+    "db_conn_max": 10,
+    "job_outcomes": {
+      "succeeded:NULL": 150
+    },
+    "completions_per_minute": {
+      "0": 22,
+      "1": 30,
+      "2": 30,
+      "3": 30,
+      "4": 30,
+      "5": 8
+    }
+  },
+  {
+    "tag": "L60",
+    "rpm_target": 60,
+    "minutes": 5,
+    "sent": 300,
+    "http_ok": 300,
+    "client_errors": 0,
+    "save_latency": {
+      "n": 300,
+      "mean": 9.89,
+      "p50": 10,
+      "p95": 13,
+      "p99": 17,
+      "min": 3,
+      "max": 41
+    },
+    "upstream_calls": 300,
+    "queue_wait_ms": {
+      "n": 300,
+      "mean": 495.43,
+      "p50": 510,
+      "p95": 965,
+      "p99": 1011,
+      "min": 13,
+      "max": 1023
+    },
+    "exec_duration_ms": {
+      "n": 300,
+      "mean": 1303.4,
+      "p50": 1304,
+      "p95": 1305,
+      "p99": 1306,
+      "min": 1299,
+      "max": 1306
+    },
+    "max_queue_depth": 3,
+    "java_cpu_max": 97.1,
+    "java_rss_max_mb": 251.8,
+    "py_cpu_max": 0,
+    "py_rss_max_mb": 5.1,
+    "db_conn_max": 10,
+    "job_outcomes": {
+      "succeeded:NULL": 300
+    },
+    "completions_per_minute": {
+      "0": 32,
+      "1": 60,
+      "2": 59,
+      "3": 60,
+      "4": 60,
+      "5": 29
+    }
+  },
+  {
+    "tag": "L120",
+    "rpm_target": 120,
+    "minutes": 5,
+    "sent": 600,
+    "http_ok": 600,
+    "client_errors": 0,
+    "save_latency": {
+      "n": 600,
+      "mean": 8.26,
+      "p50": 8,
+      "p95": 11,
+      "p99": 19,
+      "min": 3,
+      "max": 37
+    },
+    "upstream_calls": 524,
+    "queue_wait_ms": {
+      "n": 524,
+      "mean": 36932.41,
+      "p50": 44113,
+      "p95": 57481,
+      "p99": 58612,
+      "min": 294,
+      "max": 58798
+    },
+    "exec_duration_ms": {
+      "n": 524,
+      "mean": 1303.49,
+      "p50": 1304,
+      "p95": 1305,
+      "p99": 1306,
+      "min": 1300,
+      "max": 1306
+    },
+    "max_queue_depth": 90,
+    "java_cpu_max": 87.1,
+    "java_rss_max_mb": 241.4,
+    "py_cpu_max": 0,
+    "py_rss_max_mb": 5.1,
+    "db_conn_max": 10,
+    "job_outcomes": {
+      "succeeded:NULL": 524,
+      "failed:capacity_exceeded": 76
+    },
+    "completions_per_minute": {
+      "0": 61,
+      "1": 89,
+      "2": 90,
+      "3": 90,
+      "4": 90,
+      "5": 88,
+      "6": 16
+    }
+  },
+  {
+    "tag": "L240",
+    "rpm_target": 240,
+    "minutes": 5,
+    "sent": 1200,
+    "http_ok": 1200,
+    "client_errors": 0,
+    "save_latency": {
+      "n": 1200,
+      "mean": 7.8,
+      "p50": 7,
+      "p95": 10,
+      "p99": 14,
+      "min": 3,
+      "max": 109
+    },
+    "upstream_calls": 534,
+    "queue_wait_ms": {
+      "n": 534,
+      "mean": 48368.64,
+      "p50": 53975,
+      "p95": 58464,
+      "p99": 58801,
+      "min": 382,
+      "max": 58870
+    },
+    "exec_duration_ms": {
+      "n": 534,
+      "mean": 1304.67,
+      "p50": 1305,
+      "p95": 1306,
+      "p99": 1306,
+      "min": 1300,
+      "max": 1306
+    },
+    "max_queue_depth": 90,
+    "java_cpu_max": 97.3,
+    "java_rss_max_mb": 241.0,
+    "py_cpu_max": 0,
+    "py_rss_max_mb": 5.1,
+    "db_conn_max": 10,
+    "job_outcomes": {
+      "succeeded:NULL": 534,
+      "failed:capacity_exceeded": 666
+    },
+    "completions_per_minute": {
+      "0": 87,
+      "1": 90,
+      "2": 90,
+      "3": 87,
+      "4": 90,
+      "5": 90
+    }
+  },
+  {
+    "tag": "E240x300ms",
+    "rpm_target": 240,
+    "minutes": 5,
+    "sent": 1200,
+    "http_ok": 1200,
+    "client_errors": 0,
+    "save_latency": {
+      "n": 1200,
+      "mean": 6.17,
+      "p50": 5,
+      "p95": 9,
+      "p99": 18,
+      "min": 2,
+      "max": 192
+    },
+    "upstream_calls": 972,
+    "queue_wait_ms": {
+      "n": 972,
+      "mean": 22185.42,
+      "p50": 24802,
+      "p95": 29205,
+      "p99": 29650,
+      "min": 206,
+      "max": 29808
+    },
+    "exec_duration_ms": {
+      "n": 972,
+      "mean": 304.16,
+      "p50": 305,
+      "p95": 306,
+      "p99": 306,
+      "min": 300,
+      "max": 307
+    },
+    "max_queue_depth": 90,
+    "java_cpu_max": 91.6,
+    "java_rss_max_mb": 215.4,
+    "py_cpu_max": 0,
+    "py_rss_max_mb": 5.0,
+    "db_conn_max": 10,
+    "job_outcomes": {
+      "succeeded:NULL": 972,
+      "failed:capacity_exceeded": 228
+    },
+    "completions_per_minute": {
+      "0": 33,
+      "1": 180,
+      "2": 177,
+      "3": 180,
+      "4": 180,
+      "5": 180,
+      "6": 42
+    }
+  }
+]

@@ -1,0 +1,574 @@
+{
+  "t1": {
+    "tier": {
+      "tag": "t1",
+      "mood": 1000,
+      "posts_per_topic": 100
+    },
+    "records": {
+      "mood_list_page1": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 12.8,
+          "p50": 10,
+          "p95": 15,
+          "p99": null,
+          "min": 7,
+          "max": 65
+        },
+        "sql_counts_probes": [
+          16,
+          16,
+          16
+        ],
+        "sql_count_median": 16,
+        "digests": {
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            30,
+            1945000000
+          ],
+          "08ae215d5011afe685cb8f77016293f6e31fad25288b614cf9267d331eb2ac72": [
+            3,
+            800000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            500000000
+          ],
+          "f27e65463f90c3c7ee3353f872fa77f0f1b4d42b5302604641a46d9c16e0a416": [
+            3,
+            307000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            181000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            93000000
+          ]
+        }
+      },
+      "mood_list_deep": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 10.15,
+          "p50": 7,
+          "p95": 17,
+          "p99": null,
+          "min": 6,
+          "max": 25
+        },
+        "sql_counts_probes": [
+          16,
+          16,
+          16
+        ],
+        "sql_count_median": 16,
+        "digests": {
+          "a7eb397da850d50639e1282e9b1bdbd82607cfd6977147905792b8d1cd046e82": [
+            3,
+            4679000000
+          ],
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            30,
+            3242000000
+          ],
+          "08ae215d5011afe685cb8f77016293f6e31fad25288b614cf9267d331eb2ac72": [
+            3,
+            1711000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            802000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            506000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            125000000
+          ]
+        }
+      },
+      "mood_list_filter": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 7.95,
+          "p50": 8,
+          "p95": 10,
+          "p99": null,
+          "min": 5,
+          "max": 14
+        },
+        "sql_counts_probes": [
+          16,
+          16,
+          16
+        ],
+        "sql_count_median": 16,
+        "digests": {
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            30,
+            1740000000
+          ],
+          "dbe1dee57a2a11deb0098ddcc31cf27be4e29d39334819ccfcaad0b37ea3ea0b": [
+            3,
+            1213000000
+          ],
+          "390c82b488fb1ee4063dbdc9c1ab588d156663685987c3a082fa5287b3bb8b68": [
+            3,
+            1117000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            612000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            401000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            99000000
+          ]
+        }
+      },
+      "mood_detail": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 3.25,
+          "p50": 3,
+          "p95": 5,
+          "p99": null,
+          "min": 1,
+          "max": 6
+        },
+        "sql_counts_probes": [
+          6,
+          6,
+          6
+        ],
+        "sql_count_median": 6,
+        "digests": {
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            559000000
+          ],
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            3,
+            336000000
+          ],
+          "3c63ff41dea1a1674dd5dae758ca2534a4d3571a3eba7d0a0535e345ab7aebfe": [
+            3,
+            283000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            207000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            78000000
+          ]
+        }
+      },
+      "job_get": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 5.65,
+          "p50": 4,
+          "p95": 11,
+          "p99": null,
+          "min": 2,
+          "max": 22
+        },
+        "sql_counts_probes": [
+          6,
+          6,
+          6
+        ],
+        "sql_count_median": 6,
+        "digests": {
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            919000000
+          ],
+          "ec0a508c2e8e7b414432c7cc74fe7bb26784f9d741c8e2e83275e110aaa49d27": [
+            3,
+            631000000
+          ],
+          "3c63ff41dea1a1674dd5dae758ca2534a4d3571a3eba7d0a0535e345ab7aebfe": [
+            3,
+            432000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            380000000
+          ],
+          "3e67fa9d38d82054e7fc01fe3ee8844dc76faaaefbd74d213a2af42e60e95520": [
+            3,
+            140000000
+          ]
+        }
+      },
+      "community_list_topic1": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 20.05,
+          "p50": 17,
+          "p95": 32,
+          "p99": null,
+          "min": 16,
+          "max": 48
+        },
+        "sql_counts_probes": [
+          232,
+          232,
+          232
+        ],
+        "sql_count_median": 232,
+        "digests": {
+          "cdc68ee07f522adc52643dc96563ce681565ebf6e00c4069b81afd159696be1a": [
+            345,
+            9047000000
+          ],
+          "92776966626773e2a7eb40f541742d1334d43a0d33b1449a5ed38a67b128a9c5": [
+            345,
+            8888000000
+          ],
+          "60ceeb4dc05ee435fe0c8c92f8e3889b3dfadebc7159d1e96c5b4f4a2b205a5f": [
+            3,
+            872000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            388000000
+          ]
+        }
+      },
+      "community_list_hot": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 16.15,
+          "p50": 15,
+          "p95": 22,
+          "p99": null,
+          "min": 13,
+          "max": 35
+        },
+        "sql_counts_probes": [
+          232,
+          232,
+          232
+        ],
+        "sql_count_median": 232,
+        "digests": {
+          "cdc68ee07f522adc52643dc96563ce681565ebf6e00c4069b81afd159696be1a": [
+            345,
+            9488000000
+          ],
+          "92776966626773e2a7eb40f541742d1334d43a0d33b1449a5ed38a67b128a9c5": [
+            345,
+            9208000000
+          ],
+          "6cad9c95278980025af67a5b9c89d0a1da32c9c4c13650393580f98e133abbef": [
+            3,
+            925000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            379000000
+          ]
+        }
+      }
+    }
+  },
+  "t2": {
+    "tier": {
+      "tag": "t2",
+      "mood": 20000,
+      "posts_per_topic": 1000
+    },
+    "records": {
+      "mood_list_page1": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 14.4,
+          "p50": 12,
+          "p95": 18,
+          "p99": null,
+          "min": 10,
+          "max": 64
+        },
+        "sql_counts_probes": [
+          16,
+          16,
+          16
+        ],
+        "sql_count_median": 16,
+        "digests": {
+          "08ae215d5011afe685cb8f77016293f6e31fad25288b614cf9267d331eb2ac72": [
+            3,
+            16008000000
+          ],
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            30,
+            1872000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            601000000
+          ],
+          "f27e65463f90c3c7ee3353f872fa77f0f1b4d42b5302604641a46d9c16e0a416": [
+            3,
+            482000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            255000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            96000000
+          ]
+        }
+      },
+      "mood_list_deep": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 20.4,
+          "p50": 18,
+          "p95": 33,
+          "p99": null,
+          "min": 17,
+          "max": 46
+        },
+        "sql_counts_probes": [
+          16,
+          16,
+          16
+        ],
+        "sql_count_median": 16,
+        "digests": {
+          "a7eb397da850d50639e1282e9b1bdbd82607cfd6977147905792b8d1cd046e82": [
+            3,
+            69074000000
+          ],
+          "08ae215d5011afe685cb8f77016293f6e31fad25288b614cf9267d331eb2ac72": [
+            3,
+            15715000000
+          ],
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            30,
+            1348000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            589000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            240000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            64000000
+          ]
+        }
+      },
+      "mood_list_filter": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 10.4,
+          "p50": 10,
+          "p95": 17,
+          "p99": null,
+          "min": 7,
+          "max": 17
+        },
+        "sql_counts_probes": [
+          16,
+          16,
+          16
+        ],
+        "sql_count_median": 16,
+        "digests": {
+          "390c82b488fb1ee4063dbdc9c1ab588d156663685987c3a082fa5287b3bb8b68": [
+            3,
+            9433000000
+          ],
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            30,
+            2733000000
+          ],
+          "dbe1dee57a2a11deb0098ddcc31cf27be4e29d39334819ccfcaad0b37ea3ea0b": [
+            3,
+            2026000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            682000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            273000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            112000000
+          ]
+        }
+      },
+      "mood_detail": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 2.1,
+          "p50": 2,
+          "p95": 3,
+          "p99": null,
+          "min": 1,
+          "max": 7
+        },
+        "sql_counts_probes": [
+          6,
+          6,
+          6
+        ],
+        "sql_count_median": 6,
+        "digests": {
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            519000000
+          ],
+          "caf083a182b550a92a9fee49d51c8a9104f329c49fbe8a59007c7fa15631b2c3": [
+            3,
+            258000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            214000000
+          ],
+          "3c63ff41dea1a1674dd5dae758ca2534a4d3571a3eba7d0a0535e345ab7aebfe": [
+            3,
+            180000000
+          ],
+          "f2b9be5f0f32ca7507e4ddf133cd2fad0993a1c26fde9caa6f067b1af2b7603c": [
+            3,
+            75000000
+          ]
+        }
+      },
+      "job_get": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 2.5,
+          "p50": 2,
+          "p95": 4,
+          "p99": null,
+          "min": 1,
+          "max": 9
+        },
+        "sql_counts_probes": [
+          6,
+          6,
+          6
+        ],
+        "sql_count_median": 6,
+        "digests": {
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            613000000
+          ],
+          "ec0a508c2e8e7b414432c7cc74fe7bb26784f9d741c8e2e83275e110aaa49d27": [
+            3,
+            383000000
+          ],
+          "158bfe3d4b4b0a372a4acdb38affe2cb4f6b3cb21a9af0ea9fad9a9a083ac18a": [
+            6,
+            337000000
+          ],
+          "3c63ff41dea1a1674dd5dae758ca2534a4d3571a3eba7d0a0535e345ab7aebfe": [
+            3,
+            318000000
+          ],
+          "3e67fa9d38d82054e7fc01fe3ee8844dc76faaaefbd74d213a2af42e60e95520": [
+            3,
+            141000000
+          ]
+        }
+      },
+      "community_list_topic1": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 119.1,
+          "p50": 115,
+          "p95": 137,
+          "p99": null,
+          "min": 103,
+          "max": 184
+        },
+        "sql_counts_probes": [
+          2102,
+          2102,
+          2102
+        ],
+        "sql_count_median": 2102,
+        "digests": {
+          "cdc68ee07f522adc52643dc96563ce681565ebf6e00c4069b81afd159696be1a": [
+            3150,
+            54975000000
+          ],
+          "92776966626773e2a7eb40f541742d1334d43a0d33b1449a5ed38a67b128a9c5": [
+            3150,
+            53769000000
+          ],
+          "60ceeb4dc05ee435fe0c8c92f8e3889b3dfadebc7159d1e96c5b4f4a2b205a5f": [
+            3,
+            5144000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            502000000
+          ]
+        }
+      },
+      "community_list_hot": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 106.0,
+          "p50": 104,
+          "p95": 116,
+          "p99": null,
+          "min": 104,
+          "max": 124
+        },
+        "sql_counts_probes": [
+          2102,
+          2102,
+          2102
+        ],
+        "sql_count_median": 2102,
+        "digests": {
+          "cdc68ee07f522adc52643dc96563ce681565ebf6e00c4069b81afd159696be1a": [
+            3150,
+            55023000000
+          ],
+          "92776966626773e2a7eb40f541742d1334d43a0d33b1449a5ed38a67b128a9c5": [
+            3150,
+            53552000000
+          ],
+          "6cad9c95278980025af67a5b9c89d0a1da32c9c4c13650393580f98e133abbef": [
+            3,
+            6080000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            464000000
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+-- EXPLAIN ANALYZE SELECT * FROM community_post WHERE status=1 AND topic_id=1 ORDER BY create_time DESC
+EXPLAIN
+-> Index lookup on community_post using idx_post_topic_status_time (topic_id=1, status=1) (reverse)  (cost=130 rows=1050) (actual time=0.0283..1.57 rows=1050 loops=1)\n
+
+mysql: [Warning] Using a password on the command line interface can be insecure.

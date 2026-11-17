@@ -1,0 +1,14 @@
+{
+  "test": "c1_concurrent_writes",
+  "n_per_scenario": 50,
+  "scenarios": [
+    "scenario_s1",
+    "scenario_s2",
+    "scenario_s3",
+    "scenario_s4",
+    "scenario_s5",
+    "scenario_s6"
+  ],
+  "db": "xinyu_test_eval_c1_new",
+  "written_at": "2026-11-17 16:46:28"
+}

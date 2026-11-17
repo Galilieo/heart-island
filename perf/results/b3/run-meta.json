@@ -1,0 +1,47 @@
+{
+  "test": "b3_throughput",
+  "levels": [
+    {
+      "tag": "L30",
+      "rpm": 30,
+      "minutes": 5,
+      "latency_ms": 1300
+    },
+    {
+      "tag": "L60",
+      "rpm": 60,
+      "minutes": 5,
+      "latency_ms": 1300
+    },
+    {
+      "tag": "L120",
+      "rpm": 120,
+      "minutes": 5,
+      "latency_ms": 1300
+    },
+    {
+      "tag": "L240",
+      "rpm": 240,
+      "minutes": 5,
+      "latency_ms": 1300
+    },
+    {
+      "tag": "E240x300ms",
+      "rpm": 240,
+      "minutes": 5,
+      "latency_ms": 300
+    }
+  ],
+  "users_per_level": 30,
+  "rate_limits_overridden": {
+    "mood_per_hour": 100000,
+    "mood_per_day": 1000000,
+    "global_per_hour": 100000
+  },
+  "queue_caps_product_constants": {
+    "max_queued": 100,
+    "max_active_per_user": 3
+  },
+  "note": "E240x300ms 为瓶颈归因证据档：上游延迟改 300ms，其余与 L240 相同",
+  "written_at": "2026-11-17 15:12:19"
+}

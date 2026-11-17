@@ -1,0 +1,5 @@
+-- EXPLAIN ANALYZE SELECT id FROM mood_record WHERE user_id=1 AND status=1 ORDER BY create_time DESC LIMIT 10 OFFSET 0
+EXPLAIN
+-> Limit: 10 row(s)  (cost=999 rows=10) (actual time=0.157..0.159 rows=10 loops=1)\n    -> Covering index lookup on mood_record using idx_mood_record_user_status_time (user_id=1, status=1) (reverse)  (cost=999 rows=9918) (actual time=0.157..0.158 rows=10 loops=1)\n
+
+mysql: [Warning] Using a password on the command line interface can be insecure.

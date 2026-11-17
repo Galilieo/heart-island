@@ -1,0 +1,5 @@
+-- EXPLAIN ANALYZE SELECT COUNT(*) FROM post_like WHERE post_id=1 AND user_id=1
+EXPLAIN
+-> Zero input rows (no matching row in const table), aggregated into one output row  (cost=0..0 rows=1) (actual time=124e-6..166e-6 rows=1 loops=1)\n
+
+mysql: [Warning] Using a password on the command line interface can be insecure.

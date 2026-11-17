@@ -1,0 +1,8 @@
+{
+  "test": "c2_restart_recovery",
+  "n_per_point": 10,
+  "db": "xinyu_test_eval_c2_new",
+  "kill": "SIGKILL (kill -9) java 进程",
+  "recovery": "SmartLifecycle 启动 recoverInterrupted",
+  "written_at": "2026-11-17 17:07:36"
+}

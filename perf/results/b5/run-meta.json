@@ -1,0 +1,19 @@
+{
+  "test": "b5_sql_metering",
+  "tiers": [
+    {
+      "tag": "t1",
+      "mood": 1000,
+      "posts_per_topic": 100
+    },
+    {
+      "tag": "t2",
+      "mood": 20000,
+      "posts_per_topic": 1000
+    }
+  ],
+  "reps": 20,
+  "sql_probe_method": "performance_schema digest delta",
+  "note": "worker 关闭后测读路径；EXPLAIN ANALYZE 单独执行",
+  "written_at": "2026-11-17 15:22:27"
+}
