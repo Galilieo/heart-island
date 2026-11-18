@@ -16,7 +16,7 @@
 3. 判断是否需要 Pinia store。
 4. 拆页面组件和状态。
 5. 补加载、空状态、错误提示、权限跳转。
-6. 执行 `npm run build` 或必要的页面自测。
+6. 执行 `npm run format:check`、`npm test` 与 `npm run build`，以及必要的页面自测。
 
 ## 交互要求
 
@@ -32,6 +32,7 @@
 - 不擅自引入新的 UI 库。
 - 不把大段业务逻辑塞进模板。
 - API 字段转换尽量集中在接口层或明确的适配函数中。
+- 排版交给 Prettier（`xinyu-vue/.prettierrc.json`：不加分号、单引号、行宽 100、不加末尾逗号），提交前 `npm run format:check` 必须通过；只格式化本次改动涉及的文件，不手工对抗格式器。2026-11-18 起全量 `src/`、`tests/` 已统一格式。
 
 ## 自测重点
 
