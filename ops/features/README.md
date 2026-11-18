@@ -1,15 +1,15 @@
 # 心屿功能开发入口
 
-继续开发先读[接续状态](xinyu-next-session.md)。当前只维护一套总方案和一份正在执行的功能契约，旧草稿不参与日常阅读。
+继续开发先读[接续状态](xinyu-next-session.md)，再搜索当前主题的契约章节。下表是定位索引，不是全文必读清单；旧草稿与结束阶段流水不参与日常阅读。
 
-## 当前只看这些
+## 按主题定位
 
 | 文档 | 用途 |
 | --- | --- |
 | [接续状态](xinyu-next-session.md) | 做到哪一步、下一步怎么接、验证边界 |
 | [升级总方案](xinyu-upgrade-master-plan.md) | 阶段顺序、Java／Python／MySQL 职责与长期边界；按需查阅 |
 | [1a 功能契约](ai-reply-service-v1a.md) | 当前字段、内部／公共 API、状态、并发与失败规则 |
-| [1a 实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md) | Task 1—4 的执行清单；该计划已单独纳入 Git |
+| [1a 实施计划](../../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md) | Task 1—4 已实施；仅按当前问题核对对应 Task，不重新领取旧任务 |
 
 当前进度统一看[接续状态](xinyu-next-session.md)，学习协作遵守[协作约定](../11-learning-collaboration.md)。
 
@@ -21,7 +21,7 @@
 
 ## 需要时再查
 
-- [历史方案](../../docs/history/README.md)：五份早期 v1 草稿、AI 回复可选化方案、旧路线和原一页摘要；只作追溯，不直接执行。
+- [阶段归档](../../AI_WORKLOG/archive/README.md)：已结束阶段接续与执行证据；[历史方案](../../docs/history/README.md)：早期草稿与旧路线。均只在追溯时读取，不直接执行。
 - [参考方案与品牌素材](references/README.md)：用户提供的方案及当前唯一的小芽素材版本；待评估，未因归档自动进入实施。
 - [新功能模板](feature-template.md)：只有开始一个需要独立契约的新功能时才使用，不按聊天轮次重复建方案。
 

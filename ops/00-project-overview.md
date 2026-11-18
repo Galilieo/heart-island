@@ -35,7 +35,4 @@
 
 ## Agent 使用原则
 
-- 先分析，再设计，再等确认，再改代码。
-- 任何新模块都要先沉淀到 `ops/features/` 或 `AI_WORKLOG/feature-dev-template.md`。
-- 输出时区分“已实现”“待设计”“待验证”。
-- 不把本地工作记录当成项目正式文档。
+工作边界与资料归属统一见 [AGENTS.md](../AGENTS.md)，新功能方案见 [ops/06](06-feature-development.md)。本页只提供项目背景，不作为每次任务必读项。
