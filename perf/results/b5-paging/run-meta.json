@@ -1,0 +1,21 @@
+{
+  "test": "b5_community_paging",
+  "tiers": [
+    {
+      "tag": "t1",
+      "mood": 1000,
+      "posts_per_topic": 100
+    },
+    {
+      "tag": "t2",
+      "mood": 20000,
+      "posts_per_topic": 1000
+    }
+  ],
+  "reps": 20,
+  "sql_probes": 3,
+  "sql_probe_method": "performance_schema digest delta",
+  "page_num": 1,
+  "page_size": 10,
+  "written_at": "2026-11-18 08:46:22"
+}

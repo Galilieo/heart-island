@@ -38,6 +38,8 @@ uv run --directory xinyu-ai --locked python ../perf/run_b2.py
 uv run --directory xinyu-ai --locked python ../perf/run_b3.py
 uv run --directory xinyu-ai --locked python ../perf/run_b4_app.py
 uv run --directory xinyu-ai --locked python ../perf/run_b5.py
+# 分页优化复测只跑社区两个端点，沿用 B5 档位、种子、20 次延迟和 3 次 SQL 探测。
+uv run --directory xinyu-ai --locked python ../perf/run_b5.py --community-paging
 uv run --directory xinyu-ai --locked python ../perf/run_c1.py
 uv run --directory xinyu-ai --locked python ../perf/run_c2.py
 uv run --directory xinyu-ai --locked python ../perf/run_d_metrics.py   # 离线，不需要服务
@@ -71,6 +73,7 @@ java -cp "../perf/bench/out:target/classes:$(cat /tmp/xinyu-eval-cp.txt)" \
 | B3 三槽吞吐与排队 | run_b3.py | results/b3/ |
 | B4 限流开销（组件/应用） | bench/RateLimitBench.java + run_b4_app.py | results/b4/ |
 | B5 SQL 计量 | run_b5.py | results/b5/（含 explain/） |
+| 社区列表分页复测 | run_b5.py --community-paging | results/b5-paging/ |
 | C1 并发写入 | run_c1.py | results/c1/ |
 | C2 重启恢复 | run_c2.py | results/c2/ |
 | D 效果指标离线计算 | run_d_metrics.py | results/d/ |

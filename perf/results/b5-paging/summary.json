@@ -1,0 +1,178 @@
+{
+  "t1": {
+    "tier": {
+      "tag": "t1",
+      "mood": 1000,
+      "posts_per_topic": 100
+    },
+    "topic1_posts": 115,
+    "records": {
+      "community_list_topic1": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 8.5,
+          "p50": 5,
+          "p95": 21,
+          "p99": null,
+          "min": 4,
+          "max": 57
+        },
+        "sql_counts_probes": [
+          5,
+          5,
+          5
+        ],
+        "sql_count_median": 5,
+        "digests": {
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            719000000
+          ],
+          "ed3de471dec4c87739f76abd33685650cc92af4ea4ca57221b5a4bd9f8d2ea90": [
+            3,
+            553000000
+          ],
+          "85f2e103589059a5a7531589724a6bd44cec5ab7569ab6a0e1d9c19d28db731d": [
+            3,
+            457000000
+          ],
+          "76580d6b96de13d3a9271dede0a69db8a54c464684fe997dcececd083642e601": [
+            3,
+            456000000
+          ],
+          "c6e038155f7827820354ba8e70a58767a6ffb947ccc1682813f07468f82be3cb": [
+            3,
+            440000000
+          ]
+        }
+      },
+      "community_list_hot": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 5.5,
+          "p50": 5,
+          "p95": 10,
+          "p99": null,
+          "min": 3,
+          "max": 12
+        },
+        "sql_counts_probes": [
+          5,
+          5,
+          5
+        ],
+        "sql_count_median": 5,
+        "digests": {
+          "2f04ad57bebaabafa586866c2cc84ffd4033f93dbdf78d45fbde5fdab332fce3": [
+            3,
+            1189000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            800000000
+          ],
+          "85f2e103589059a5a7531589724a6bd44cec5ab7569ab6a0e1d9c19d28db731d": [
+            3,
+            638000000
+          ],
+          "ed3de471dec4c87739f76abd33685650cc92af4ea4ca57221b5a4bd9f8d2ea90": [
+            3,
+            584000000
+          ],
+          "76580d6b96de13d3a9271dede0a69db8a54c464684fe997dcececd083642e601": [
+            3,
+            455000000
+          ]
+        }
+      }
+    }
+  },
+  "t2": {
+    "tier": {
+      "tag": "t2",
+      "mood": 20000,
+      "posts_per_topic": 1000
+    },
+    "topic1_posts": 1050,
+    "records": {
+      "community_list_topic1": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 9.65,
+          "p50": 6,
+          "p95": 23,
+          "p99": null,
+          "min": 4,
+          "max": 67
+        },
+        "sql_counts_probes": [
+          5,
+          5,
+          5
+        ],
+        "sql_count_median": 5,
+        "digests": {
+          "85f2e103589059a5a7531589724a6bd44cec5ab7569ab6a0e1d9c19d28db731d": [
+            3,
+            1503000000
+          ],
+          "c6e038155f7827820354ba8e70a58767a6ffb947ccc1682813f07468f82be3cb": [
+            3,
+            542000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            516000000
+          ],
+          "ed3de471dec4c87739f76abd33685650cc92af4ea4ca57221b5a4bd9f8d2ea90": [
+            3,
+            492000000
+          ],
+          "76580d6b96de13d3a9271dede0a69db8a54c464684fe997dcececd083642e601": [
+            3,
+            436000000
+          ]
+        }
+      },
+      "community_list_hot": {
+        "latency_ms": {
+          "n": 20,
+          "mean": 5.3,
+          "p50": 5,
+          "p95": 9,
+          "p99": null,
+          "min": 4,
+          "max": 10
+        },
+        "sql_counts_probes": [
+          5,
+          5,
+          5
+        ],
+        "sql_count_median": 5,
+        "digests": {
+          "85f2e103589059a5a7531589724a6bd44cec5ab7569ab6a0e1d9c19d28db731d": [
+            3,
+            1852000000
+          ],
+          "2f04ad57bebaabafa586866c2cc84ffd4033f93dbdf78d45fbde5fdab332fce3": [
+            3,
+            1142000000
+          ],
+          "a9f1caa52946c9fbefa39e89c2a086e73474e2a77dd71ecfbda087b6d6040dae": [
+            3,
+            608000000
+          ],
+          "ed3de471dec4c87739f76abd33685650cc92af4ea4ca57221b5a4bd9f8d2ea90": [
+            3,
+            514000000
+          ],
+          "76580d6b96de13d3a9271dede0a69db8a54c464684fe997dcececd083642e601": [
+            3,
+            325000000
+          ]
+        }
+      }
+    }
+  }
+}

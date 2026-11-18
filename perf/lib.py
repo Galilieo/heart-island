@@ -95,21 +95,27 @@ def sanitize_isolated_sql(sql):
     return "\n".join(lines)
 
 
-def create_database(database, sql_parts):
+def create_database(database, sql_parts, *, replace_existing=True):
     """从冻结的 git 内容创建隔离库；sql_parts 为 [(label, sql_text), ...]。
 
     迁移冲突（Duplicate column / already exists）视为“基线已含该变更”，跳过并记录，
     因为 sql/xinyu.sql 的基线内容与迁移合并状态随上线工作变动。
     """
     assert_isolated(database)
-    mysql(f"DROP DATABASE IF EXISTS `{database}`; CREATE DATABASE `{database}` "
-          "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+    create_sql = f"CREATE DATABASE `{database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    if replace_existing:
+        create_sql = f"DROP DATABASE IF EXISTS `{database}`; " + create_sql
+    mysql(create_sql)
     skipped = []
     for label, sql in sql_parts:
+        schema = sanitize_isolated_sql(sql)
+        if not replace_existing:
+            # 新建隔离库无需执行初始化脚本的删表语句。
+            schema = re.sub(r"(?im)^\s*DROP TABLE IF EXISTS [^;]+;\s*$", "", schema)
         proc = subprocess.run(
             ["mysql", "-h127.0.0.1", "-u", TEST_ENV["AI_TEST_DB_USER"],
              f"-p{TEST_ENV['AI_TEST_DB_PASSWORD']}", "-D", database],
-            input=sanitize_isolated_sql(sql), capture_output=True, text=True, timeout=300,
+            input=schema, capture_output=True, text=True, timeout=300,
         )
         if proc.returncode != 0:
             err = proc.stderr

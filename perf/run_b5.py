@@ -11,11 +11,14 @@ EXPLAIN ANALYZE 单独对手工代入参数的代表 SQL 执行，保存原始�
 产物：perf/results/b5/{tier}_requests.json、summary.json、explain/*.txt
 """
 
+import argparse
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -95,13 +98,24 @@ def explain(out_dir, db, name, sql):
     return path
 
 
-def setup_tier(tier):
+def setup_tier(tier, *, run_id=None, service="java_new"):
     db = f"xinyu_test_eval_b5_{tier['tag']}"
-    lib.create_database(db, lib.new_schema_parts())
+    if run_id is not None:
+        db = f"xinyu_test_eval_b5_paging_{tier['tag']}_{run_id}"
+    lib.create_database(db, lib.new_schema_parts(), replace_existing=run_id is None)
     # 先把 Java 指向本档库再注册用户（否则注册会写进上一段的库）
-    S.stop("java_new")
+    S.stop(service, wait_s=4 if run_id is not None else 40)
     time.sleep(2)
-    S.start_java_new(db, worker=False)  # B5 只测读路径，关 worker 避免任务扫描噪声
+    if run_id is not None:
+        try:
+            with socket.create_connection(("127.0.0.1", S.NEW_PORT), timeout=2):
+                raise RuntimeError("B5 回环端口已在使用")
+        except ConnectionRefusedError:
+            pass
+
+    pid = S.start_java_new(db, name=service, worker=False)  # 关 worker 避免任务扫描噪声
+    if run_id is not None:
+        require_owned_listener(pid)
     api = lib.Api(NEW, timeout=60)
     token = lib.ensure_user(api, "eval_sql_u1", "Passw0rd!123")
     for a in range(1, 6):
@@ -113,21 +127,91 @@ def setup_tier(tier):
     lib.mysql("INSERT INTO topic (name, description, sort, status) VALUES "
               "('测评话题一','t',1,1),('测评话题二','t',2,1),('测评话题三','t',3,1)", db)
     # 数据文件（固定种子；心情+社区合并生成一份）
-    data_sql = os.path.join(lib.RESULTS_ROOT, "b5", f"data_{tier['tag']}.sql")
-    subprocess.run(["uv", "run", "--directory",
-                    os.path.join(lib.REPO_ROOT, "xinyu-ai"), "--locked", "python",
-                    os.path.join(lib.REPO_ROOT, "perf", "gen_data.py"),
-                    "--mood", str(tier["mood"]), "--user-id", viewer_row,
-                    "--posts", str(tier["posts_per_topic"] * 3),
-                    "--viewer-id", viewer_row, "--author-ids", author_rows,
-                    "--out", data_sql],
-                   check=True, cwd=lib.REPO_ROOT)
-    proc = subprocess.run(["mysql", "-h127.0.0.1", "-u", lib.TEST_ENV["AI_TEST_DB_USER"],
-                           f"-p{lib.TEST_ENV['AI_TEST_DB_PASSWORD']}", "-D", db],
-                          stdin=open(data_sql), capture_output=True, text=True, timeout=300)
-    if proc.returncode != 0:
-        raise RuntimeError(f"load {data_sql}: {proc.stderr[:300]}")
+    with tempfile.TemporaryDirectory(prefix="xinyu-b5-data-") as fixture_dir:
+        data_sql = os.path.join(fixture_dir, f"data_{tier['tag']}.sql")
+        subprocess.run(
+            [sys.executable, os.path.join(lib.REPO_ROOT, "perf", "gen_data.py"),
+             "--mood", str(tier["mood"]), "--user-id", viewer_row,
+             "--posts", str(tier["posts_per_topic"] * 3),
+             "--viewer-id", viewer_row, "--author-ids", author_rows, "--out", data_sql],
+            check=True, cwd=lib.REPO_ROOT,
+        )
+        with open(data_sql, encoding="utf-8") as fixture:
+            proc = subprocess.run(
+                ["mysql", "-h127.0.0.1", "-u", lib.TEST_ENV["AI_TEST_DB_USER"],
+                 f"-p{lib.TEST_ENV['AI_TEST_DB_PASSWORD']}", "-D", db],
+                stdin=fixture, capture_output=True, text=True, timeout=300,
+            )
+        if proc.returncode != 0:
+            raise RuntimeError(f"load {data_sql}: {proc.stderr[:300]}")
     return db, token, viewer_row
+
+
+def require_owned_listener(pid):
+    """向测试后端提交注册前，确认端口由本次指定隔离库的 JVM 持有。"""
+    result = subprocess.run(
+        ["lsof", "-nP", "-a", "-p", str(pid), f"-iTCP:{S.NEW_PORT}", "-sTCP:LISTEN", "-Fpn"],
+        capture_output=True, text=True, timeout=5,
+    )
+    lines = set(result.stdout.splitlines())
+    loopback_listeners = {f"n127.0.0.1:{S.NEW_PORT}", f"n[::ffff:127.0.0.1]:{S.NEW_PORT}"}
+    if result.returncode != 0 or f"p{pid}" not in lines or not lines.intersection(loopback_listeners):
+        raise RuntimeError("B5 回环端口的监听进程未通过核对，停止注册")
+
+
+def community_page(api, sort, total):
+    """校验 HTTP 和业务响应，失败请求不能进入延迟样本。"""
+    params = {"topicId": 1, "pageNum": 1, "pageSize": 10}
+    if sort == "hot":
+        params["sort"] = "hot"
+    response = api.client.get("/community/post/list", params=params, headers=api.headers)
+    response.raise_for_status()
+    body = response.json()
+    if body["code"] != 200:
+        raise RuntimeError("社区列表请求失败")
+    page = body["data"]
+    if int(page["total"]) != total or len(page["records"]) != 10:
+        raise RuntimeError(f"分页样本不符合预期，预期总数 {total}、返回 10 条")
+
+
+def run_community_paging():
+    """按原 B5 档位和计量方法，单独复测两个社区列表端点。"""
+    out_dir = os.path.join(lib.RESULTS_ROOT, "b5-paging")
+    run_id = str(time.time_ns())
+    service = f"java_b5_paging_{run_id}"
+    os.environ.update({
+        "AI_WORKER_ENABLED": "false",
+        "AI_SERVICE_BASE_URL": "http://127.0.0.1:18000",
+        "DEEPSEEK_API_KEY": "",
+        "SERVER_ADDRESS": "127.0.0.1",
+    })
+    summary = {}
+    try:
+        for tier, expected_total in zip(TIERS, (115, 1050), strict=True):
+            db, token, _ = setup_tier(tier, run_id=run_id, service=service)
+            api = lib.Api(NEW, timeout=120).with_token(token)
+            records = {}
+            run_endpoint(db, "community_list_topic1",
+                         lambda: community_page(api, "latest", expected_total), records)
+            run_endpoint(db, "community_list_hot",
+                         lambda: community_page(api, "hot", expected_total), records)
+            for result in records.values():
+                probes = result["sql_counts_probes"]
+                if len(probes) != SQL_PROBES or any(count <= 0 for count in probes):
+                    raise RuntimeError("SQL 摘要探测未获得完整非零计数")
+            summary[tier["tag"]] = {"tier": tier, "topic1_posts": expected_total, "records": records}
+    finally:
+        S.stop(service, wait_s=4)
+
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as output:
+        json.dump(summary, output, ensure_ascii=False, indent=2)
+        output.write("\n")
+    lib.write_meta(out_dir, {
+        "test": "b5_community_paging", "tiers": TIERS, "reps": REPS, "sql_probes": SQL_PROBES,
+        "sql_probe_method": "performance_schema digest delta", "page_num": 1, "page_size": 10,
+    })
+    print("saved", out_dir)
 
 
 def main():
@@ -197,4 +281,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--community-paging", action="store_true", help="只复测分页后的两个社区列表端点")
+    if parser.parse_args().community_paging:
+        run_community_paging()
+    else:
+        main()
