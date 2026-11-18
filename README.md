@@ -1,287 +1,212 @@
 # 心屿 AI 情绪记录与匿名互助社区系统
 
-心屿是一个基于 Spring Boot + Vue3 的前后端分离项目，围绕“情绪记录、AI 陪伴回复、匿名互助社区、后台内容治理”构建完整 Web 应用闭环。
+[![CI](https://github.com/Galilieo/heart-island/actions/workflows/ci.yml/badge.svg)](https://github.com/Galilieo/heart-island/actions/workflows/ci.yml)
+[![Integration](https://github.com/Galilieo/heart-island/actions/workflows/integration.yml/badge.svg)](https://github.com/Galilieo/heart-island/actions/workflows/integration.yml)
 
-项目当前已经完成用户注册登录、JWT 认证、心情记录 CRUD、AI 回复生成与记录、匿名社区发帖回复、点赞收藏、话题管理、后台用户/帖子/回复/话题管理、AI 回复记录管理和后台概览统计等核心能力。整体功能已经从普通 CRUD 扩展为一个更接近真实实习项目的综合平台。
+心屿围绕“情绪记录、AI 陪伴回应、近期回顾、匿名互助社区、后台内容治理”构建。记录先保存、AI 回应在后台异步生成；统计由程序计算，AI 只负责文字解释；社区支持匿名发帖、举报与后台裁决。
 
-## 项目定位
+当前已上线的能力对应升级总方案的阶段 1a、阶段 2 与阶段 1b 的 Redis 限流部分；阶段 3 起（多轮对话、陪伴聊天、记忆与知识库）尚未开始，见[升级总方案](ops/features/xinyu-upgrade-master-plan.md)。
 
-本项目不是单纯练习页面或单表增删改查，而是面向个人简历和实习展示的 Java Web 项目。它重点体现：
+## 架构
 
-- 前后端分离开发能力
-- Spring Boot 分层架构设计能力
-- MyBatis-Plus 数据访问能力
-- JWT 登录认证与角色权限控制
-- Vue3 + Pinia + Vue Router 状态与页面组织能力
-- AI 能力接入、失败兜底和调用日志留痕
-- 社区内容治理与后台管理能力
-- 文档、测试、部署和阶段规划意识
+```text
+浏览器（Vue 3）
+   │  /api
+   ▼
+Java 后端（Spring Boot，JDK 17）──► MySQL 8：用户、记录、任务表 ai_job、回顾、社区、举报
+   │  鉴权／业务／限流／任务领取       Redis：付费 AI 调用的时间窗口计数（不可用时降级为本机计数）
+   │
+   ├─ 心情回应、近期回顾：单 worker 领取 ai_job ──HTTP（内部令牌）──► Python AI 服务（FastAPI）──► 模型供应商
+   │                                                               提示词、危机规则、输出校验
+   └─ 社区帖子回应：发帖请求内同步调用模型（未经 Python 服务）
+```
+
+- Java 持有用户身份、来源版本、任务状态与结果持久化；Python 只做内部认证、输入校验、危机规则分支和一次模型生成。
+- 任务表做持久队列：领取用 `FOR UPDATE SKIP LOCKED` 加条件更新，结果按来源版本提交，修改或删除后的迟到结果不会写回。
 
 ## 技术栈
 
 | 层级 | 技术 |
 | --- | --- |
-| 后端 | Spring Boot、MyBatis-Plus、MySQL、JWT、BCrypt、Knife4j |
-| 前端 | Vue3、Vite、Pinia、Vue Router、axios |
-| AI | DeepSeek API |
-| 数据库 | MySQL |
-| 部署 | Linux、Nginx、systemd、MySQL |
+| 后端 | Spring Boot 3、MyBatis-Plus、MySQL 8、Redis、JWT、BCrypt、Apache HttpClient 5 |
+| AI 服务 | Python 3.12、FastAPI、httpx、uv；DeepSeek（OpenAI 兼容接口） |
+| 前端 | Vue 3、Vite、Pinia、Vue Router、axios；自建组件库，无第三方 UI 库 |
+| 工程 | GitHub Actions 两层 CI、Prettier／oxlint／ESLint、pytest、JUnit 5 |
+| 部署 | Linux、Nginx、systemd（运行手册见 `deploy/`） |
 
 ## 已完成功能
 
-### 用户与权限
+### 心情记录与 AI 回应
 
-- 用户注册、登录、退出登录
-- JWT token 保存与请求自动携带
-- 密码 BCrypt 加密存储
-- 登录后保存用户基础信息
-- 个人资料完善：昵称、性别、生日（推算年龄）、签名、城市
-- 修改密码（BCrypt 校验原密码）
-- 个人资料页：hero 展示 + 4 项数据小条（心情数 / 帖子数 / 收藏数 / 加入天数）
-- 生日、时间筛选等日期输入使用自定义三段式日期组件，支持数字输入和日历选择
-- 普通用户与管理员角色区分
-- 管理员接口权限校验
+- 记录增删改查、分页筛选、近 7 天趋势；单条正文上限 1000 字。
+- 每条记录可单独开关 AI 回应。保存立即返回，AI 回应进入任务队列，前端轮询状态（排队、生成中、成功、失败、已关闭）。
+- 失败如实标记，不自动重试付费；用户可手动重试，多次失败后进入冷却。修改或删除记录后，旧任务的迟到结果不会覆盖新内容。
+- 危机规则命中时不调用模型，直接返回固定的支持文案。
+- 服务重启时，执行中的任务标记为中断，排队中的任务继续处理。
 
-### 心情记录
+### 近期回顾与周报
 
-- 新增心情记录
-- 心情记录分页列表
-- 心情类型、时间筛选、快捷日期范围（今天 / 近 7 天 / 近 30 天）
-- 查看心情详情
-- 修改心情记录
-- 删除心情记录
-- 最近 7 天情绪趋势统计
-- 新增或修改记录后自动生成 AI 回复
-
-### AI 回复
-
-- 心情记录 AI 陪伴回复
-- 社区帖子 AI 回复
-- AI 调用成功记录
-- AI 调用失败记录
-- 失败时返回兜底文案，不阻断主业务
-- `ai_reply` 表保存 prompt、回复内容、业务类型、业务 id、状态和错误信息
-- 后台 AI 回复记录分页、筛选和详情查看
-- 后台概览统计 AI 调用总数、成功次数、失败次数和失败率
+- 按自然周（周一起，`Asia/Shanghai`）与近 30 天统计记录次数、记录天数与情绪类型分布；首页另有近 7 天趋势。
+- 按需生成 AI 文字回顾与周报，信件中的引用指向具体记录；可查看历史，来源记录变化后提示需更新，显式重新生成时旧版本保留到新版本成功。
+- 统计数字由程序渲染，模型不能改写统计字段。
 
 ### 匿名社区
 
-- 话题列表
-- 按话题查看帖子
-- 发布帖子
-- 修改本人帖子
-- 删除本人帖子
-- 帖子详情
-- 最新/热门排序
-- 回复帖子
-- 修改本人回复
-- 删除本人回复
-- 点赞/取消点赞
-- 收藏/取消收藏
-- 收藏列表
-- 帖子详情展示 AI 心屿回复
+- 话题、帖子与回复的发布、修改、删除；最新／最热排序；分页列表（每页默认 10 条）。
+- 点赞、收藏、收藏列表；帖子可选 AI 回应。
+- 社区接口不返回作者 ID，只返回 `mine` 标记本人内容。
+- 举报帖子或回复，查看“我的举报”；被管理员隐藏的内容仅作者可见并显示原因。
 
-### 后台管理
+### 后台管理（全站 ADMIN）
 
-- 后台概览页
-- 用户管理：分页、搜索、状态筛选、启用/禁用
-- 帖子管理：分页、内容搜索、帖子 id、用户 id、状态筛选、隐藏/恢复
-- 回复管理：分页、内容搜索、回复 id、帖子 id、用户 id、状态筛选、隐藏/恢复
-- 话题管理：新增、编辑、启用/禁用、排序
-- AI 记录管理：按用户、业务类型、状态、关键词筛选，查看详情
-- 后台公共组件拆分：`AdminTabs`、`AdminPageHeader`、`AdminFilterActions`
+- 概览：用户、帖子与回复（含隐藏数）、AI 调用成功与失败、限流后端与当日拒绝次数；举报页显示待处理数。
+- 用户、帖子、回复、话题管理；举报按对象聚合处理（隐藏或驳回），并发裁决加锁。
+- AI 日志：可跨用户查看与搜索已保存的 prompt、回复和错误详情，用于排障；隐私页已告知。
 
-### 工程与设计
+### 限流与稳定性
 
-- 自建设计系统：全局 token + 基础组件库（无第三方 UI 库依赖）
-- 全站响应式适配：3 个标准断点（480 / 768 / 1024），集中维护
-- 移动端体验保护：触摸目标 ≥ 40px，输入框 ≥ 16px 防 iOS 自动 zoom
-- composable 抽象通用逻辑：useToast / useConfirm / useAsyncAction / usePagination
+- Redis 时间窗口额度：每人每小时／每日心情回应、每小时社区回应、每日回顾，以及全站每小时上限；超额返回 429 与 `Retry-After`。
+- Redis 故障时自动降级为本机计数并定期重试恢复；单人在途任务数与全站排队容量另有上限。
+
+### 用户与隐私
+
+- 注册、登录、JWT 鉴权（签名密钥必须由环境变量提供）、BCrypt 密码、个人资料（昵称选填）、修改密码。
+- 隐私政策页：说明 AI 外发范围、管理员排障权限、匿名与删除保留规则。
 
 ## 项目结构
 
 ```text
-heart_island
-├─ AGENTS.md
-├─ ops
-│  ├─ 00-10 Agent 工程说明
-│  └─ features
-│     └─ 当前升级契约、接续入口与参考资料
-├─ AI_WORKLOG
-│  └─ 本地个人工作记录，已加入 .gitignore
-├─ docs
-│  ├─ README.md
-│  ├─ project
-│  │  └─ 当前项目资料入口
-│  ├─ history
-│  │  └─ 旧交付文档、设计与实施记录
-│  └─ personal
-│     └─ 本地个人资料，不提交到仓库
-├─ sql
-│  └─ xinyu.sql
-├─ xinyu-backend
-│  └─ src/main/java/com/xinyu
-│     ├─ controller
-│     ├─ service
-│     ├─ mapper
-│     ├─ entity
-│     ├─ dto
-│     ├─ vo
-│     └─ common
-├─ xinyu-ai
-│  └─ 独立 Python AI 服务（Java 客户端已接入，worker闭环进行中）
-└─ xinyu-vue
-   └─ src
-      ├─ api
-      ├─ stores
-      ├─ router
-      ├─ views
-      ├─ components
-      └─ utils
+heart-island
+├─ xinyu-backend     Spring Boot 后端（controller / service / mapper / entity / dto / vo / ratelimit）
+├─ xinyu-ai          Python AI 服务（app/ 运行代码，tests/ 测试，evals/ 离线测评集与脚本）
+├─ xinyu-vue         Vue 3 前端（api / stores / views / components / composables / utils，tests/ 单元测试）
+├─ sql               完整初始化 xinyu.sql 与 migrations/ 增量迁移
+├─ deploy            上线运行手册、迁移核查单、环境变量与 systemd／Nginx／Redis 模板
+├─ perf              本机受控性能与正确性测评脚本及结果
+├─ test-contracts    Java 与 Python 共用的契约数据（如心情类型）
+├─ ops               Agent 工作规则与 features/ 功能契约、总方案、接续状态
+├─ docs              项目资料入口与历史归档
+└─ .github           两层 CI 工作流与集成测试脚本
 ```
 
-## 快速启动
+## 本机运行
 
-### 1. 初始化数据库
+需要：JDK 17、Maven（或 `xinyu-backend/mvnw`）、Node 20.19+／22.12+、Python 3.12 与 uv、MySQL 8、Redis（可选）。
 
-在 MySQL 中创建数据库并导入脚本：
+### 1. 数据库
 
 ```sql
-CREATE DATABASE xinyu DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE DATABASE xinyu DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-然后导入：
+然后导入 `sql/xinyu.sql`。**该脚本会先 DROP 再建表，只能用于空库或可丢弃的本地库**；已有数据的库请按 `sql/migrations/` 与 [迁移核查单](deploy/MIGRATIONS.md) 逐份升级。
 
-```text
-sql/xinyu.sql
+### 2. Python AI 服务
+
+```bash
+cd xinyu-ai
+uv sync --locked
 ```
 
-### 2. 启动后端
+服务只从进程环境读取配置（变量说明见 [`xinyu-ai/README.md`](xinyu-ai/README.md)，模板见 `deploy/env/python.env.example`）：`AI_INTERNAL_TOKEN`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL`、`DEEPSEEK_THINKING_MODE`。设置后启动：
 
-进入后端目录：
+```bash
+uv run --locked uvicorn app.main:app_from_env --factory --host 127.0.0.1 --port 8000 --no-access-log
+```
 
-```powershell
+只监听回环地址，不要暴露到公网。`GET /health` 返回 `{"ready":true}` 表示配置校验通过。
+
+### 3. Java 后端
+
+至少设置以下环境变量（完整列表与说明见 `deploy/env/backend.env.example`）：
+
+| 变量 | 说明 |
+| --- | --- |
+| `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` | 数据库连接 |
+| `JWT_SECRET` | 必填，至少 32 字节的随机值；缺失或过短时拒绝启动 |
+| `AI_WORKER_ENABLED` | `true` 才会领取并执行心情／回顾任务；`false` 时记录照常保存，任务停在排队 |
+| `AI_SERVICE_BASE_URL`、`AI_INTERNAL_TOKEN` | worker 开启时必填；令牌与 Python 服务一致 |
+| `DEEPSEEK_API_KEY` | 社区帖子 AI 回应使用 |
+| `REDIS_URL` | 可选；为空时限流使用本机内存计数 |
+
+```bash
 cd xinyu-backend
-$env:DB_PASSWORD="你的本地 MySQL 密码"
-mvn spring-boot:run
+sh mvnw spring-boot:run
 ```
 
-默认后端地址：
+默认地址 `http://localhost:8080`，健康检查 `GET /hello`。
 
-```text
-http://localhost:8080
-```
-
-### 3. 启动前端
-
-进入前端目录：
+### 4. 前端
 
 ```bash
 cd xinyu-vue
 npm install
+echo 'VITE_API_BASE_URL=http://localhost:8080' > .env.development.local
 npm run dev
 ```
 
-默认前端地址：
+默认地址 `http://localhost:5173`。
 
-```text
-http://localhost:5173
-```
+## 测试与 CI
 
-前端接口地址通过 `xinyu-vue/.env.development` 中的 `VITE_API_BASE_URL` 配置。
+| 范围 | 命令 |
+| --- | --- |
+| 前端 | `npm run format:check`、`npm run check:lint`、`npm test`、`npm run build`（在 `xinyu-vue/`） |
+| Python | `uv run --locked pytest -q`（在 `xinyu-ai/`） |
+| Java 单元与契约 | `sh mvnw test`（在 `xinyu-backend/`，运行 `*Test`／`*Tests`） |
+| Java 集成测试 | `.github/scripts/run-backend-its.sh`：每个 `*IT` 类新建一个空的 `xinyu_test_ci_` 库逐类运行，需要本机 MySQL、`xinyu-ai` 已 `uv sync`，设置 `AI_TEST_REDIS_URL` 时包含 Redis 限流测试 |
 
-后端数据库连接也可以通过 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 环境变量覆盖，避免把本地密码写入仓库。
+GitHub Actions 分两层：每次 push／PR 运行三端快速检查；推送到 `main` 时额外用 MySQL 8.0 与 Redis 6.0 容器运行全部集成测试。CI 不使用真实模型密钥，也不自动部署。说明见 [ops/02 持续集成](ops/02-agent-workflow.md#持续集成)。
 
-## 核心接口概览
+`perf/` 下是本机受控的性能与正确性测评（合成上游与隔离库），结果不代表线上性能，见 [`perf/README.md`](perf/README.md)。
 
-| 模块 | 方法 | 地址 | 说明 |
-| --- | --- | --- | --- |
-| 用户 | POST | `/user/register` | 注册 |
-| 用户 | POST | `/user/login` | 登录 |
-| 用户 | POST | `/user/update-profile` | 修改个人资料（昵称/性别/生日/签名/城市） |
-| 用户 | POST | `/user/update-password` | 修改密码 |
-| 用户 | GET | `/user/profile-stats` | 个人资料页 4 项统计 |
-| 心情 | GET | `/mood/list` | 心情记录分页 |
-| 心情 | POST | `/mood/add` | 新增心情并生成 AI 回复 |
-| 心情 | GET | `/mood/detail/{id}` | 心情详情 |
-| 心情 | PUT | `/mood/update/{id}` | 修改心情并重新生成 AI 回复 |
-| 心情 | DELETE | `/mood/delete/{id}` | 删除心情 |
-| 心情 | GET | `/mood/trend/recent7` | 最近 7 天趋势 |
-| 社区 | GET | `/community/post/list` | 帖子列表 |
-| 社区 | POST | `/community/post/add` | 发布帖子并生成 AI 回复 |
-| 社区 | GET | `/community/post/detail?id=` | 帖子详情 |
-| 社区 | POST | `/community/post/update` | 修改帖子并重新生成 AI 回复 |
-| 社区 | POST | `/community/reply/add` | 发布回复 |
-| 社区 | POST | `/community/post/like`、`/community/post/unlike` | 点赞/取消点赞 |
-| 社区 | POST | `/community/post/favorite`、`/community/post/unfavorite` | 收藏/取消收藏 |
-| 后台 | GET | `/admin/overview` | 后台概览统计 |
-| 后台 | GET | `/admin/user/page` | 用户管理分页 |
-| 后台 | PUT | `/admin/user/{id}/status` | 启用/禁用用户 |
-| 后台 | GET | `/admin/post/page` | 帖子管理分页 |
-| 后台 | PUT | `/admin/post/{id}/status` | 隐藏/恢复帖子 |
-| 后台 | GET | `/admin/reply/page` | 回复管理分页 |
-| 后台 | PUT | `/admin/reply/{id}/status` | 隐藏/恢复回复 |
-| 后台 | GET | `/admin/topic/list` | 话题管理列表 |
-| 后台 | POST | `/admin/topic` | 新增话题 |
-| 后台 | PUT | `/admin/topic/{id}` | 编辑话题 |
-| 后台 | GET | `/admin/ai-replies/page` | AI 回复记录分页 |
+## 接口概览
 
-接口入口见[项目文档导航](docs/project/README.md)；当前AI升级接口以[1a契约](ops/features/ai-reply-service-v1a.md)为准。
+除注明“公开”外均需请求头 `token`；后台接口要求 ADMIN。
 
-## 运行验证
+| 模块 | 方法与路径 | 说明 |
+| --- | --- | --- |
+| 用户 | `POST /user/register`、`POST /user/login` | 注册、登录（公开） |
+| 用户 | `POST /user/update-profile`、`POST /user/update-password`、`GET /user/profile-stats` | 资料、密码、个人页统计 |
+| 心情 | `POST /mood/add`、`PUT /mood/update/{id}`、`DELETE /mood/delete/{id}` | 保存、修改、删除；开启 AI 时返回任务信息 |
+| 心情 | `GET /mood/list`、`GET /mood/detail/{id}`、`GET /mood/trend/recent7` | 分页、详情（含 AI 状态）、近 7 天趋势 |
+| AI 任务 | `GET /mood/ai-job/{id}`、`POST /mood/ai-job/{id}/retry` | 查询任务状态、手动重试 |
+| 回顾 | `GET /mood/analysis?range=30d`、`POST /mood/analysis/generate` | 近 30 天统计与回顾、生成 |
+| 周报 | `GET /mood/report/week`、`POST /mood/report/week/generate`、`POST /mood/report/week/regenerate`、`GET /mood/report/week/history` | 周统计与周报、生成、重新生成、历史 |
+| 社区 | `GET /community/post/list`、`GET /community/post/detail`、`GET /community/reply/list` | 公开读取；`mine=true` 需登录 |
+| 社区 | `POST /community/post/add`、`/update`、`/delete` | 帖子发布、修改、删除 |
+| 社区 | `POST /community/post/like`、`/unlike`、`/favorite`、`/unfavorite`；`GET /community/post/favorites` | 互动与收藏列表 |
+| 社区 | `POST /community/reply/add`、`/update`、`/delete` | 回复 |
+| 举报 | `POST /community/report`、`GET /community/report/mine`、`GET /community/report/reported-targets` | 举报、我的举报、已举报对象 |
+| 话题 | `GET /topic/list` | 话题列表 |
+| 后台 | `GET /admin/overview` | 概览 |
+| 后台 | `GET /admin/user/page`、`PUT /admin/user/{id}/status` | 用户管理 |
+| 后台 | `GET /admin/post/page`、`GET /admin/post/{id}`、`PUT /admin/post/{id}/status`、`DELETE /admin/post/{id}` | 帖子管理；`/admin/reply/...` 同构 |
+| 后台 | `GET /admin/report/page`、`GET /admin/report/detail`、`POST /admin/report/handle`、`GET /admin/report/pending-count` | 举报处理 |
+| 后台 | `GET /admin/topic/list`、`POST /admin/topic`、`PUT /admin/topic/{id}`、`PUT /admin/topic/{id}/status` | 话题管理 |
+| 后台 | `GET /admin/ai-replies/page` | AI 日志 |
 
-后端测试：
-
-```bash
-cd xinyu-backend
-mvn test
-```
-
-前端构建：
-
-```bash
-cd xinyu-vue
-npm run build
-```
-
-建议手动验证以下主流程：
-
-1. 注册并登录普通用户。
-2. 新增心情记录，确认列表和详情展示 AI 回复。
-3. 发布社区帖子，确认帖子详情展示 AI 回复。
-4. 点赞、收藏、回复帖子。
-5. 使用管理员账号进入后台。
-6. 查看概览统计、用户管理、帖子管理、回复管理、话题管理和 AI 记录管理。
+字段、状态与错误码以功能契约为准：[1a AI 回应](ops/features/ai-reply-service-v1a.md)、[阶段2回顾](ops/features/mood-review.md)、[社区举报与分页](ops/features/community-report.md)、[Redis 限流](ops/features/redis-rate-limit.md)。Python 内部接口见 [`xinyu-ai/README.md`](xinyu-ai/README.md)。
 
 ## 文档入口
 
 | 你要做什么 | 入口 |
 | --- | --- |
-| 继续当前升级开发 | [功能首页](ops/features/README.md) → [接续状态](ops/features/xinyu-next-session.md) |
-| 查当前方案与契约 | [升级总方案](ops/features/xinyu-upgrade-master-plan.md)、[1a 功能契约](ops/features/ai-reply-service-v1a.md) |
-| 查 Agent 工作规则 | [AGENTS.md](AGENTS.md) 与 `ops/00-10` 相关规则 |
-| 查需求、架构、接口、数据库与部署说明 | [项目文档入口](docs/project/README.md)，按问题选读 |
-| 查旧方案、旧计划 | [历史归档索引](docs/history/README.md) |
-| 查参考方案和品牌素材 | [参考资料索引](ops/features/references/README.md) |
-| 查本地计划、验证和学习记录 | `AI_WORKLOG/`，已忽略，不纳入 Git |
+| 继续开发 | [功能首页](ops/features/README.md) → [接续状态](ops/features/xinyu-next-session.md) |
+| 查阶段规划与边界 | [升级总方案](ops/features/xinyu-upgrade-master-plan.md) |
+| 查测评口径与结果 | [测评计划](ops/features/xinyu-evaluation-plan.md) |
+| 部署上线 | [上线运行手册](deploy/README.md)、[迁移核查单](deploy/MIGRATIONS.md) |
+| 查 Agent 工作规则 | [AGENTS.md](AGENTS.md) 与 `ops/` |
+| 查项目资料与历史方案 | [docs/README.md](docs/README.md)、[历史归档](docs/history/README.md) |
 
-完整分类与可信度说明见 [docs/README.md](docs/README.md)。当前只维护一套总方案和一份正在执行的功能契约，历史材料不作为实现证据。
-
-## 简历表述建议
-
-可以在简历中概括为：
-
-> 基于 Spring Boot + Vue3 开发“心屿”AI 情绪记录与匿名互助社区系统，实现 JWT 登录认证、BCrypt 密码加密、心情记录 CRUD、AI 陪伴回复、匿名社区发帖回复、点赞收藏、后台内容治理、AI 调用日志管理和平台统计等功能。后端采用 Controller-Service-Mapper 分层和 MyBatis-Plus 完成业务开发，前端使用 Vue3、Pinia、Vue Router 和 axios 构建用户端与管理端页面，并对后台列表筛选、分页和公共组件进行了复用拆分。
+`AI_WORKLOG/` 为本地工作记录，大部分未纳入 Git。
 
 ## 后续规划
 
-项目当前主流程已经完整，后续可以继续增强：
+按[升级总方案](ops/features/xinyu-upgrade-master-plan.md)推进，以下均**尚未实现**：
 
-- 多轮对话：让 AI 回复从单次文本升级为可连续追问的会话。
-- 轻量长期记忆：在用户可控前提下提炼偏好、压力源和支持方式。
-- 情绪周报：按周汇总心情趋势、关键词和温和建议。
-- RAG 知识库：让 AI 回复参考平台规则、心理健康常见问答等知识。
-- 工具调用：让 AI 在白名单内查询近期心情趋势、生成周报草稿。
-- SSE 流式输出、内容治理、日志监控、限流重试和部署自检。
-
-上述后续能力以[当前总方案](ops/features/xinyu-upgrade-master-plan.md)为准；1a 目前仅完成独立 Python 服务，尚未形成 Java／前端产品闭环。旧初版草稿已归档，不要在简历或展示中把规划写成已实现。
+- 阶段 1b 余项：危机回应增强（命中后结合原文生成支持性回应，失败退回固定文案；已决定在阶段 3 前或线上出现误判时排期）、启用多实例前的任务租约。
+- 阶段 3：围绕记录继续聊（多轮对话与历史）。
+- 阶段 4：独立陪伴聊天、流式输出与受控工具调用。
+- 阶段 5：用户可管理的记忆与有来源的知识库。
+- 阶段 6：自动周报、提醒与成本面板等。
