@@ -71,11 +71,15 @@ test('周报切换先发后到时，旧响应不能覆盖新周统计', async ()
   const p1 = store.fetchWeek('2026-10-26')
   const p2 = store.fetchWeek('2026-11-02')
 
-  second.resolve(ok({ url: '/mood/report/week' }, samplePage({ rangeStart: '2026-11-02', total: 5 })))
+  second.resolve(
+    ok({ url: '/mood/report/week' }, samplePage({ rangeStart: '2026-11-02', total: 5 }))
+  )
   await p2
   assert.equal(store.weekStats.rangeStart, '2026-11-02')
 
-  first.resolve(ok({ url: '/mood/report/week' }, samplePage({ rangeStart: '2026-10-26', total: 1 })))
+  first.resolve(
+    ok({ url: '/mood/report/week' }, samplePage({ rangeStart: '2026-10-26', total: 1 }))
+  )
   await p1
   assert.equal(store.weekStats.rangeStart, '2026-11-02')
   assert.equal(store.weekStats.total, 5)
@@ -103,7 +107,14 @@ test('generateWeek 并发防重入并在成功排队后立刻进入 active 状�
   pending.resolve(
     ok(
       { url: '/mood/report/week/generate' },
-      { id: '10', revision: 1, status: 'queued', jobId: '88', rangeStart: '2026-11-02', rangeEnd: '2026-11-09' }
+      {
+        id: '10',
+        revision: 1,
+        status: 'queued',
+        jobId: '88',
+        rangeStart: '2026-11-02',
+        rangeEnd: '2026-11-09'
+      }
     )
   )
   const res = await firstClick
@@ -188,7 +199,10 @@ test('切换周次后，先发后到的 generateWeek 响应与报错刷新不能
     }
     if (config.url === '/mood/report/week') {
       const start = config.params?.start || '2026-11-02'
-      return ok(config, samplePage({ rangeStart: start, failed: { id: '7', status: 'failed', jobId: '77' } }))
+      return ok(
+        config,
+        samplePage({ rangeStart: start, failed: { id: '7', status: 'failed', jobId: '77' } })
+      )
     }
     return ok(config, samplePage())
   }
@@ -201,7 +215,10 @@ test('切换周次后，先发后到的 generateWeek 响应与报错刷新不能
   assert.equal(store.weekStats.rangeStart, '2026-10-26')
 
   genDeferred.resolve(
-    ok({ url: '/mood/report/week/generate' }, { id: '10', status: 'queued', jobId: '88', rangeStart: '2026-11-02' })
+    ok(
+      { url: '/mood/report/week/generate' },
+      { id: '10', status: 'queued', jobId: '88', rangeStart: '2026-11-02' }
+    )
   )
   await pendingGen
   assert.equal(store.weekStats.rangeStart, '2026-10-26')

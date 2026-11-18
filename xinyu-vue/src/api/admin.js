@@ -3,7 +3,6 @@
 import { request, unwrap, unwrapHttp } from './_helpers'
 
 export const adminApi = {
-
   overview() {
     return unwrap(request.get('/admin/overview'))
   },
@@ -83,9 +82,10 @@ export const adminApi = {
   },
 
   updateTopicStatus(id, status) {
-    return unwrap(request.put(`/admin/topic/${id}/status`, null, {
-      params: { status }
-    }))
+    return unwrap(
+      request.put(`/admin/topic/${id}/status`, null, {
+        params: { status }
+      })
+    )
   }
-
 }

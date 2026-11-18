@@ -85,22 +85,17 @@ function goLogin() {
       size="lg"
       @enter="handleRegister"
     />
-    <BaseButton
-      variant="primary"
-      size="lg"
-      :loading="loading"
-      block
-      @click="handleRegister"
-    >注册</BaseButton>
+    <BaseButton variant="primary" size="lg" :loading="loading" block @click="handleRegister"
+      >注册</BaseButton
+    >
 
     <template #footer>
-      <BaseButton variant="link" @click="goLogin">
-        已经有账号？回到登录 →
-      </BaseButton>
+      <BaseButton variant="link" @click="goLogin"> 已经有账号？回到登录 → </BaseButton>
     </template>
 
     <template #legal>
-      注册前请阅读<RouterLink to="/privacy">隐私政策</RouterLink>，了解记录、AI 回复和管理员排障访问的范围。
+      注册前请阅读<RouterLink to="/privacy">隐私政策</RouterLink>，了解记录、AI
+      回复和管理员排障访问的范围。
     </template>
   </AuthLayout>
 </template>

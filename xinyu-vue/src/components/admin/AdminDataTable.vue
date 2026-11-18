@@ -29,28 +29,18 @@ const fixedWidth = computed(() =>
   props.columns.reduce((sum, column) => sum + (column.width || 0), 0)
 )
 
-const flexibleCount = computed(
-  () => props.columns.filter((column) => !column.width).length
-)
+const flexibleCount = computed(() => props.columns.filter((column) => !column.width).length)
 
 // 固定列 + 内容列的最小宽度：宽屏（≥1280）放得下，窄屏才出现横向滚动。
 const minWidth = computed(() => fixedWidth.value + flexibleCount.value * 160)
 
-const eyebrowColumns = computed(() =>
-  props.columns.filter((column) => column.mobile === 'eyebrow')
-)
+const eyebrowColumns = computed(() => props.columns.filter((column) => column.mobile === 'eyebrow'))
 
-const bodyColumn = computed(() =>
-  props.columns.find((column) => column.mobile === 'body')
-)
+const bodyColumn = computed(() => props.columns.find((column) => column.mobile === 'body'))
 
-const metaColumns = computed(() =>
-  props.columns.filter((column) => column.mobile === 'meta')
-)
+const metaColumns = computed(() => props.columns.filter((column) => column.mobile === 'meta'))
 
-const statusColumn = computed(() =>
-  props.columns.find((column) => column.mobile === 'status')
-)
+const statusColumn = computed(() => props.columns.find((column) => column.mobile === 'status'))
 
 const showLoading = computed(() => props.loading && !props.rows.length)
 
@@ -90,7 +80,9 @@ function cellClass(column) {
 <template>
   <section class="admin-table">
     <div class="admin-table__toolbar">
-      <span>共 <b>{{ total }}</b> 条</span>
+      <span
+        >共 <b>{{ total }}</b> 条</span
+      >
       <span v-if="orderHint" class="admin-table__hint">{{ orderHint }}</span>
     </div>
 
@@ -119,11 +111,7 @@ function cellClass(column) {
 
           <thead>
             <tr>
-              <th
-                v-for="column in columns"
-                :key="column.key"
-                :class="cellClass(column)"
-              >
+              <th v-for="column in columns" :key="column.key" :class="cellClass(column)">
                 {{ column.title }}
               </th>
             </tr>
@@ -137,11 +125,7 @@ function cellClass(column) {
                 :class="cellClass(column)"
                 :title="cellTooltip(column, row)"
               >
-                <slot
-                  v-if="column.key === 'actions'"
-                  name="actions"
-                  :row="row"
-                />
+                <slot v-if="column.key === 'actions'" name="actions" :row="row" />
                 <slot
                   v-else-if="$slots[`cell-${column.key}`]"
                   :name="`cell-${column.key}`"
@@ -155,17 +139,10 @@ function cellClass(column) {
       </div>
 
       <div class="admin-table__cards">
-        <article
-          v-for="row in rows"
-          :key="row[rowKey]"
-          class="admin-card-row"
-        >
+        <article v-for="row in rows" :key="row[rowKey]" class="admin-card-row">
           <div class="admin-card-row__top">
             <span class="admin-card-row__eyebrow">
-              <template
-                v-for="(column, index) in eyebrowColumns"
-                :key="column.key"
-              >
+              <template v-for="(column, index) in eyebrowColumns" :key="column.key">
                 <span v-if="index > 0" class="admin-card-row__separator">·</span>
                 <span>{{ eyebrowText(column, row) }}</span>
               </template>
@@ -180,11 +157,7 @@ function cellClass(column) {
             </span>
           </div>
 
-          <p
-            v-if="bodyColumn"
-            class="admin-card-row__body"
-            :title="cellTooltip(bodyColumn, row)"
-          >
+          <p v-if="bodyColumn" class="admin-card-row__body" :title="cellTooltip(bodyColumn, row)">
             {{ cellText(bodyColumn, row) }}
           </p>
 

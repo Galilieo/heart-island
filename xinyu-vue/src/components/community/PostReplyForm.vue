@@ -15,9 +15,7 @@ const emit = defineEmits(['submit'])
 const content = ref('')
 
 const canSubmit = computed(
-  () => content.value.trim().length > 0 &&
-        content.value.length <= 500 &&
-        !props.submitting
+  () => content.value.trim().length > 0 && content.value.length <= 500 && !props.submitting
 )
 
 function submit() {
@@ -49,7 +47,8 @@ defineExpose({ reset })
         :loading="submitting"
         :disabled="!canSubmit"
         @click="submit"
-      >发送回复</BaseButton>
+        >发送回复</BaseButton
+      >
     </div>
   </BaseCard>
 </template>

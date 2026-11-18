@@ -24,7 +24,9 @@ defineEmits(['select'])
         class="topic-chip motion-press"
         :class="{ 'is-active': selectedTopicId === null || selectedTopicId === '' }"
         @click="$emit('select', null)"
-      >全部</button>
+      >
+        全部
+      </button>
 
       <span v-if="loading && !topics.length" class="topics__loading">话题加载中…</span>
 
@@ -35,7 +37,9 @@ defineEmits(['select'])
         class="topic-chip motion-press"
         :class="{ 'is-active': selectedTopicId === topic.id }"
         @click="$emit('select', topic.id)"
-      >{{ topic.name }}</button>
+      >
+        {{ topic.name }}
+      </button>
     </div>
   </div>
 </template>
@@ -68,7 +72,8 @@ defineEmits(['select'])
   color: var(--ink-2);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 

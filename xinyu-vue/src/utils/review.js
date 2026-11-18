@@ -44,7 +44,10 @@ export function formatRangeLong(startKey, endExclusiveKey) {
   const [startYear, startMonth, startDay] = startKey.split('-').map(Number)
   const [endYear, endMonth, endDay] = addDays(endExclusiveKey, -1).split('-').map(Number)
   const start = `${startMonth} 月 ${startDay} 日`
-  const end = startYear === endYear ? `${endMonth} 月 ${endDay} 日` : `${endYear} 年 ${endMonth} 月 ${endDay} 日`
+  const end =
+    startYear === endYear
+      ? `${endMonth} 月 ${endDay} 日`
+      : `${endYear} 年 ${endMonth} 月 ${endDay} 日`
   return `${start} – ${end}`
 }
 
@@ -267,7 +270,13 @@ export function formatChineseDate(dateKey) {
 }
 
 /** 计算桌面端引用原文浮层相对于信纸容器的位置，并在贴近视口底边时翻转到上方。 */
-export function computeCitationPopoverLayout({ letterRect, tagRect, popWidth, popHeight, viewportHeight }) {
+export function computeCitationPopoverLayout({
+  letterRect,
+  tagRect,
+  popWidth,
+  popHeight,
+  viewportHeight
+}) {
   const tagCenter = tagRect.left + tagRect.width / 2
   const minLeft = letterRect.left + 16
   const maxLeft = Math.max(minLeft, letterRect.right - popWidth - 16)
@@ -277,7 +286,9 @@ export function computeCitationPopoverLayout({ letterRect, tagRect, popWidth, po
 
   return {
     left: left - letterRect.left,
-    top: above ? tagRect.top - letterRect.top - popHeight - 12 : tagRect.bottom - letterRect.top + 12,
+    top: above
+      ? tagRect.top - letterRect.top - popHeight - 12
+      : tagRect.bottom - letterRect.top + 12,
     above,
     arrowX: tagCenter - left - 6
   }

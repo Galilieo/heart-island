@@ -6,17 +6,15 @@ const request = axios.create({
 })
 
 // 请求拦截器：每次请求发出前都会执行
-request.interceptors.request.use(
-  config => {
-    const token = localStorage.getItem('token')
+request.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
 
-    if (token) {
-      config.headers.token = token
-    }
-
-    return config
+  if (token) {
+    config.headers.token = token
   }
-)
+
+  return config
+})
 
 function clearSessionAndRedirect() {
   localStorage.removeItem('loginUser')
@@ -26,7 +24,7 @@ function clearSessionAndRedirect() {
 
 // 响应拦截器：每次响应返回后都会执行
 request.interceptors.response.use(
-  response => {
+  (response) => {
     const result = response.data
 
     if (result && result.code !== 200) {
@@ -39,7 +37,7 @@ request.interceptors.response.use(
 
     return response
   },
-  error => {
+  (error) => {
     if (error.response) {
       if (error.response.status === 401) clearSessionAndRedirect()
       const result = error.response.data

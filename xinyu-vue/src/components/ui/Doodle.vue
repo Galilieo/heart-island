@@ -5,8 +5,7 @@ defineProps({
   name: {
     type: String,
     default: 'cloud',
-    validator: (v) =>
-      ['cloud', 'star', 'leaf', 'wave', 'cup', 'plant', 'sun', 'heart'].includes(v)
+    validator: (v) => ['cloud', 'star', 'leaf', 'wave', 'cup', 'plant', 'sun', 'heart'].includes(v)
   },
   size: { type: [Number, String], default: 48 },
   color: { type: String, default: 'currentColor' },
@@ -29,7 +28,9 @@ defineProps({
   >
     <!-- 云 -->
     <g v-if="name === 'cloud'">
-      <path d="M16 40c-5 0-8-3-8-7s3-7 8-7c1-5 5-9 11-9 7 0 12 5 12 11h2c5 0 9 4 9 9s-4 9-9 9H16z" />
+      <path
+        d="M16 40c-5 0-8-3-8-7s3-7 8-7c1-5 5-9 11-9 7 0 12 5 12 11h2c5 0 9 4 9 9s-4 9-9 9H16z"
+      />
       <path d="M24 48c0 1.5 1 3 2.5 3M36 50c0 1.5 1 3 2.5 3" />
     </g>
     <!-- 星 -->
@@ -68,7 +69,9 @@ defineProps({
     </g>
     <!-- 心 -->
     <g v-else-if="name === 'heart'">
-      <path d="M32 52S12 40 12 25c0-7 6-13 13-13 4 0 7 2 7 6 0-4 3-6 7-6 7 0 13 6 13 13 0 15-20 27-20 27z" />
+      <path
+        d="M32 52S12 40 12 25c0-7 6-13 13-13 4 0 7 2 7 6 0-4 3-6 7-6 7 0 13 6 13 13 0 15-20 27-20 27z"
+      />
     </g>
   </svg>
 </template>

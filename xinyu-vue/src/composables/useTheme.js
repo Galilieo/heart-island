@@ -15,9 +15,7 @@ export function initTheme() {
   if (saved === 'light' || saved === 'night') {
     theme.value = saved
   } else {
-    theme.value = window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'night'
-      : 'light'
+    theme.value = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'light'
   }
   apply()
 }

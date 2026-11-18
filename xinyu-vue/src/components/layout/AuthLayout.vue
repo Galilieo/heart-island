@@ -81,13 +81,28 @@ defineProps({
   position: absolute;
   animation: drift 10s ease-in-out infinite alternate;
 }
-.d-1 { top: 10%; left: 12%; }
-.d-2 { bottom: 16%; left: 18%; animation-delay: 1.2s; }
-.d-3 { top: 18%; right: 12%; animation-delay: 2.4s; }
+.d-1 {
+  top: 10%;
+  left: 12%;
+}
+.d-2 {
+  bottom: 16%;
+  left: 18%;
+  animation-delay: 1.2s;
+}
+.d-3 {
+  top: 18%;
+  right: 12%;
+  animation-delay: 2.4s;
+}
 
 @keyframes drift {
-  from { transform: translateY(0) rotate(-2deg); }
-  to   { transform: translateY(-10px) rotate(2deg); }
+  from {
+    transform: translateY(0) rotate(-2deg);
+  }
+  to {
+    transform: translateY(-10px) rotate(2deg);
+  }
 }
 
 .auth__column {
@@ -177,23 +192,31 @@ defineProps({
     align-items: flex-start;
     padding: 28px 16px 40px;
   }
-  .auth__column { gap: 18px; }
+  .auth__column {
+    gap: 18px;
+  }
   .auth__logo {
     height: 36px;
     margin-bottom: 10px;
   }
   /* 22px 下最长的注册标语（13 字）在 375px 宽度内可单行显示 */
-  .auth__slogan { font-size: var(--fs-xl); }
+  .auth__slogan {
+    font-size: var(--fs-xl);
+  }
   .auth__subtitle {
     margin-top: 6px;
     font-size: var(--fs-sm);
   }
-  .auth__card { padding: 22px 20px 18px; }
+  .auth__card {
+    padding: 22px 20px 18px;
+  }
   .auth__body {
     margin-top: 16px;
     gap: 12px;
   }
   /* 窄屏空间不足，涂鸦会压到标语和卡片，直接隐藏 */
-  .auth__doodles { display: none; }
+  .auth__doodles {
+    display: none;
+  }
 }
 </style>

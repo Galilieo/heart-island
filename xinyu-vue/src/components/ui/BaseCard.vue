@@ -44,15 +44,26 @@ defineProps({
   background: var(--bg-card);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
-  transition: transform var(--t-base) var(--ease-soft),
+  transition:
+    transform var(--t-base) var(--ease-soft),
     box-shadow var(--t-base) var(--ease-soft);
 }
 
-.card--cream  { background: var(--bg-soft); }
-.card--brand  { background: var(--brand-soft); border-color: var(--brand-soft-deep); }
-.card--accent { background: var(--accent-soft); border-color: var(--accent-line); }
+.card--cream {
+  background: var(--bg-soft);
+}
+.card--brand {
+  background: var(--brand-soft);
+  border-color: var(--brand-soft-deep);
+}
+.card--accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
 
-.card--flat { box-shadow: none; }
+.card--flat {
+  box-shadow: none;
+}
 
 .card--hoverable {
   cursor: pointer;
@@ -67,9 +78,15 @@ defineProps({
 .card--p-none .card__footer {
   padding: 0;
 }
-.card--p-sm .card__body { padding: 16px; }
-.card--p-md .card__body { padding: 24px; }
-.card--p-lg .card__body { padding: 32px; }
+.card--p-sm .card__body {
+  padding: 16px;
+}
+.card--p-md .card__body {
+  padding: 24px;
+}
+.card--p-lg .card__body {
+  padding: 32px;
+}
 
 .card--p-sm .card__header,
 .card--p-sm .card__footer {

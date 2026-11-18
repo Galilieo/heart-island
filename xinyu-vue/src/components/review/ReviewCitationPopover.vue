@@ -31,7 +31,9 @@ const layout = ref({ left: 0, top: 0, above: false, arrowX: 24 })
 
 let intersectionObserver = null
 
-const dateLabel = computed(() => formatChineseDate(props.source?.date) || String(props.source?.date || ''))
+const dateLabel = computed(
+  () => formatChineseDate(props.source?.date) || String(props.source?.date || '')
+)
 
 const popoverStyle = computed(() => {
   if (useSheet.value) {
@@ -155,7 +157,11 @@ onBeforeUnmount(() => {
         tabindex="-1"
         :aria-label="`${dateLabel}的记录`"
         class="review-citation__dialog"
-        :class="useSheet ? 'review-citation__sheet' : ['review-citation__note', { 'is-above': layout.above }]"
+        :class="
+          useSheet
+            ? 'review-citation__sheet'
+            : ['review-citation__note', { 'is-above': layout.above }]
+        "
         :style="popoverStyle"
         @click.stop
       >
@@ -178,7 +184,9 @@ onBeforeUnmount(() => {
           ref="textRef"
           class="review-citation__content"
           :class="{ 'is-clamped': !expanded, 'is-open': expanded }"
-        >{{ source.content }}</p>
+        >
+          {{ source.content }}
+        </p>
 
         <div class="review-citation__actions">
           <button
@@ -219,7 +227,7 @@ onBeforeUnmount(() => {
 }
 
 .review-citation__note::before {
-  content: "";
+  content: '';
   position: absolute;
   left: var(--arrow-x, 24px);
   top: -7px;

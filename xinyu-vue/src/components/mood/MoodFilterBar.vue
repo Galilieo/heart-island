@@ -21,14 +21,9 @@ const emit = defineEmits([
   'reset'
 ])
 
-const moodSelectOptions = [
-  { label: '全部心情', value: '' },
-  ...MOOD_OPTIONS
-]
+const moodSelectOptions = [{ label: '全部心情', value: '' }, ...MOOD_OPTIONS]
 
-const hasFilter = computed(
-  () => props.moodType || props.startDate || props.endDate
-)
+const hasFilter = computed(() => props.moodType || props.startDate || props.endDate)
 
 // 常驻范围按钮：全部沿用现有 reset 语义，其余按天数换算起止日期
 const RANGE_OPTIONS = [
@@ -79,9 +74,7 @@ const activeRange = computed(() => {
 })
 
 // 折叠区里还有预设范围以外的筛选（心情或自定义日期）时，在按钮上点一个小圆点提示
-const hasExtraFilter = computed(
-  () => Boolean(props.moodType) || activeRange.value === ''
-)
+const hasExtraFilter = computed(() => Boolean(props.moodType) || activeRange.value === '')
 
 async function applyRecent(days) {
   emit('update:startDate', recentStartDate(days))
@@ -123,7 +116,9 @@ async function selectRange(range) {
         class="filter-bar__range"
         :class="{ 'is-on': activeRange === range.value }"
         @click="selectRange(range)"
-      >{{ range.label }}</button>
+      >
+        {{ range.label }}
+      </button>
     </div>
 
     <button
@@ -174,12 +169,9 @@ async function selectRange(range) {
 
       <div class="filter-bar__actions">
         <BaseButton variant="primary" size="sm" @click="emit('apply')">筛选</BaseButton>
-        <BaseButton
-          variant="plain"
-          size="sm"
-          :disabled="!hasFilter"
-          @click="emit('reset')"
-        >重置</BaseButton>
+        <BaseButton variant="plain" size="sm" :disabled="!hasFilter" @click="emit('reset')"
+          >重置</BaseButton
+        >
       </div>
     </div>
   </div>
@@ -207,7 +199,8 @@ async function selectRange(range) {
   color: var(--ink-2);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 
@@ -300,8 +293,12 @@ async function selectRange(range) {
 }
 
 @media (max-width: 1024px) {
-  .filter-bar__field--mood { flex: 0 0 170px; }
-  .filter-bar__dates { flex: 1 1 calc(100% - 182px); }
+  .filter-bar__field--mood {
+    flex: 0 0 170px;
+  }
+  .filter-bar__dates {
+    flex: 1 1 calc(100% - 182px);
+  }
 }
 
 @media (max-width: 768px) {

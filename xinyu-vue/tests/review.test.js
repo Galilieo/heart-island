@@ -74,7 +74,10 @@ test('近 30 天按周分组：首尾可能是不完整周，当前周有标记'
     days.push({ date: `2026-10-${day}`, moods: day % 2 === 0 ? ['平静'] : [] })
   }
   for (let day = 1; day <= 13; day++) {
-    days.push({ date: `2026-11-${String(day).padStart(2, '0')}`, moods: day % 3 === 0 ? ['开心'] : [] })
+    days.push({
+      date: `2026-11-${String(day).padStart(2, '0')}`,
+      moods: day % 3 === 0 ? ['开心'] : []
+    })
   }
 
   const weeks = groupDaysIntoWeeks(days, '2026-11-13')
@@ -90,7 +93,10 @@ test('近 30 天按周分组：首尾可能是不完整周，当前周有标记'
     weeks.reduce((sum, week) => sum + week.total, 0),
     days.reduce((sum, day) => sum + day.moods.length, 0)
   )
-  assert.deepEqual(weeks.reduce((all, week) => all.concat(week.days.map((day) => day.date)), []), days.map((day) => day.date))
+  assert.deepEqual(
+    weeks.reduce((all, week) => all.concat(week.days.map((day) => day.date)), []),
+    days.map((day) => day.date)
+  )
 })
 
 test('只有下一周仍是完整周时可以点下一周', () => {
@@ -101,8 +107,22 @@ test('只有下一周仍是完整周时可以点下一周', () => {
 })
 
 const SAMPLE_SOURCES = [
-  { ref: 'r1', recordId: '101', date: '2026-11-02', weekday: '周一', moodType: '疲惫', content: '加班' },
-  { ref: 'r2', recordId: '102', date: '2026-11-03', weekday: '周二', moodType: '平静', content: '散步' }
+  {
+    ref: 'r1',
+    recordId: '101',
+    date: '2026-11-02',
+    weekday: '周一',
+    moodType: '疲惫',
+    content: '加班'
+  },
+  {
+    ref: 'r2',
+    recordId: '102',
+    date: '2026-11-03',
+    weekday: '周二',
+    moodType: '平静',
+    content: '散步'
+  }
 ]
 
 test('parseLetterSegments 处理普通文本、句首标记、相邻标记、标点绑定、未知引用与残缺括号', () => {
@@ -156,17 +176,32 @@ test('parseLetterSegments 处理普通文本、句首标记、相邻标记、标
 test('resolveReviewViewState 覆盖状态表每一行', () => {
   const baseStats = { total: 3, aiEnabledCount: 3, report: null, active: null, failed: null }
 
-  assert.equal(resolveReviewViewState(baseStats, { mode: 'week', isCurrentWeek: true }), 'week_not_finished')
-  assert.equal(resolveReviewViewState({ ...baseStats, total: 0, aiEnabledCount: 0 }, { mode: 'week' }), 'empty')
-  assert.equal(resolveReviewViewState({ ...baseStats, aiEnabledCount: 0 }, { mode: 'week' }), 'no_ai_enabled')
+  assert.equal(
+    resolveReviewViewState(baseStats, { mode: 'week', isCurrentWeek: true }),
+    'week_not_finished'
+  )
+  assert.equal(
+    resolveReviewViewState({ ...baseStats, total: 0, aiEnabledCount: 0 }, { mode: 'week' }),
+    'empty'
+  )
+  assert.equal(
+    resolveReviewViewState({ ...baseStats, aiEnabledCount: 0 }, { mode: 'week' }),
+    'no_ai_enabled'
+  )
   assert.equal(resolveReviewViewState(baseStats, { mode: 'week' }), 'not_generated')
 
   assert.equal(
-    resolveReviewViewState({ ...baseStats, active: { id: '1', status: 'queued', jobId: '9' } }, { mode: 'week' }),
+    resolveReviewViewState(
+      { ...baseStats, active: { id: '1', status: 'queued', jobId: '9' } },
+      { mode: 'week' }
+    ),
     'generating'
   )
   assert.equal(
-    resolveReviewViewState({ ...baseStats, active: { id: '1', status: 'running', jobId: '9' } }, { mode: 'week' }),
+    resolveReviewViewState(
+      { ...baseStats, active: { id: '1', status: 'running', jobId: '9' } },
+      { mode: 'week' }
+    ),
     'generating'
   )
   assert.equal(
@@ -179,28 +214,46 @@ test('resolveReviewViewState 覆盖状态表每一行', () => {
 
   assert.equal(
     resolveReviewViewState(
-      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: 'ok', stale: false } },
+      {
+        ...baseStats,
+        report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: 'ok', stale: false }
+      },
       { mode: 'week' }
     ),
     'ready'
   )
   assert.equal(
     resolveReviewViewState(
-      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'SUPPORT', body: '支持文案', stale: false } },
+      {
+        ...baseStats,
+        report: {
+          id: '1',
+          status: 'succeeded',
+          resultKind: 'SUPPORT',
+          body: '支持文案',
+          stale: false
+        }
+      },
       { mode: 'week' }
     ),
     'crisis'
   )
   assert.equal(
     resolveReviewViewState(
-      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: '旧信', stale: true } },
+      {
+        ...baseStats,
+        report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: '旧信', stale: true }
+      },
       { mode: 'week' }
     ),
     'stale_edited'
   )
   assert.equal(
     resolveReviewViewState(
-      { ...baseStats, report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: null, stale: true } },
+      {
+        ...baseStats,
+        report: { id: '1', status: 'succeeded', resultKind: 'MODEL', body: null, stale: true }
+      },
       { mode: 'week' }
     ),
     'stale_deleted'
@@ -217,7 +270,10 @@ test('resolveReviewViewState 覆盖状态表每一行', () => {
     'failed_with_report'
   )
   assert.equal(
-    resolveReviewViewState({ ...baseStats, failed: { id: '2', status: 'failed', jobId: '10' } }, { mode: 'week' }),
+    resolveReviewViewState(
+      { ...baseStats, failed: { id: '2', status: 'failed', jobId: '10' } },
+      { mode: 'week' }
+    ),
     'failed_empty'
   )
 })
@@ -255,7 +311,9 @@ test('首页 record 深链解析与过期横幅/近30天重生成展示条件', 
   assert.equal(parseRecordQueryParam(['456']), '456')
   assert.equal(parseRecordQueryParam('0'), null)
   assert.equal(parseRecordQueryParam('abc'), null)
-  assert.deepEqual(stripRecordQuery({ record: '123', start: '2026-11-02' }), { start: '2026-11-02' })
+  assert.deepEqual(stripRecordQuery({ record: '123', start: '2026-11-02' }), {
+    start: '2026-11-02'
+  })
 
   assert.deepEqual(resolveLetterStaleUI({ mode: 'week', viewState: 'stale_edited' }), {
     showWeekStaleBanner: true,

@@ -13,23 +13,13 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import { useAdminReportHandle } from '../composables/useAdminReportHandle'
 import { useToast } from '../composables/useToast'
 import { useAdminStore } from '../stores/admin'
-import {
-  reasonLabel,
-  adminReportResultMeta,
-  formatReportTime
-} from '../utils/communityReport'
+import { reasonLabel, adminReportResultMeta, formatReportTime } from '../utils/communityReport'
 
 const adminStore = useAdminStore()
 const toast = useToast()
 
-const {
-  reports,
-  reportsTotal,
-  reportsLoading,
-  reportFilters,
-  reportPages,
-  pendingReportCount
-} = storeToRefs(adminStore)
+const { reports, reportsTotal, reportsLoading, reportFilters, reportPages, pendingReportCount } =
+  storeToRefs(adminStore)
 
 const {
   detailVisible,

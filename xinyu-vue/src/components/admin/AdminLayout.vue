@@ -22,9 +22,7 @@ onMounted(() => {
   adminStore.fetchPendingReportCount().catch(() => null)
 })
 
-const logoUrl = computed(() =>
-  theme.value === 'night' ? lockupDarkUrl : lockupUrl
-)
+const logoUrl = computed(() => (theme.value === 'night' ? lockupDarkUrl : lockupUrl))
 
 const adminDisplayName = computed(() => userStore.displayName)
 const adminInitial = computed(() => adminDisplayName.value.slice(0, 1))
@@ -65,7 +63,8 @@ function isActive(item) {
             <span
               v-if="item.to === '/admin/reports' && pendingReportCount > 0"
               class="admin-nav__badge"
-            >{{ pendingReportCount }}</span>
+              >{{ pendingReportCount }}</span
+            >
           </RouterLink>
         </template>
       </nav>
@@ -94,11 +93,7 @@ function isActive(item) {
 
       <!-- 备案信息随后台右侧内容区一起滚动，不横跨侧栏，侧栏保持整屏高度。 -->
       <footer class="admin-filing" aria-label="网站备案信息">
-        <a
-          href="https://beian.miit.gov.cn/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
           鄂ICP备2026025921号-1
         </a>
         <a
@@ -202,7 +197,8 @@ function isActive(item) {
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 

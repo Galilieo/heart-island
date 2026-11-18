@@ -52,10 +52,7 @@ const { run: doFetchReplies, loading: repliesLoading } = useAsyncAction(
   { silent: true }
 )
 
-const { run: doFetchTopics } = useAsyncAction(
-  () => communityStore.fetchTopics(),
-  { silent: true }
-)
+const { run: doFetchTopics } = useAsyncAction(() => communityStore.fetchTopics(), { silent: true })
 
 const { run: doSubmitReply, loading: replySubmitting } = useAsyncAction(
   (content) => communityStore.publishReply({ postId: Number(route.params.id), content }),
@@ -250,11 +247,7 @@ onMounted(async () => {
         />
       </template>
 
-      <EmptyState
-        v-else
-        doodle="cloud"
-        title="帖子不存在或已删除"
-      >
+      <EmptyState v-else doodle="cloud" title="帖子不存在或已删除">
         <BaseButton variant="primary" @click="goBack">回到社区</BaseButton>
       </EmptyState>
 

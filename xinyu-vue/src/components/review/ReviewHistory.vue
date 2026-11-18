@@ -51,7 +51,9 @@ function statusLabel(item) {
         @click="emit('select', item.rangeStart)"
       >
         <span class="review-envelope__flap" aria-hidden="true" />
-        <span class="review-envelope__range">{{ formatRangeShort(item.rangeStart, item.rangeEnd) }}</span>
+        <span class="review-envelope__range">{{
+          formatRangeShort(item.rangeStart, item.rangeEnd)
+        }}</span>
         <span class="review-envelope__meta">{{ statusLabel(item) }}</span>
       </button>
 
@@ -101,7 +103,9 @@ function statusLabel(item) {
   border-radius: var(--radius-2);
   color: var(--ink-1);
   cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft);
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
+    background var(--t-fast) var(--ease-soft);
 }
 
 .review-envelope:hover {

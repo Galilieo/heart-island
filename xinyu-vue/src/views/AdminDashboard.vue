@@ -26,13 +26,16 @@ const RATE_LIMIT_BACKEND_LABELS = {
   disabled: '已关闭'
 }
 
-const rateLimitBackendLabel = computed(() =>
-  RATE_LIMIT_BACKEND_LABELS[overview.value.rateLimitBackend] || '未知'
+const rateLimitBackendLabel = computed(
+  () => RATE_LIMIT_BACKEND_LABELS[overview.value.rateLimitBackend] || '未知'
 )
 
 const rateLimitRejections = computed(() =>
   // 后端 Long 全局序列化为字符串（JacksonConfig），求和前先转数字，避免拼接。
-  Object.values(overview.value.rateLimitRejections || {}).reduce((sum, count) => sum + Number(count), 0)
+  Object.values(overview.value.rateLimitRejections || {}).reduce(
+    (sum, count) => sum + Number(count),
+    0
+  )
 )
 
 // 按业务域分组展示：用户与账号 / 社区内容 / AI 服务。
@@ -57,7 +60,11 @@ const statGroups = computed(() => [
   {
     name: 'AI 服务',
     items: [
-      { label: 'AI调用总数', value: overview.value.aiReplyTotal, hint: '心情与社区触发的 AI 回复次数' },
+      {
+        label: 'AI调用总数',
+        value: overview.value.aiReplyTotal,
+        hint: '心情与社区触发的 AI 回复次数'
+      },
       { label: 'AI成功次数', value: overview.value.aiReplySuccess, hint: '模型成功返回回复的次数' },
       {
         label: 'AI失败次数',
@@ -89,10 +96,7 @@ onMounted(() => {
 
 <template>
   <div class="admin-dashboard">
-    <AdminPageTitle
-      title="概览"
-      desc="用户、社区与 AI 服务的整体情况。"
-    />
+    <AdminPageTitle title="概览" desc="用户、社区与 AI 服务的整体情况。" />
 
     <div v-if="overviewLoading" class="admin-dashboard__kpis">
       <SkeletonCard v-for="i in 9" :key="i" rows="2" />
@@ -102,11 +106,7 @@ onMounted(() => {
       <section v-for="group in statGroups" :key="group.name">
         <h2 class="admin-dashboard__group-title">{{ group.name }}</h2>
         <div class="admin-dashboard__kpis">
-          <article
-            v-for="item in group.items"
-            :key="item.label"
-            class="admin-dashboard__kpi"
-          >
+          <article v-for="item in group.items" :key="item.label" class="admin-dashboard__kpi">
             <p class="admin-dashboard__kpi-label">{{ item.label }}</p>
             <strong class="admin-dashboard__kpi-value">
               {{ item.value || 0 }}

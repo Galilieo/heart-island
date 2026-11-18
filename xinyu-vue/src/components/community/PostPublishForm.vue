@@ -27,10 +27,7 @@ const topicOptions = computed(() => [
   ...props.topics.map((t) => ({ label: t.name, value: t.id }))
 ])
 
-const moodOptions = computed(() => [
-  { label: '选择情绪', value: '' },
-  ...MOOD_OPTIONS
-])
+const moodOptions = computed(() => [{ label: '选择情绪', value: '' }, ...MOOD_OPTIONS])
 
 const canSubmit = computed(
   () =>
@@ -64,18 +61,8 @@ defineExpose({ resetAfterSuccess })
     <p class="publish__desc">帖子会匿名展示。聊聊你的近况，也请尊重不同的感受。</p>
 
     <div class="publish__row">
-      <BaseSelect
-        v-model="topicId"
-        :options="topicOptions"
-        placeholder="选择话题"
-        label="话题"
-      />
-      <BaseSelect
-        v-model="moodType"
-        :options="moodOptions"
-        placeholder="选择情绪"
-        label="情绪"
-      />
+      <BaseSelect v-model="topicId" :options="topicOptions" placeholder="选择话题" label="话题" />
+      <BaseSelect v-model="moodType" :options="moodOptions" placeholder="选择情绪" label="情绪" />
     </div>
 
     <BaseTextarea
@@ -88,12 +75,9 @@ defineExpose({ resetAfterSuccess })
 
     <div class="publish__foot">
       <BaseSwitch v-model="needAiReply" label="让小芽回复（AI 生成）" :disabled="submitting" />
-      <BaseButton
-        variant="primary"
-        :loading="submitting"
-        :disabled="!canSubmit"
-        @click="submit"
-      >发布</BaseButton>
+      <BaseButton variant="primary" :loading="submitting" :disabled="!canSubmit" @click="submit"
+        >发布</BaseButton
+      >
     </div>
   </div>
 </template>
@@ -121,6 +105,8 @@ defineExpose({ resetAfterSuccess })
 }
 
 @media (max-width: 480px) {
-  .publish__row { grid-template-columns: 1fr; }
+  .publish__row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

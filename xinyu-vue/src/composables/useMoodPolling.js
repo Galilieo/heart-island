@@ -21,7 +21,7 @@ export function useMoodPolling(store, userStore) {
         if (slot.source) {
           store.markObservation(slot.source.recordId, reason, error)
         }
-      },
+      }
     })
     return slot
   })
@@ -36,21 +36,26 @@ export function useMoodPolling(store, userStore) {
         continue
       }
       const key = [record.id, record.contentVersion, record.jobId, store.observationEpoch].join(':')
-      unique.set(key, { key, recordId: record.id, contentVersion: record.contentVersion, jobId: record.jobId })
+      unique.set(key, {
+        key,
+        recordId: record.id,
+        contentVersion: record.contentVersion,
+        jobId: record.jobId
+      })
     }
     return [...unique.values()].slice(0, MAX_OBSERVATIONS)
   })
 
   function reconcile() {
     const desired = visible.value && userStore.isLoggedIn ? sources.value : []
-    const keys = new Set(desired.map(source => source.key))
-    const retained = new Set(slots.filter(slot => keys.has(slot.key)))
+    const keys = new Set(desired.map((source) => source.key))
+    const retained = new Set(slots.filter((slot) => keys.has(slot.key)))
 
     for (const source of desired) {
-      if (slots.some(slot => slot.key === source.key)) {
+      if (slots.some((slot) => slot.key === source.key)) {
         continue
       }
-      const slot = slots.find(candidate => !retained.has(candidate))
+      const slot = slots.find((candidate) => !retained.has(candidate))
       slot.poller.stop()
       slot.key = source.key
       slot.source = source
@@ -67,7 +72,11 @@ export function useMoodPolling(store, userStore) {
     }
   }
 
-  watch(() => userStore.token, () => store.reset(), { immediate: true, flush: 'sync' })
+  watch(
+    () => userStore.token,
+    () => store.reset(),
+    { immediate: true, flush: 'sync' }
+  )
   watch([sources, visible, () => userStore.isLoggedIn], reconcile)
 
   function visibilityChanged() {
@@ -77,7 +86,9 @@ export function useMoodPolling(store, userStore) {
 
   onMounted(() => {
     document.addEventListener('visibilitychange', visibilityChanged)
-    clockTimer = setInterval(() => { now.value = Date.now() }, 1000)
+    clockTimer = setInterval(() => {
+      now.value = Date.now()
+    }, 1000)
     reconcile()
   })
   onUnmounted(() => {

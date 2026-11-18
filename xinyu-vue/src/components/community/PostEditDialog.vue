@@ -37,9 +37,7 @@ watch(
   { immediate: true }
 )
 
-const topicOptions = computed(() =>
-  props.topics.map((t) => ({ label: t.name, value: t.id }))
-)
+const topicOptions = computed(() => props.topics.map((t) => ({ label: t.name, value: t.id })))
 
 const moodSelectOptions = computed(() => [...MOOD_OPTIONS])
 
@@ -79,7 +77,12 @@ function close() {
     <div class="ped">
       <div class="ped__row">
         <BaseSelect v-model="topicId" :options="topicOptions" label="话题" placeholder="选择话题" />
-        <BaseSelect v-model="moodType" :options="moodSelectOptions" label="情绪" placeholder="选择情绪" />
+        <BaseSelect
+          v-model="moodType"
+          :options="moodSelectOptions"
+          label="情绪"
+          placeholder="选择情绪"
+        />
       </div>
       <BaseTextarea
         v-model="content"
@@ -103,7 +106,11 @@ function close() {
 </template>
 
 <style scoped>
-.ped { display: flex; flex-direction: column; gap: 14px; }
+.ped {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
 .ped__row {
   display: grid;
@@ -117,6 +124,8 @@ function close() {
 }
 
 @media (max-width: 768px) {
-  .ped__row { grid-template-columns: 1fr; }
+  .ped__row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

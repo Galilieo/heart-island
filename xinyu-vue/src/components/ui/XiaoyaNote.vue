@@ -17,8 +17,8 @@ const signature = computed(() => (props.support ? '心屿' : '小芽写道'))
 const isClamped = computed(() => props.clamp > 0)
 
 // 用自定义属性传行数，模板里不必按行数拼样式。
-const clampStyle = computed(
-  () => (isClamped.value ? { '--note-clamp': String(props.clamp) } : null)
+const clampStyle = computed(() =>
+  isClamped.value ? { '--note-clamp': String(props.clamp) } : null
 )
 </script>
 

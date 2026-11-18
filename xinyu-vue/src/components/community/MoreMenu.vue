@@ -81,12 +81,7 @@ onUnmounted(() => {
       ⋯
     </button>
 
-    <div
-      v-if="open"
-      class="more-menu__pop"
-      role="menu"
-      @keydown="onMenuKeydown"
-    >
+    <div v-if="open" class="more-menu__pop" role="menu" @keydown="onMenuKeydown">
       <button
         ref="itemRef"
         type="button"
@@ -126,7 +121,8 @@ onUnmounted(() => {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 

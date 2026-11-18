@@ -58,13 +58,21 @@ defineEmits(['update:modelValue', 'enter'])
   background: var(--bg-card);
   border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
 }
 
-.field__control--sm { height: 34px; }
-.field__control--md { height: 42px; }
-.field__control--lg { height: 48px; font-size: var(--fs-lg); }
+.field__control--sm {
+  height: 34px;
+}
+.field__control--md {
+  height: 42px;
+}
+.field__control--lg {
+  height: 48px;
+  font-size: var(--fs-lg);
+}
 
 .field__control:focus-within {
   border-color: var(--brand);

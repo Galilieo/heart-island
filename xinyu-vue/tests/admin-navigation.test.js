@@ -20,7 +20,15 @@ test('导航分组与页面名称和任务书一致', () => {
   )
   assert.deepEqual(
     adminNavigationItems.map((item) => item.to),
-    ['/admin', '/admin/users', '/admin/posts', '/admin/replies', '/admin/reports', '/admin/topics', '/admin/ai-replies']
+    [
+      '/admin',
+      '/admin/users',
+      '/admin/posts',
+      '/admin/replies',
+      '/admin/reports',
+      '/admin/topics',
+      '/admin/ai-replies'
+    ]
   )
 })
 

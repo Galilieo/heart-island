@@ -14,19 +14,27 @@
 
 /* 隐藏 / 仅显示 */
 @media (max-width: 480px) {
-  .hide-on-mobile { display: none !important; }
+  .hide-on-mobile {
+    display: none !important;
+  }
 }
 
 @media (max-width: 768px) {
-  .hide-on-tablet { display: none !important; }
+  .hide-on-tablet {
+    display: none !important;
+  }
 }
 
 @media (min-width: 481px) {
-  .only-mobile { display: none !important; }
+  .only-mobile {
+    display: none !important;
+  }
 }
 
 @media (min-width: 769px) {
-  .only-tablet { display: none !important; }
+  .only-tablet {
+    display: none !important;
+  }
 }
 
 /* 双栏 → 单栏快捷类（grid / flex 通用） */

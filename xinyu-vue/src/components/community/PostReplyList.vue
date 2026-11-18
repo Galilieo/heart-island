@@ -34,9 +34,7 @@ const visibleCount = ref(INITIAL_COUNT)
 
 const visibleReplies = computed(() => props.replies.slice(0, visibleCount.value))
 const remaining = computed(() => props.replies.length - visibleCount.value)
-const collapsible = computed(
-  () => remaining.value <= 0 && props.replies.length > INITIAL_COUNT
-)
+const collapsible = computed(() => remaining.value <= 0 && props.replies.length > INITIAL_COUNT)
 
 function loadMore() {
   visibleCount.value += PAGE_STEP
@@ -100,13 +98,17 @@ async function saveEdit(reply) {
               class="rl__op"
               :disabled="updatingId === r.id || deletingId === r.id"
               @click="startEdit(r)"
-            >编辑</button>
+            >
+              编辑
+            </button>
             <button
               type="button"
               class="rl__op rl__op--danger"
               :disabled="deletingId === r.id"
               @click="emit('delete', r)"
-            >{{ deletingId === r.id ? '删除中…' : '删除' }}</button>
+            >
+              {{ deletingId === r.id ? '删除中…' : '删除' }}
+            </button>
           </div>
           <MoreMenu
             v-else-if="!isOwner(r) && !r.hidden && !postHidden"
@@ -136,7 +138,8 @@ async function saveEdit(reply) {
               :loading="updatingId === r.id"
               :disabled="!canSave"
               @click="saveEdit(r)"
-            >保存</BaseButton>
+              >保存</BaseButton
+            >
           </div>
         </div>
 
@@ -144,20 +147,10 @@ async function saveEdit(reply) {
       </article>
 
       <div v-if="remaining > 0 || collapsible" class="rl__more">
-        <BaseButton
-          v-if="remaining > 0"
-          variant="ghost"
-          size="sm"
-          block
-          @click="loadMore"
-        >展开更多回复（还有 {{ remaining }} 条）</BaseButton>
-        <BaseButton
-          v-else
-          variant="ghost"
-          size="sm"
-          block
-          @click="collapse"
-        >收起回复</BaseButton>
+        <BaseButton v-if="remaining > 0" variant="ghost" size="sm" block @click="loadMore"
+          >展开更多回复（还有 {{ remaining }} 条）</BaseButton
+        >
+        <BaseButton v-else variant="ghost" size="sm" block @click="collapse">收起回复</BaseButton>
       </div>
     </template>
 
@@ -243,9 +236,14 @@ async function saveEdit(reply) {
   transition: color var(--t-fast) var(--ease-soft);
 }
 
-.rl__op:hover { color: var(--ink-1); }
+.rl__op:hover {
+  color: var(--ink-1);
+}
 
-.rl__op:disabled { opacity: 0.55; cursor: not-allowed; }
+.rl__op:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 .rl__op--danger:hover {
   color: var(--danger-ink);

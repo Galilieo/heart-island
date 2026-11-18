@@ -45,10 +45,7 @@ defineProps({
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(
-    rgba(120, 98, 60, 0.04) 1px,
-    transparent 1px
-  );
+  background-image: radial-gradient(rgba(120, 98, 60, 0.04) 1px, transparent 1px);
   background-size: 14px 14px;
   z-index: 0;
   opacity: 0.5;
@@ -76,6 +73,12 @@ defineProps({
   padding: 28px 0;
 }
 
-.shell__main--narrow :slotted(*) { max-width: 1080px; margin-left: auto; margin-right: auto; }
-.shell__main--wide   :slotted(*) { max-width: none; }
+.shell__main--narrow :slotted(*) {
+  max-width: 1080px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.shell__main--wide :slotted(*) {
+  max-width: none;
+}
 </style>

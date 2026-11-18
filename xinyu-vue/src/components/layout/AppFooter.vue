@@ -25,5 +25,4 @@
   color: var(--ink-3);
   font-size: var(--fs-xs);
 }
-
 </style>

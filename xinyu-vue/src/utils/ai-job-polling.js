@@ -2,7 +2,7 @@ const ACTIVE_STATES = new Set(['queued', 'running'])
 const defaultScheduler = {
   now: () => Date.now(),
   setTimeout: (callback, delay) => setTimeout(callback, delay),
-  clearTimeout: timer => clearTimeout(timer),
+  clearTimeout: (timer) => clearTimeout(timer)
 }
 
 /**
@@ -10,8 +10,12 @@ const defaultScheduler = {
  * stop立即使本地代次失效并取消请求；底层取消尚未结束时，新的start仍等待旧请求退出。
  */
 export function createAiJobPoller({
-  fetchJob, onUpdate, onStop = () => {}, intervalMs = 2000,
-  maxObserveMs = 120_000, scheduler = defaultScheduler,
+  fetchJob,
+  onUpdate,
+  onStop = () => {},
+  intervalMs = 2000,
+  maxObserveMs = 120_000,
+  scheduler = defaultScheduler
 }) {
   let current = null
   let requesting = false
@@ -30,9 +34,11 @@ export function createAiJobPoller({
   }
 
   function matches(job, source) {
-    return String(job.id) === String(source.jobId) &&
+    return (
+      String(job.id) === String(source.jobId) &&
       String(job.targetId) === String(source.recordId) &&
       String(job.targetVersion) === String(source.contentVersion)
+    )
   }
 
   function schedule(delay) {

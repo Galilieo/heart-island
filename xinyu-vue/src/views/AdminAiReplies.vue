@@ -22,13 +22,8 @@ const adminStore = useAdminStore()
 const detailVisible = ref(false)
 const currentRecord = ref(null)
 
-const {
-  aiReplies,
-  aiRepliesTotal,
-  aiRepliesLoading,
-  aiReplyFilters,
-  aiReplyPages
-} = storeToRefs(adminStore)
+const { aiReplies, aiRepliesTotal, aiRepliesLoading, aiReplyFilters, aiReplyPages } =
+  storeToRefs(adminStore)
 
 const targetTypeOptions = [
   { label: '全部类型', value: '' },
@@ -141,16 +136,9 @@ function closeDetail() {
 
 <template>
   <div class="admin-ai-replies">
-    <AdminPageTitle
-      title="AI 记录"
-      desc="查看 AI 回复、失败原因，以及对应的心情记录或帖子。"
-    />
+    <AdminPageTitle title="AI 记录" desc="查看 AI 回复、失败原因，以及对应的心情记录或帖子。" />
 
-    <AdminFilterBar
-      :loading="aiRepliesLoading"
-      @search="handleSearch"
-      @reset="handleReset"
-    >
+    <AdminFilterBar :loading="aiRepliesLoading" @search="handleSearch" @reset="handleReset">
       <AdminFilterField size="md">
         <BaseInput
           v-model="aiReplyFilters.userId"
@@ -197,16 +185,11 @@ function closeDetail() {
       order-hint="按创建时间倒序"
     >
       <template #cell-status="{ row }">
-        <AdminStatus
-          :text="statusText(row.status)"
-          :tone="row.status === 1 ? 'ok' : 'bad'"
-        />
+        <AdminStatus :text="statusText(row.status)" :tone="row.status === 1 ? 'ok' : 'bad'" />
       </template>
 
       <template #actions="{ row }">
-        <AdminRowAction @click="openDetail(row)">
-          详情
-        </AdminRowAction>
+        <AdminRowAction @click="openDetail(row)"> 详情 </AdminRowAction>
       </template>
 
       <template #loading>
@@ -231,12 +214,7 @@ function closeDetail() {
       </template>
     </AdminDataTable>
 
-    <BaseDialog
-      v-model="detailVisible"
-      title="AI 回复详情"
-      width="lg"
-      @close="closeDetail"
-    >
+    <BaseDialog v-model="detailVisible" title="AI 回复详情" width="lg" @close="closeDetail">
       <div v-if="currentRecord" class="admin-ai-replies__detail">
         <div class="admin-ai-replies__detail-grid">
           <div>
@@ -288,9 +266,7 @@ function closeDetail() {
       </div>
 
       <template #footer>
-        <BaseButton variant="plain" @click="closeDetail">
-          关闭
-        </BaseButton>
+        <BaseButton variant="plain" @click="closeDetail"> 关闭 </BaseButton>
       </template>
     </BaseDialog>
   </div>

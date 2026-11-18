@@ -145,11 +145,7 @@ function toValidDate(year, month, day) {
   if (year < 1900 || year > 2100) return null
 
   const date = new Date(year, month - 1, day)
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
     return null
   }
 
@@ -181,11 +177,7 @@ function emitIfValid() {
   }
   if (yearPart.value.length !== 4 || !monthPart.value || !dayPart.value) return
 
-  const parsed = toValidDate(
-    Number(yearPart.value),
-    Number(monthPart.value),
-    Number(dayPart.value)
-  )
+  const parsed = toValidDate(Number(yearPart.value), Number(monthPart.value), Number(dayPart.value))
   if (parsed) {
     emit('update:modelValue', `${parsed.year}-${pad(parsed.month)}-${pad(parsed.day)}`)
   }
@@ -367,9 +359,7 @@ async function updatePickerPlacement() {
   const pickerWidth = picker.offsetWidth
   const minLeft = viewportLeft + margin
   const maxLeft = viewportLeft + viewportWidth - pickerWidth - margin
-  const preferredLeft = props.pickerAlign === 'end'
-    ? rootRect.right - pickerWidth
-    : rootRect.left
+  const preferredLeft = props.pickerAlign === 'end' ? rootRect.right - pickerWidth : rootRect.left
   const clampedLeft = Math.min(Math.max(preferredLeft, minLeft), Math.max(minLeft, maxLeft))
 
   const fullHeight = Math.max(picker.scrollHeight, picker.getBoundingClientRect().height)
@@ -540,13 +530,22 @@ async function updatePickerPlacement() {
   background: var(--bg-card);
   border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
 }
 
-.date-field__control--sm { height: 34px; font-size: var(--fs-sm); }
-.date-field__control--md { height: 42px; }
-.date-field__control--lg { height: 48px; font-size: var(--fs-lg); }
+.date-field__control--sm {
+  height: 34px;
+  font-size: var(--fs-sm);
+}
+.date-field__control--md {
+  height: 42px;
+}
+.date-field__control--lg {
+  height: 48px;
+  font-size: var(--fs-lg);
+}
 
 .date-field__control:focus-within {
   border-color: var(--brand);

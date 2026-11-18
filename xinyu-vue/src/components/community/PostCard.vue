@@ -57,7 +57,9 @@ const likeLabel = computed(() => {
       <div class="pc__hidden-copy">
         <strong>这条内容因违反社区规范已被隐藏，仅你自己可见。</strong>
         <p>
-          违规原因：{{ reasonLabel(post.hideReason) }}。如有异议，请按隐私政策中的联系邮箱与我们联系。
+          违规原因：{{
+            reasonLabel(post.hideReason)
+          }}。如有异议，请按隐私政策中的联系邮箱与我们联系。
         </p>
       </div>
     </div>
@@ -76,16 +78,9 @@ const likeLabel = computed(() => {
       />
     </header>
 
-    <p
-      class="pc__content"
-      :class="variant === 'card' ? 'clamp-3' : ''"
-    >{{ post.content }}</p>
+    <p class="pc__content" :class="variant === 'card' ? 'clamp-3' : ''">{{ post.content }}</p>
 
-    <XiaoyaNote
-      v-if="variant === 'card' && post.aiReply"
-      :text="post.aiReply"
-      :clamp="2"
-    />
+    <XiaoyaNote v-if="variant === 'card' && post.aiReply" :text="post.aiReply" :clamp="2" />
 
     <footer class="pc__actions" @click.stop>
       <button
@@ -127,7 +122,11 @@ const likeLabel = computed(() => {
         >
           编辑
         </button>
-        <button type="button" class="pc__action pc__action--danger motion-press" @click="$emit('delete', post)">
+        <button
+          type="button"
+          class="pc__action pc__action--danger motion-press"
+          @click="$emit('delete', post)"
+        >
           删除
         </button>
       </template>
@@ -137,7 +136,8 @@ const likeLabel = computed(() => {
 
 <style scoped>
 .pc {
-  transition: transform var(--t-base) var(--ease-soft),
+  transition:
+    transform var(--t-base) var(--ease-soft),
     box-shadow var(--t-base) var(--ease-soft);
 }
 
@@ -261,5 +261,7 @@ const likeLabel = computed(() => {
   font-size: var(--fs-xs);
 }
 
-.pc__spacer { flex: 1; }
+.pc__spacer {
+  flex: 1;
+}
 </style>

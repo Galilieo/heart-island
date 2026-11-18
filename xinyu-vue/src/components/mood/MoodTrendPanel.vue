@@ -21,7 +21,7 @@ const total = computed(() => props.trend?.total || 0)
 const segments = computed(() => {
   const counts = props.trend?.moodCounts || []
   return counts
-    .filter(item => (item.count || 0) > 0)
+    .filter((item) => (item.count || 0) > 0)
     .sort((left, right) => right.count - left.count)
 })
 
@@ -37,7 +37,7 @@ function segmentWidth(count) {
 
 // 长条是视觉表达，汇总信息通过 aria-label 提供给读屏；图例文字本身可读。
 const barLabel = computed(() => {
-  const parts = segments.value.map(item => `${item.moodType} ${item.count} 次`)
+  const parts = segments.value.map((item) => `${item.moodType} ${item.count} 次`)
   return `最近 7 天共 ${total.value} 次记录：${parts.join('，')}`
 })
 </script>
@@ -78,9 +78,7 @@ const barLabel = computed(() => {
       </ul>
     </template>
 
-    <p v-else class="week__empty">
-      最近 7 天还没有记录。记下心情后，可以在这里查看统计。
-    </p>
+    <p v-else class="week__empty">最近 7 天还没有记录。记下心情后，可以在这里查看统计。</p>
 
     <RouterLink to="/review" class="week__report-link">看周报 ›</RouterLink>
   </section>
@@ -179,10 +177,22 @@ const barLabel = computed(() => {
 }
 
 /* 心情分组 → tokens.css 的配色变量；长条与图例色点统一读 var(--tone)。 */
-.tone--joy { --tone: var(--joy); }
-.tone--calm { --tone: var(--calm); }
-.tone--tension { --tone: var(--tension); }
-.tone--sad { --tone: var(--sad); }
-.tone--tired { --tone: var(--tired); }
-.tone--neutral { --tone: var(--brand); }
+.tone--joy {
+  --tone: var(--joy);
+}
+.tone--calm {
+  --tone: var(--calm);
+}
+.tone--tension {
+  --tone: var(--tension);
+}
+.tone--sad {
+  --tone: var(--sad);
+}
+.tone--tired {
+  --tone: var(--tired);
+}
+.tone--neutral {
+  --tone: var(--brand);
+}
 </style>

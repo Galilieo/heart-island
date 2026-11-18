@@ -54,7 +54,10 @@ const httpError = (config, status, message) => {
 
 test('举报表单校验覆盖未选原因、OTHER 缺说明和 200 字上限', () => {
   assert.equal(reportUtils.validateReportForm({ reason: '', detail: '' }), '请选择举报原因')
-  assert.equal(reportUtils.validateReportForm({ reason: 'OTHER', detail: '   ' }), '选「其他」时请写一句原因')
+  assert.equal(
+    reportUtils.validateReportForm({ reason: 'OTHER', detail: '   ' }),
+    '选「其他」时请写一句原因'
+  )
   assert.match(reportUtils.validateReportForm({ reason: 'AD', detail: '字'.repeat(201) }), /200/)
   assert.equal(reportUtils.validateReportForm({ reason: 'SAFETY', detail: '' }), '')
   assert.equal(reportUtils.validateReportForm({ reason: 'OTHER', detail: '包含引流广告' }), '')
@@ -62,9 +65,18 @@ test('举报表单校验覆盖未选原因、OTHER 缺说明和 200 字上限', 
 
 test('myReportResultMeta 覆盖全部举报状态', () => {
   assert.deepEqual(reportUtils.myReportResultMeta('PENDING'), { text: '处理中', tone: 'warn' })
-  assert.deepEqual(reportUtils.myReportResultMeta('HIDDEN'), { text: '已处理 · 内容已隐藏', tone: 'neutral' })
-  assert.deepEqual(reportUtils.myReportResultMeta('DISMISSED'), { text: '已处理 · 未发现违规', tone: 'success' })
-  assert.deepEqual(reportUtils.myReportResultMeta('CLOSED'), { text: '已处理 · 内容已被作者删除', tone: 'neutral' })
+  assert.deepEqual(reportUtils.myReportResultMeta('HIDDEN'), {
+    text: '已处理 · 内容已隐藏',
+    tone: 'neutral'
+  })
+  assert.deepEqual(reportUtils.myReportResultMeta('DISMISSED'), {
+    text: '已处理 · 未发现违规',
+    tone: 'success'
+  })
+  assert.deepEqual(reportUtils.myReportResultMeta('CLOSED'), {
+    text: '已处理 · 内容已被作者删除',
+    tone: 'neutral'
+  })
 })
 
 test('contentStatusMeta 覆盖全部内容状态', () => {

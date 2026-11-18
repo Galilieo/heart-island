@@ -134,7 +134,10 @@ export function createModerationModule() {
   }
 
   function updateReplyStatus(id, status, hideReason) {
-    return refreshOnSuccessOrConflict(adminApi.updateReplyStatus(id, status, hideReason), fetchReplies)
+    return refreshOnSuccessOrConflict(
+      adminApi.updateReplyStatus(id, status, hideReason),
+      fetchReplies
+    )
   }
 
   function removeReply(id, hideReason) {

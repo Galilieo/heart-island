@@ -40,7 +40,8 @@ const emit = defineEmits(['click'])
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     border-color var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }

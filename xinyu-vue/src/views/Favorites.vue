@@ -19,15 +19,11 @@ const toast = useToast()
 
 const { favorites, topics } = storeToRefs(communityStore)
 
-const { run: doFetch, loading } = useAsyncAction(
-  () => communityStore.fetchFavorites(),
-  { silent: true }
-)
+const { run: doFetch, loading } = useAsyncAction(() => communityStore.fetchFavorites(), {
+  silent: true
+})
 
-const { run: doFetchTopics } = useAsyncAction(
-  () => communityStore.fetchTopics(),
-  { silent: true }
-)
+const { run: doFetchTopics } = useAsyncAction(() => communityStore.fetchTopics(), { silent: true })
 
 async function handleLike(post) {
   const res = await communityStore.toggleLike(post)

@@ -116,10 +116,22 @@ function toggle() {
   outline-offset: 2px;
 }
 
-.tone--joy { --tone: var(--joy); }
-.tone--calm { --tone: var(--calm); }
-.tone--tension { --tone: var(--tension); }
-.tone--sad { --tone: var(--sad); }
-.tone--tired { --tone: var(--tired); }
-.tone--neutral { --tone: var(--brand); }
+.tone--joy {
+  --tone: var(--joy);
+}
+.tone--calm {
+  --tone: var(--calm);
+}
+.tone--tension {
+  --tone: var(--tension);
+}
+.tone--sad {
+  --tone: var(--sad);
+}
+.tone--tired {
+  --tone: var(--tired);
+}
+.tone--neutral {
+  --tone: var(--brand);
+}
 </style>

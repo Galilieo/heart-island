@@ -21,7 +21,10 @@ defineEmits(['update:modelValue'])
 </script>
 
 <template>
-  <label class="field" :class="{ 'field--paper': variant === 'paper', 'is-error': !!error, 'is-disabled': disabled }">
+  <label
+    class="field"
+    :class="{ 'field--paper': variant === 'paper', 'is-error': !!error, 'is-disabled': disabled }"
+  >
     <span v-if="label" class="field__label">{{ label }}</span>
     <span class="field__control">
       <textarea
@@ -62,7 +65,8 @@ defineEmits(['update:modelValue'])
   background: var(--bg-card);
   border: 1px solid var(--line-control);
   border-radius: var(--radius-2);
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
 }
 

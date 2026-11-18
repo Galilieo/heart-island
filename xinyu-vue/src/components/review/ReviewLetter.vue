@@ -39,7 +39,9 @@ const activeCitation = ref(null)
 const report = computed(() => props.pageData?.report || null)
 const sources = computed(() => report.value?.sources || [])
 const sourceByRef = computed(() => new Map(sources.value.map((item) => [item.ref, item])))
-const staleUi = computed(() => resolveLetterStaleUI({ mode: props.mode, viewState: props.viewState }))
+const staleUi = computed(() =>
+  resolveLetterStaleUI({ mode: props.mode, viewState: props.viewState })
+)
 const showLetter = computed(() => shouldShowReviewLetter(props.viewState, report.value))
 
 const bodyParagraphs = computed(() => {
@@ -146,7 +148,11 @@ watch(
 <template>
   <section class="review-letter" :aria-label="mode === 'week' ? '周报回信' : '近 30 天回信'">
     <!-- 危机分流：严禁渲染小芽形象或头像，只保留温和稳重的纯文字支持卡片 -->
-    <div v-if="viewState === 'crisis'" class="review-letter__support" data-testid="review-crisis-card">
+    <div
+      v-if="viewState === 'crisis'"
+      class="review-letter__support"
+      data-testid="review-crisis-card"
+    >
       <div class="review-letter__support-title">陪你待一会儿</div>
       <div class="review-letter__support-body">
         <p v-for="(paragraph, idx) in supportParagraphs" :key="idx">{{ paragraph }}</p>
@@ -156,7 +162,13 @@ watch(
     <!-- 尚未出现信纸前的空态 / 提示态 / 生成态 -->
     <div v-else-if="!showLetter" class="review-letter__state">
       <Xiaoya
-        :expression="viewState === 'generating' || viewState === 'polling_timeout' ? 'thinking' : viewState === 'not_generated' ? 'reply' : 'calm'"
+        :expression="
+          viewState === 'generating' || viewState === 'polling_timeout'
+            ? 'thinking'
+            : viewState === 'not_generated'
+              ? 'reply'
+              : 'calm'
+        "
         :animated="viewState === 'generating'"
         :size="72"
       />
@@ -167,7 +179,9 @@ watch(
       </template>
 
       <template v-else-if="viewState === 'empty'">
-        <h3 class="review-letter__state-title">{{ mode === 'week' ? '这一周还没有心情记录' : '最近 30 天还没有心情记录' }}</h3>
+        <h3 class="review-letter__state-title">
+          {{ mode === 'week' ? '这一周还没有心情记录' : '最近 30 天还没有心情记录' }}
+        </h3>
         <p class="review-letter__state-desc">先多写几条日记再来看，小芽会替你好好收着。</p>
       </template>
 
@@ -199,27 +213,43 @@ watch(
 
       <template v-else-if="viewState === 'stale_deleted'">
         <h3 class="review-letter__state-title">记录有变动或已删除</h3>
-        <p class="review-letter__state-desc">原先那封信对应的记录已不在了，重新写一封会更贴近现在。</p>
-        <BaseButton variant="primary" :loading="submitting" @click="emit('regenerate')">重新生成</BaseButton>
+        <p class="review-letter__state-desc">
+          原先那封信对应的记录已不在了，重新写一封会更贴近现在。
+        </p>
+        <BaseButton variant="primary" :loading="submitting" @click="emit('regenerate')"
+          >重新生成</BaseButton
+        >
       </template>
 
       <template v-else-if="viewState === 'failed_empty'">
         <h3 class="review-letter__state-title">这次没有顺利写出来</h3>
         <p class="review-letter__state-desc">可能是刚刚连线走神了，过一会儿再试试吧。</p>
-        <BaseButton variant="primary" :loading="submitting" @click="emit('retry')">再试一次</BaseButton>
+        <BaseButton variant="primary" :loading="submitting" @click="emit('retry')"
+          >再试一次</BaseButton
+        >
       </template>
     </div>
 
     <!-- 已有信件正文（含周报过期与 failed_with_report 顶部温和提醒条） -->
     <div v-else class="review-letter__paper-wrap">
-      <div v-if="staleUi.showWeekStaleBanner" class="review-letter__banner review-letter__banner--warn">
+      <div
+        v-if="staleUi.showWeekStaleBanner"
+        class="review-letter__banner review-letter__banner--warn"
+      >
         <span>记录有修改或新增，这封信写在那之前</span>
-        <BaseButton variant="soft" size="sm" :loading="submitting" @click="emit('regenerate')">重新生成</BaseButton>
+        <BaseButton variant="soft" size="sm" :loading="submitting" @click="emit('regenerate')"
+          >重新生成</BaseButton
+        >
       </div>
 
-      <div v-else-if="viewState === 'failed_with_report'" class="review-letter__banner review-letter__banner--danger">
+      <div
+        v-else-if="viewState === 'failed_with_report'"
+        class="review-letter__banner review-letter__banner--danger"
+      >
         <span>刚才重新写没有成功，先把上一封留在这里</span>
-        <BaseButton variant="soft" size="sm" :loading="submitting" @click="emit('retry')">再试一次</BaseButton>
+        <BaseButton variant="soft" size="sm" :loading="submitting" @click="emit('retry')"
+          >再试一次</BaseButton
+        >
       </div>
 
       <article ref="paperRef" class="review-letter__paper">
@@ -227,7 +257,9 @@ watch(
           <div class="review-letter__sender">
             <Xiaoya expression="reply" :size="36" />
             <div>
-              <h3 class="review-letter__title">{{ mode === 'week' ? '小芽的本周来信' : '小芽的近况来信' }}</h3>
+              <h3 class="review-letter__title">
+                {{ mode === 'week' ? '小芽的本周来信' : '小芽的近况来信' }}
+              </h3>
               <p v-if="headerMeta" class="review-letter__meta">{{ headerMeta }}</p>
             </div>
           </div>
@@ -250,29 +282,50 @@ watch(
         <div class="review-letter__body">
           <!-- 行内紧贴排版：刻意不换行以免标签间生成多余空格文本节点 -->
           <p v-for="(segments, pIdx) in bodyParagraphs" :key="pIdx" class="review-letter__p">
-            <template v-for="(seg, sIdx) in segments" :key="sIdx"><template v-if="seg.type === 'text'">{{ seg.text }}</template><span v-else class="nw">{{ seg.prefix }}<button
-                v-for="refItem in seg.refs"
-                :key="refItem.ref"
-                type="button"
-                class="review-letter__src"
-                :aria-label="citationAriaLabel(refItem)"
-                :aria-expanded="String(activeCitation?.citeKey === `body-${pIdx}-${sIdx}-${refItem.ref}`)"
-                @click.stop="toggleCitation($event, `body-${pIdx}-${sIdx}-${refItem.ref}`, refItem.ref)"
-              >{{ refItem.label }}</button>{{ seg.punctuation }}</span></template>
+            <template v-for="(seg, sIdx) in segments" :key="sIdx"
+              ><template v-if="seg.type === 'text'">{{ seg.text }}</template
+              ><span v-else class="nw"
+                >{{ seg.prefix
+                }}<button
+                  v-for="refItem in seg.refs"
+                  :key="refItem.ref"
+                  type="button"
+                  class="review-letter__src"
+                  :aria-label="citationAriaLabel(refItem)"
+                  :aria-expanded="
+                    String(activeCitation?.citeKey === `body-${pIdx}-${sIdx}-${refItem.ref}`)
+                  "
+                  @click.stop="
+                    toggleCitation($event, `body-${pIdx}-${sIdx}-${refItem.ref}`, refItem.ref)
+                  "
+                >
+                  {{ refItem.label }}</button
+                >{{ seg.punctuation }}</span
+              ></template
+            >
           </p>
         </div>
 
         <!-- 行内紧贴排版：同正文段落，保持 P.S. 引用标签无前置空白 -->
         <p v-if="psSegments.length" class="review-letter__ps">
-          <span class="review-letter__ps-label">P.S. </span><template v-for="(seg, sIdx) in psSegments" :key="sIdx"><template v-if="seg.type === 'text'">{{ seg.text }}</template><span v-else class="nw">{{ seg.prefix }}<button
-              v-for="refItem in seg.refs"
-              :key="refItem.ref"
-              type="button"
-              class="review-letter__src"
-              :aria-label="citationAriaLabel(refItem)"
-              :aria-expanded="String(activeCitation?.citeKey === `ps-${sIdx}-${refItem.ref}`)"
-              @click.stop="toggleCitation($event, `ps-${sIdx}-${refItem.ref}`, refItem.ref)"
-            >{{ refItem.label }}</button>{{ seg.punctuation }}</span></template>
+          <span class="review-letter__ps-label">P.S. </span
+          ><template v-for="(seg, sIdx) in psSegments" :key="sIdx"
+            ><template v-if="seg.type === 'text'">{{ seg.text }}</template
+            ><span v-else class="nw"
+              >{{ seg.prefix
+              }}<button
+                v-for="refItem in seg.refs"
+                :key="refItem.ref"
+                type="button"
+                class="review-letter__src"
+                :aria-label="citationAriaLabel(refItem)"
+                :aria-expanded="String(activeCitation?.citeKey === `ps-${sIdx}-${refItem.ref}`)"
+                @click.stop="toggleCitation($event, `ps-${sIdx}-${refItem.ref}`, refItem.ref)"
+              >
+                {{ refItem.label }}</button
+              >{{ seg.punctuation }}</span
+            ></template
+          >
         </p>
 
         <footer class="review-letter__sig">—— 小芽</footer>

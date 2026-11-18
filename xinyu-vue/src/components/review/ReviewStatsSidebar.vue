@@ -13,9 +13,7 @@ const props = defineProps({
   todayKey: { type: String, required: true }
 })
 
-const activeStats = computed(() =>
-  props.mode === 'week' ? props.weekStats : props.recent30Stats
-)
+const activeStats = computed(() => (props.mode === 'week' ? props.weekStats : props.recent30Stats))
 const hasRecords = computed(() => (activeStats.value?.total || 0) > 0)
 const moodCounts = computed(() => activeStats.value?.moodCounts || [])
 
@@ -56,11 +54,7 @@ function groupMoods(week) {
             <span>有记录</span>
           </div>
         </div>
-        <WeekGrid
-          :start-key="weekStats.rangeStart"
-          :days="weekStats.days"
-          :today-key="todayKey"
-        />
+        <WeekGrid :start-key="weekStats.rangeStart" :days="weekStats.days" :today-key="todayKey" />
       </section>
 
       <section class="review-card">
@@ -97,11 +91,7 @@ function groupMoods(week) {
           <h2>按周看</h2>
         </div>
         <div class="review-weeks">
-          <div
-            v-for="week in weekGroups"
-            :key="week.startKey"
-            class="review-weeks__row"
-          >
+          <div v-for="week in weekGroups" :key="week.startKey" class="review-weeks__row">
             <strong class="review-weeks__label">{{ week.label }}</strong>
             <span class="review-weeks__dots" aria-hidden="true">
               <i
@@ -250,10 +240,22 @@ function groupMoods(week) {
   font-variant-numeric: tabular-nums;
 }
 
-.tone--joy { --tone: var(--joy); }
-.tone--calm { --tone: var(--calm); }
-.tone--tension { --tone: var(--tension); }
-.tone--sad { --tone: var(--sad); }
-.tone--tired { --tone: var(--tired); }
-.tone--neutral { --tone: var(--brand); }
+.tone--joy {
+  --tone: var(--joy);
+}
+.tone--calm {
+  --tone: var(--calm);
+}
+.tone--tension {
+  --tone: var(--tension);
+}
+.tone--sad {
+  --tone: var(--sad);
+}
+.tone--tired {
+  --tone: var(--tired);
+}
+.tone--neutral {
+  --tone: var(--brand);
+}
 </style>

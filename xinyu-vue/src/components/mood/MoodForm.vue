@@ -25,15 +25,12 @@ const canSubmit = computed(
 )
 
 // 未选心情时小芽保持默认表情；选中后换成对应表情并播放动态版
-const headerExpression = computed(
-  () => props.moodType ? moodExpression(props.moodType) : 'default'
+const headerExpression = computed(() =>
+  props.moodType ? moodExpression(props.moodType) : 'default'
 )
 
 // 副标题跟着心情变化：选中时展示小芽的一句回应，否则用默认提示
-const headerHint = computed(
-  () => MOOD_RESPONSE_LINES[props.moodType] || MOOD_DEFAULT_HINT
-)
-
+const headerHint = computed(() => MOOD_RESPONSE_LINES[props.moodType] || MOOD_DEFAULT_HINT)
 </script>
 
 <template>

@@ -4,8 +4,10 @@ import { useAsyncAction } from '../src/composables/useAsyncAction.js'
 
 test('并发读请求不被写操作互斥挡掉，loading等待全部请求退出', async () => {
   const pending = []
-  const action = useAsyncAction(() => new Promise(resolve => pending.push(resolve)),
-    { silent: true, concurrent: true })
+  const action = useAsyncAction(() => new Promise((resolve) => pending.push(resolve)), {
+    silent: true,
+    concurrent: true
+  })
   const first = action.run()
   const second = action.run()
   assert.equal(pending.length, 2)

@@ -4,7 +4,7 @@ import Doodle from '../ui/Doodle.vue'
 import { navigationItems, isNavigationActive } from './navigation'
 
 const route = useRoute()
-const mobileItems = navigationItems.filter(item => item.mobile !== false)
+const mobileItems = navigationItems.filter((item) => item.mobile !== false)
 </script>
 
 <template>

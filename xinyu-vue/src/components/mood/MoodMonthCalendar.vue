@@ -71,7 +71,8 @@ function dayLabel(cell) {
         ]"
         :title="dayLabel(cell)"
         :aria-label="dayLabel(cell)"
-      >{{ cell.day }}</span>
+        >{{ cell.day }}</span
+      >
     </div>
   </section>
 </template>
@@ -127,10 +128,28 @@ function dayLabel(cell) {
 }
 
 /* 心情分组 → tokens.css 的柔底与文字色；格子背景与文字统一读 var(--tone-soft) / var(--tone-ink)。 */
-.tone--joy { --tone-soft: var(--joy-soft); --tone-ink: var(--joy-ink); }
-.tone--calm { --tone-soft: var(--calm-soft); --tone-ink: var(--calm-ink); }
-.tone--tension { --tone-soft: var(--tension-soft); --tone-ink: var(--tension-ink); }
-.tone--sad { --tone-soft: var(--sad-soft); --tone-ink: var(--sad-ink); }
-.tone--tired { --tone-soft: var(--tired-soft); --tone-ink: var(--tired-ink); }
-.tone--neutral { --tone-soft: var(--brand-soft); --tone-ink: var(--brand-deep); }
+.tone--joy {
+  --tone-soft: var(--joy-soft);
+  --tone-ink: var(--joy-ink);
+}
+.tone--calm {
+  --tone-soft: var(--calm-soft);
+  --tone-ink: var(--calm-ink);
+}
+.tone--tension {
+  --tone-soft: var(--tension-soft);
+  --tone-ink: var(--tension-ink);
+}
+.tone--sad {
+  --tone-soft: var(--sad-soft);
+  --tone-ink: var(--sad-ink);
+}
+.tone--tired {
+  --tone-soft: var(--tired-soft);
+  --tone-ink: var(--tired-ink);
+}
+.tone--neutral {
+  --tone-soft: var(--brand-soft);
+  --tone-ink: var(--brand-deep);
+}
 </style>

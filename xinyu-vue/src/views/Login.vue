@@ -44,36 +44,15 @@ function goRegister() {
 </script>
 
 <template>
-  <AuthLayout
-    slogan="今天过得怎么样？"
-    subtitle="记记今天的心情，也看看大家的近况。"
-    title="登录"
-  >
-    <BaseInput
-      v-model="username"
-      label="用户名"
-      size="lg"
-      @enter="handleLogin"
-    />
-    <BaseInput
-      v-model="password"
-      type="password"
-      label="密码"
-      size="lg"
-      @enter="handleLogin"
-    />
-    <BaseButton
-      variant="primary"
-      size="lg"
-      :loading="loading"
-      block
-      @click="handleLogin"
-    >登录</BaseButton>
+  <AuthLayout slogan="今天过得怎么样？" subtitle="记记今天的心情，也看看大家的近况。" title="登录">
+    <BaseInput v-model="username" label="用户名" size="lg" @enter="handleLogin" />
+    <BaseInput v-model="password" type="password" label="密码" size="lg" @enter="handleLogin" />
+    <BaseButton variant="primary" size="lg" :loading="loading" block @click="handleLogin"
+      >登录</BaseButton
+    >
 
     <template #footer>
-      <BaseButton variant="link" @click="goRegister">
-        还没有账号？去注册 →
-      </BaseButton>
+      <BaseButton variant="link" @click="goRegister"> 还没有账号？去注册 → </BaseButton>
     </template>
   </AuthLayout>
 </template>

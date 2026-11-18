@@ -70,15 +70,31 @@ const toast = useToast()
   flex-shrink: 0;
 }
 
-.toast--success .toast__dot { background: var(--success); }
-.toast--error   .toast__dot { background: var(--danger); }
-.toast--warn    .toast__dot { background: var(--warn); }
-.toast--info    .toast__dot { background: var(--brand); }
+.toast--success .toast__dot {
+  background: var(--success);
+}
+.toast--error .toast__dot {
+  background: var(--danger);
+}
+.toast--warn .toast__dot {
+  background: var(--warn);
+}
+.toast--info .toast__dot {
+  background: var(--brand);
+}
 
-.toast--success { border-color: var(--success-soft); }
-.toast--error   { border-color: var(--danger-soft); }
-.toast--warn    { border-color: var(--warn-soft); }
-.toast--info    { border-color: var(--brand-soft); }
+.toast--success {
+  border-color: var(--success-soft);
+}
+.toast--error {
+  border-color: var(--danger-soft);
+}
+.toast--warn {
+  border-color: var(--warn-soft);
+}
+.toast--info {
+  border-color: var(--brand-soft);
+}
 
 .toast-enter-from {
   opacity: 0;
@@ -90,7 +106,8 @@ const toast = useToast()
 }
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity var(--t-base) var(--ease-soft),
+  transition:
+    opacity var(--t-base) var(--ease-soft),
     transform var(--t-base) var(--ease-bounce);
 }
 .toast-move {

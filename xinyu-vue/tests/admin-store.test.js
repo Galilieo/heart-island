@@ -25,9 +25,20 @@ try {
   await server.close()
 }
 
-const ok = (config, data) => ({ status: 200, data: { code: 200, message: 'OK', data }, headers: {}, config })
+const ok = (config, data) => ({
+  status: 200,
+  data: { code: 200, message: 'OK', data },
+  headers: {},
+  config
+})
 const httpError = (config, status, message) =>
-  new AxiosError(message, 'ERR_BAD_REQUEST', config, {}, { status, data: { code: status, message }, headers: {}, config })
+  new AxiosError(
+    message,
+    'ERR_BAD_REQUEST',
+    config,
+    {},
+    { status, data: { code: status, message }, headers: {}, config }
+  )
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -36,13 +47,73 @@ beforeEach(() => {
 test('useAdminStore 对外导出的 state/computed/action 键集合保持稳定', () => {
   const store = useAdminStore()
   const expectedKeys = [
-    'overview', 'overviewLoading', 'fetchOverview',
-    'users', 'loading', 'filters', 'pagination', 'pages', 'fetchUsers', 'updateUserStatus', 'searchUsers', 'resetFilters', 'changePage',
-    'posts', 'postsLoading', 'postsFilters', 'postPagination', 'postPages', 'fetchPosts', 'fetchPostDetail', 'updatePostStatus', 'removePost', 'searchPosts', 'resetPostFilters', 'changePostPage',
-    'replies', 'repliesLoading', 'replyFilters', 'replyPagination', 'replyPages', 'fetchReplies', 'fetchReplyDetail', 'updateReplyStatus', 'removeReply', 'searchReplies', 'resetReplyFilters', 'changeReplyPage',
-    'pendingReportCount', 'reports', 'reportsTotal', 'reportsLoading', 'reportFilters', 'reportPages', 'fetchPendingReportCount', 'fetchReports', 'setReportTab', 'changeReportPage', 'fetchReportDetail', 'handleReport',
-    'topics', 'topicsLoading', 'topicFilters', 'fetchTopics', 'addTopic', 'updateTopic', 'updateTopicStatus', 'searchTopics', 'resetTopicFilters',
-    'aiReplies', 'aiRepliesTotal', 'aiRepliesLoading', 'aiReplyFilters', 'aiReplyPages', 'fetchAiReplies', 'searchAiReplies', 'resetAiReplyFilters', 'changeAiReplyPage'
+    'overview',
+    'overviewLoading',
+    'fetchOverview',
+    'users',
+    'loading',
+    'filters',
+    'pagination',
+    'pages',
+    'fetchUsers',
+    'updateUserStatus',
+    'searchUsers',
+    'resetFilters',
+    'changePage',
+    'posts',
+    'postsLoading',
+    'postsFilters',
+    'postPagination',
+    'postPages',
+    'fetchPosts',
+    'fetchPostDetail',
+    'updatePostStatus',
+    'removePost',
+    'searchPosts',
+    'resetPostFilters',
+    'changePostPage',
+    'replies',
+    'repliesLoading',
+    'replyFilters',
+    'replyPagination',
+    'replyPages',
+    'fetchReplies',
+    'fetchReplyDetail',
+    'updateReplyStatus',
+    'removeReply',
+    'searchReplies',
+    'resetReplyFilters',
+    'changeReplyPage',
+    'pendingReportCount',
+    'reports',
+    'reportsTotal',
+    'reportsLoading',
+    'reportFilters',
+    'reportPages',
+    'fetchPendingReportCount',
+    'fetchReports',
+    'setReportTab',
+    'changeReportPage',
+    'fetchReportDetail',
+    'handleReport',
+    'topics',
+    'topicsLoading',
+    'topicFilters',
+    'fetchTopics',
+    'addTopic',
+    'updateTopic',
+    'updateTopicStatus',
+    'searchTopics',
+    'resetTopicFilters',
+    'aiReplies',
+    'aiRepliesTotal',
+    'aiRepliesLoading',
+    'aiReplyFilters',
+    'aiReplyPages',
+    'fetchAiReplies',
+    'searchAiReplies',
+    'resetAiReplyFilters',
+    'changeAiReplyPage'
   ]
   for (const key of expectedKeys) {
     assert.ok(key in store, `missing store key: ${key}`)
@@ -71,7 +142,8 @@ test('fetchOverview 携带限流后端状态与今日拒绝计数', async () => 
 test('fetchOverview 把后端字符串计数转成数字，"0" 不被当成有值', async () => {
   const prevAdapter = request.defaults.adapter
   // 后端 JacksonConfig 把 Long 序列化为字符串，概览计数实际以 "0"、"3" 形式返回。
-  request.defaults.adapter = async (config) => ok(config, { aiReplyTotal: '0', aiReplyFailed: '0', postTotal: '3' })
+  request.defaults.adapter = async (config) =>
+    ok(config, { aiReplyTotal: '0', aiReplyFailed: '0', postTotal: '3' })
   try {
     const store = useAdminStore()
     await store.fetchOverview()
@@ -108,7 +180,12 @@ test('用户管理：筛选、分页、重置与状态更新后刷新列表', as
   request.defaults.adapter = async (config) => {
     calls.push({ method: config.method, url: config.url, params: config.params, data: config.data })
     if (config.url === '/admin/user/page') {
-      return ok(config, { records: [{ id: '1', username: 'alice' }], total: 25, current: config.params.pageNum, size: 10 })
+      return ok(config, {
+        records: [{ id: '1', username: 'alice' }],
+        total: 25,
+        current: config.params.pageNum,
+        size: 10
+      })
     }
     return ok(config, null)
   }
@@ -146,7 +223,12 @@ test('帖子管理：筛选查询、分页、重置、状态更新与 409 冲突
   request.defaults.adapter = async (config) => {
     calls.push({ method: config.method, url: config.url, params: config.params })
     if (config.url === '/admin/post/page') {
-      return ok(config, { records: [{ id: '10' }], total: 21, current: config.params.pageNum, size: 10 })
+      return ok(config, {
+        records: [{ id: '10' }],
+        total: 21,
+        current: config.params.pageNum,
+        size: 10
+      })
     }
     if (config.url === '/admin/post/10/status') {
       return Promise.reject(httpError(config, 409, '状态已变更'))
@@ -198,7 +280,12 @@ test('回复管理：筛选查询、分页、重置、删除与 409 冲突也刷
   request.defaults.adapter = async (config) => {
     calls.push({ method: config.method, url: config.url, params: config.params })
     if (config.url === '/admin/reply/page') {
-      return ok(config, { records: [{ id: '20' }], total: 15, current: config.params.pageNum, size: 10 })
+      return ok(config, {
+        records: [{ id: '20' }],
+        total: 15,
+        current: config.params.pageNum,
+        size: 10
+      })
     }
     if (config.url === '/admin/reply/20') {
       return Promise.reject(httpError(config, 409, '已被处理'))
@@ -251,7 +338,12 @@ test('举报与话题与 AI 记录管理：筛选、切换 Tab、翻页与更新
       return ok(config, [{ id: 1, name: '树洞' }])
     }
     if (config.url === '/admin/ai-replies/page') {
-      return ok(config, { records: [{ id: '99' }], total: 11, current: config.params.pageNum, size: 10 })
+      return ok(config, {
+        records: [{ id: '99' }],
+        total: 11,
+        current: config.params.pageNum,
+        size: 10
+      })
     }
     return ok(config, null)
   }

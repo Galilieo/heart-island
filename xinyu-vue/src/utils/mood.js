@@ -4,24 +4,37 @@ export const MOOD_GROUPS = [
   {
     id: 'first',
     ariaLabel: '心情选项第一组',
-    options: ['开心', '满足', '期待', '感动', '平静'].map(value => ({ label: value, value }))
+    options: ['开心', '满足', '期待', '感动', '平静'].map((value) => ({ label: value, value }))
   },
   {
     id: 'second',
     ariaLabel: '心情选项第二组',
-    options: ['焦虑', '难过', '生气', '委屈', '孤独', '迷茫', '疲惫', '其他'].map(value => ({ label: value, value }))
+    options: ['焦虑', '难过', '生气', '委屈', '孤独', '迷茫', '疲惫', '其他'].map((value) => ({
+      label: value,
+      value
+    }))
   }
 ]
 
 // 筛选和统计沿用扁平列表；与选择器从同一份分组生成，避免选项遗漏。
-export const MOOD_OPTIONS = MOOD_GROUPS.flatMap(group => group.options)
+export const MOOD_OPTIONS = MOOD_GROUPS.flatMap((group) => group.options)
 
 // 心情 → 配色分组，对应 tokens.css 中的 --joy / --tension / --calm / --sad / --tired。
 // 焦虑、生气归入“紧绷”（tension），不再借用状态提示色 warn。
 const TONE_MAP = {
-  开心: 'joy', 满足: 'joy', 期待: 'joy', 感动: 'calm', 平静: 'calm',
-  焦虑: 'tension', 难过: 'sad', 生气: 'tension', 委屈: 'sad', 孤独: 'sad',
-  迷茫: 'tired', 疲惫: 'tired', 其他: 'neutral'
+  开心: 'joy',
+  满足: 'joy',
+  期待: 'joy',
+  感动: 'calm',
+  平静: 'calm',
+  焦虑: 'tension',
+  难过: 'sad',
+  生气: 'tension',
+  委屈: 'sad',
+  孤独: 'sad',
+  迷茫: 'tired',
+  疲惫: 'tired',
+  其他: 'neutral'
 }
 
 export function moodTone(type) {
@@ -30,9 +43,19 @@ export function moodTone(type) {
 
 // 与素材包的十三种心情一一对应；历史未知值仍保留原文字，表情使用中性默认项。
 const EXPRESSION_MAP = {
-  开心: 'happy', 满足: 'content', 期待: 'hopeful', 感动: 'touched', 平静: 'calm',
-  焦虑: 'anxious', 难过: 'sad', 生气: 'angry', 委屈: 'wronged', 孤独: 'lonely',
-  迷茫: 'lost', 疲惫: 'tired', 其他: 'other'
+  开心: 'happy',
+  满足: 'content',
+  期待: 'hopeful',
+  感动: 'touched',
+  平静: 'calm',
+  焦虑: 'anxious',
+  难过: 'sad',
+  生气: 'angry',
+  委屈: 'wronged',
+  孤独: 'lonely',
+  迷茫: 'lost',
+  疲惫: 'tired',
+  其他: 'other'
 }
 
 export function moodExpression(type) {

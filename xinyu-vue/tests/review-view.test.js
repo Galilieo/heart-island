@@ -37,7 +37,13 @@ try {
 
 const ok = (config, data) => ({ status: 200, data: { code: 200, data }, headers: {}, config })
 const httpError = (config, status, message) =>
-  new AxiosError(message, 'ERR_BAD_REQUEST', config, {}, { status, data: { code: status, message }, headers: {}, config })
+  new AxiosError(
+    message,
+    'ERR_BAD_REQUEST',
+    config,
+    {},
+    { status, data: { code: status, message }, headers: {}, config }
+  )
 
 let prevAdapter = null
 afterEach(() => {
@@ -159,7 +165,13 @@ test('resolveVisibleSources 与信纸显示状态一致，generating / stale_del
     assert.equal(resolveVisibleSources(state, report).length, 1)
   }
 
-  for (const state of ['generating', 'polling_timeout', 'crisis', 'stale_deleted', 'not_generated']) {
+  for (const state of [
+    'generating',
+    'polling_timeout',
+    'crisis',
+    'stale_deleted',
+    'not_generated'
+  ]) {
     assert.equal(shouldShowReviewLetter(state, report), false)
     assert.deepEqual(resolveVisibleSources(state, report), [])
   }

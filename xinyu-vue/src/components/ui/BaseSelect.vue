@@ -42,9 +42,7 @@ function toggle() {
 
 function show() {
   open.value = true
-  activeIndex.value = props.options.findIndex(
-    (o) => String(o.value) === String(props.modelValue)
-  )
+  activeIndex.value = props.options.findIndex((o) => String(o.value) === String(props.modelValue))
   nextTick(positionPanel)
   document.addEventListener('mousedown', onOutsideClick)
   window.addEventListener('resize', positionPanel)
@@ -154,13 +152,7 @@ onBeforeUnmount(() => {
 
     <Teleport to="body">
       <transition name="bs-pop">
-        <ul
-          v-if="open"
-          ref="panelRef"
-          class="bs-panel"
-          :style="panelStyle"
-          role="listbox"
-        >
+        <ul v-if="open" ref="panelRef" class="bs-panel" :style="panelStyle" role="listbox">
           <li
             v-for="(opt, i) in options"
             :key="String(opt.value)"
@@ -213,7 +205,8 @@ onBeforeUnmount(() => {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
 }
 
@@ -231,9 +224,17 @@ onBeforeUnmount(() => {
   border-color: var(--line-strong);
 }
 
-.field__control--sm { height: 34px; font-size: var(--fs-sm); }
-.field__control--md { height: 42px; }
-.field__control--lg { height: 48px; font-size: var(--fs-lg); }
+.field__control--sm {
+  height: 34px;
+  font-size: var(--fs-sm);
+}
+.field__control--md {
+  height: 42px;
+}
+.field__control--lg {
+  height: 48px;
+  font-size: var(--fs-lg);
+}
 
 .field.is-disabled .field__control,
 .field__control:disabled {
@@ -291,7 +292,8 @@ onBeforeUnmount(() => {
   color: var(--ink-1);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 
@@ -340,7 +342,8 @@ onBeforeUnmount(() => {
 
 .bs-pop-enter-active,
 .bs-pop-leave-active {
-  transition: opacity var(--t-fast) var(--ease-soft),
+  transition:
+    opacity var(--t-fast) var(--ease-soft),
     transform var(--t-fast) var(--ease-soft);
   transform-origin: top;
 }

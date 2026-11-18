@@ -84,7 +84,8 @@ const { state, accept, reject } = _confirmState()
   border-radius: var(--radius-2);
   font-size: var(--fs-md);
   font-weight: 600;
-  transition: transform var(--t-fast) var(--ease-soft),
+  transition:
+    transform var(--t-fast) var(--ease-soft),
     background var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
 }

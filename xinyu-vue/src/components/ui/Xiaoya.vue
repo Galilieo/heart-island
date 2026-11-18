@@ -9,26 +9,44 @@ const props = defineProps({
 })
 
 const stills = import.meta.glob('../../assets/xiaoya/moods/*.svg', {
-  eager: true, query: '?url', import: 'default'
+  eager: true,
+  query: '?url',
+  import: 'default'
 })
 const animations = import.meta.glob('../../assets/xiaoya/animated/*.svg', {
-  eager: true, query: '?url', import: 'default'
+  eager: true,
+  query: '?url',
+  import: 'default'
 })
-const still = computed(() => stills[`../../assets/xiaoya/moods/xiaoya-${props.expression}.svg`]
-  || stills['../../assets/xiaoya/moods/xiaoya-default.svg'])
-const source = computed(() => props.animated
-  ? animations[`../../assets/xiaoya/animated/xiaoya-${props.expression}.svg`] || still.value
-  : still.value)
+const still = computed(
+  () =>
+    stills[`../../assets/xiaoya/moods/xiaoya-${props.expression}.svg`] ||
+    stills['../../assets/xiaoya/moods/xiaoya-default.svg']
+)
+const source = computed(() =>
+  props.animated
+    ? animations[`../../assets/xiaoya/animated/xiaoya-${props.expression}.svg`] || still.value
+    : still.value
+)
 </script>
 
 <template>
   <picture class="xiaoya" aria-hidden="true" :style="{ width: `${size}px`, height: `${size}px` }">
-    <source media="(prefers-reduced-motion: reduce)" :srcset="still">
-    <img :src="source" alt="" :width="size" :height="size" decoding="async">
+    <source media="(prefers-reduced-motion: reduce)" :srcset="still" />
+    <img :src="source" alt="" :width="size" :height="size" decoding="async" />
   </picture>
 </template>
 
 <style scoped>
-.xiaoya { display: inline-flex; flex-shrink: 0; vertical-align: middle; }
-.xiaoya img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.xiaoya {
+  display: inline-flex;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.xiaoya img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 </style>

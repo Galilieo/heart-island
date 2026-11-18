@@ -44,10 +44,7 @@ watch(
 )
 
 const canSave = computed(
-  () =>
-    !!editMoodType.value &&
-    editContent.value.trim().length > 0 &&
-    !props.updating
+  () => !!editMoodType.value && editContent.value.trim().length > 0 && !props.updating
 )
 
 function startEdit() {
@@ -93,11 +90,7 @@ function close() {
   >
     <div v-if="mood" class="md">
       <div class="md__meta">
-        <MoodTag
-          :mood-type="mood.moodType"
-          :hide-mascot="isSupportReply(mood)"
-          size="lg"
-        />
+        <MoodTag :mood-type="mood.moodType" :hide-mascot="isSupportReply(mood)" size="lg" />
         <span>创建于 {{ formatTime(mood.createTime) }}</span>
         <span v-if="mood.updateTime && mood.updateTime !== mood.createTime">
           · 更新于 {{ formatTime(mood.updateTime) }}
@@ -111,13 +104,15 @@ function close() {
 
       <section class="md__block">
         <h4>AI 回复</h4>
-        <XiaoyaNote
-          v-if="mood.aiReply"
-          :text="mood.aiReply"
-          :support="isSupportReply(mood)"
+        <XiaoyaNote v-if="mood.aiReply" :text="mood.aiReply" :support="isSupportReply(mood)" />
+        <MoodAiStatus
+          v-else
+          :mood="mood"
+          :now="now"
+          :busy="retrying || updating"
+          @retry="(id) => emit('retry', id)"
+          @refresh="emit('refresh')"
         />
-        <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || updating"
-          @retry="id => emit('retry', id)" @refresh="emit('refresh')" />
       </section>
 
       <section v-if="editing" class="md__edit">
@@ -205,5 +200,4 @@ function close() {
   display: flex;
   justify-content: flex-end;
 }
-
 </style>

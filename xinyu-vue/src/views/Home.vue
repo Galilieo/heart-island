@@ -36,8 +36,7 @@ const { now } = useMoodPolling(moodStore, userStore)
 const toast = useToast()
 const { confirm } = useConfirm()
 
-const { list, total, pages, selected, filters, pagination, trend, month } =
-  storeToRefs(moodStore)
+const { list, total, pages, selected, filters, pagination, trend, month } = storeToRefs(moodStore)
 
 const moodType = ref('')
 const content = ref('')
@@ -76,23 +75,30 @@ const todaySubtitle = computed(() => {
   return '今天过得怎么样？想说的都可以记下来。'
 })
 
-const { run: doFetchList, loading: listLoading } = useAsyncAction(
-  () => moodStore.fetchList(),
-  { silent: true, concurrent: true }
-)
+const { run: doFetchList, loading: listLoading } = useAsyncAction(() => moodStore.fetchList(), {
+  silent: true,
+  concurrent: true
+})
 
-const { run: doFetchTrend } = useAsyncAction(
-  () => moodStore.fetchTrend(),
-  { silent: true }
-)
+const { run: doFetchTrend } = useAsyncAction(() => moodStore.fetchTrend(), { silent: true })
 
 const { run: doAdd, loading: adding } = useAsyncAction(
-  () => moodStore.add({ moodType: moodType.value, content: content.value.trim(), needAiReply: needAiReply.value }),
+  () =>
+    moodStore.add({
+      moodType: moodType.value,
+      content: content.value.trim(),
+      needAiReply: needAiReply.value
+    }),
   { errorMsg: '暂时没能保存，请稍后再试' }
 )
 
 const { run: doUpdate, loading: updating } = useAsyncAction(
-  (payload) => moodStore.update(payload.id, { moodType: payload.moodType, content: payload.content, needAiReply: payload.needAiReply }),
+  (payload) =>
+    moodStore.update(payload.id, {
+      moodType: payload.moodType,
+      content: payload.content,
+      needAiReply: payload.needAiReply
+    }),
   {}
 )
 
@@ -117,15 +123,21 @@ async function handleRefresh() {
   const operations = [moodStore.fetchList()]
   if (detailId) operations.push(moodStore.openDetail(detailId))
   const results = await Promise.allSettled(operations)
-  const failed = results.some(result => result.status === 'rejected' || !result.value?.ok)
+  const failed = results.some((result) => result.status === 'rejected' || !result.value?.ok)
   if (failed) toast.warn('部分状态暂未能刷新，请稍后再试')
   moodStore.refreshObservation()
 }
 
-const { run: handleRetry } = useAsyncAction(id => moodStore.retry(id), { successMsg: '已更新回复状态' })
+const { run: handleRetry } = useAsyncAction((id) => moodStore.retry(id), {
+  successMsg: '已更新回复状态'
+})
 
 async function handleApplyFilter() {
-  if (filters.value.startDate && filters.value.endDate && filters.value.startDate > filters.value.endDate) {
+  if (
+    filters.value.startDate &&
+    filters.value.endDate &&
+    filters.value.startDate > filters.value.endDate
+  ) {
     return toast.warn('开始日期不能晚于结束日期')
   }
   pagination.value.pageNum = 1
@@ -199,7 +211,9 @@ async function handleRecordDeepLink() {
     await openDetail(recordId)
   } finally {
     if (route.query.record !== undefined) {
-      await router.replace({ path: route.path, query: stripRecordQuery(route.query) }).catch(() => {})
+      await router
+        .replace({ path: route.path, query: stripRecordQuery(route.query) })
+        .catch(() => {})
     }
   }
 }
@@ -254,7 +268,9 @@ onMounted(() => {
               <h2 class="home__timeline-title">最近的记录</h2>
               <span v-if="total" class="home__timeline-count">共 {{ total }} 条</span>
             </div>
-            <BaseButton variant="link" size="sm" :loading="listLoading" @click="handleRefresh">刷新</BaseButton>
+            <BaseButton variant="link" size="sm" :loading="listLoading" @click="handleRefresh"
+              >刷新</BaseButton
+            >
           </header>
 
           <MoodFilterBar
@@ -330,9 +346,9 @@ onMounted(() => {
      侧栏从 compose 行开始跨两行，首卡与书写卡顶边对齐。 */
   grid-template-columns: minmax(0, 680px) 300px;
   grid-template-areas:
-    "hello hello"
-    "compose rail"
-    "timeline rail";
+    'hello hello'
+    'compose rail'
+    'timeline rail';
   justify-content: center;
   column-gap: 40px;
   row-gap: 20px;
@@ -341,9 +357,17 @@ onMounted(() => {
   padding-bottom: 40px;
 }
 
-.home__hello { grid-area: hello; }
-.home__compose { grid-area: compose; min-width: 0; }
-.home__timeline { grid-area: timeline; min-width: 0; }
+.home__hello {
+  grid-area: hello;
+}
+.home__compose {
+  grid-area: compose;
+  min-width: 0;
+}
+.home__timeline {
+  grid-area: timeline;
+  min-width: 0;
+}
 
 /* 侧栏不做 sticky：卡片总高度可能超过一屏，贴顶会让底部卡片卡在视口外。
    网格把侧栏放在 compose 行起，首卡自然与书写卡顶边对齐，无需额外 padding 偏移。 */
@@ -430,10 +454,10 @@ onMounted(() => {
   .home__layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "hello"
-      "compose"
-      "rail"
-      "timeline";
+      'hello'
+      'compose'
+      'rail'
+      'timeline';
     max-width: 720px;
   }
 }

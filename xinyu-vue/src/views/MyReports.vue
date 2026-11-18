@@ -9,21 +9,12 @@ import BasePagination from '../components/ui/BasePagination.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import { useCommunityStore } from '../stores/community'
-import {
-  reasonLabel,
-  myReportResultMeta,
-  formatReportTime
-} from '../utils/communityReport'
+import { reasonLabel, myReportResultMeta, formatReportTime } from '../utils/communityReport'
 
 const router = useRouter()
 const communityStore = useCommunityStore()
-const {
-  myReports,
-  myReportsTotal,
-  myReportsPage,
-  myReportsPages,
-  myReportsLoading
-} = storeToRefs(communityStore)
+const { myReports, myReportsTotal, myReportsPage, myReportsPages, myReportsLoading } =
+  storeToRefs(communityStore)
 const { myReportsPageSize } = communityStore
 
 onMounted(() => {
@@ -56,12 +47,7 @@ function goBack() {
       </div>
 
       <div v-else-if="myReports.length" class="my-reports__list">
-        <BaseCard
-          v-for="item in myReports"
-          :key="item.id"
-          padding="md"
-          class="my-reports__card"
-        >
+        <BaseCard v-for="item in myReports" :key="item.id" padding="md" class="my-reports__card">
           <div class="my-reports__row-top">
             <div class="my-reports__badges">
               <BaseTag tone="neutral" size="sm">

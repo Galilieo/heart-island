@@ -50,15 +50,11 @@ const mode = ref('week')
 const weekStart = ref('')
 const loadError = ref('')
 
-const activeStats = computed(() =>
-  mode.value === 'week' ? weekStats.value : recent30Stats.value
-)
+const activeStats = computed(() => (mode.value === 'week' ? weekStats.value : recent30Stats.value))
 const activeLoading = computed(() =>
   mode.value === 'week' ? weekLoading.value : recent30Loading.value
 )
-const isCurrentWeek = computed(
-  () => Boolean(weekStart.value) && weekStart.value === currentMonday
-)
+const isCurrentWeek = computed(() => Boolean(weekStart.value) && weekStart.value === currentMonday)
 const isLastWeek = computed(() => weekStart.value === shiftWeek(currentMonday, -1))
 const canNextWeek = computed(
   () => Boolean(weekStart.value) && canGoNextWeek(weekStart.value, todayKey)
@@ -456,10 +452,7 @@ function handleHistoryMore() {
   right: 0;
   left: 0;
   height: var(--stub-line-band);
-  background-image: repeating-linear-gradient(
-    transparent 0 33px,
-    var(--paper-line) 33px 34px
-  );
+  background-image: repeating-linear-gradient(transparent 0 33px, var(--paper-line) 33px 34px);
   pointer-events: none;
 }
 

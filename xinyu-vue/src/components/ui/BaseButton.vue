@@ -51,7 +51,8 @@ defineProps({
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft),
     transform var(--t-fast) var(--ease-bounce),
     box-shadow var(--t-fast) var(--ease-soft),
@@ -86,7 +87,9 @@ defineProps({
   border-radius: var(--radius-3);
 }
 
-.btn--block { width: 100%; }
+.btn--block {
+  width: 100%;
+}
 
 /* primary */
 .btn--primary {
@@ -100,7 +103,9 @@ defineProps({
   box-shadow: 0 6px 16px rgba(42, 86, 85, 0.22);
 }
 .btn--primary:focus-visible {
-  box-shadow: 0 4px 12px rgba(61, 111, 110, 0.18), var(--shadow-focus);
+  box-shadow:
+    0 4px 12px rgba(61, 111, 110, 0.18),
+    var(--shadow-focus);
 }
 
 /* soft */
@@ -129,9 +134,13 @@ defineProps({
   color: #fff;
   box-shadow: 0 8px 20px rgba(198, 106, 106, 0.26);
 }
-.btn--danger:not(:disabled):hover { background: var(--danger-deep); }
+.btn--danger:not(:disabled):hover {
+  background: var(--danger-deep);
+}
 .btn--danger:focus-visible {
-  box-shadow: 0 8px 20px rgba(198, 106, 106, 0.26), var(--shadow-focus);
+  box-shadow:
+    0 8px 20px rgba(198, 106, 106, 0.26),
+    var(--shadow-focus);
 }
 
 /* plain (neutral) */
@@ -169,7 +178,9 @@ defineProps({
 }
 
 @keyframes btn-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .btn__icon {

@@ -107,7 +107,9 @@ function handleSubmit() {
         <BaseTextarea
           v-model="detail"
           :label="isOther ? '补充说明（必填）' : '补充说明（选填）'"
-          :placeholder="isOther ? '请写一句具体的举报原因' : '可以补充上下文或具体位置，最多 200 字'"
+          :placeholder="
+            isOther ? '请写一句具体的举报原因' : '可以补充上下文或具体位置，最多 200 字'
+          "
           :rows="3"
           :maxlength="MAX_REPORT_DETAIL_LENGTH"
           show-count
@@ -121,9 +123,7 @@ function handleSubmit() {
     </div>
 
     <template #footer>
-      <BaseButton variant="plain" :disabled="submitting" @click="handleClose">
-        取消
-      </BaseButton>
+      <BaseButton variant="plain" :disabled="submitting" @click="handleClose"> 取消 </BaseButton>
       <BaseButton
         variant="primary"
         :disabled="!reason || submitting"
@@ -188,7 +188,8 @@ function handleSubmit() {
   color: var(--ink-1);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     background var(--t-fast) var(--ease-soft);
 }
 

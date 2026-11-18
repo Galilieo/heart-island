@@ -5,7 +5,7 @@ export const navigationItems = [
   { label: '社区', to: '/posts', match: ['/posts', '/community'], icon: 'cloud' },
   // 收藏在手机底部导航收起，入口移到「我的」页；电脑顶栏仍保留。
   { label: '收藏', to: '/favorites', match: ['/favorites'], icon: 'star', mobile: false },
-  { label: '我的', to: '/profile', match: ['/profile'], icon: 'leaf' },
+  { label: '我的', to: '/profile', match: ['/profile'], icon: 'leaf' }
 ]
 
 export function isNavigationActive(item, path) {

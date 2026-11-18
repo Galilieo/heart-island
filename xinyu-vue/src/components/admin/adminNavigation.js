@@ -22,9 +22,7 @@ export const adminNavigationGroups = [
   }
 ]
 
-export const adminNavigationItems = adminNavigationGroups.flatMap(
-  (group) => group.items
-)
+export const adminNavigationItems = adminNavigationGroups.flatMap((group) => group.items)
 
 // 概览页只匹配 /admin 本身；其余页面要求路径完全相等或带子路径，
 // 防止 /admin/postsxx 这类前缀相似的地址误点亮帖子管理。
@@ -37,7 +35,5 @@ export function isAdminNavigationActive(item, path) {
 }
 
 export function findAdminNavigationItem(path) {
-  return adminNavigationItems.find((item) =>
-    isAdminNavigationActive(item, path)
-  )
+  return adminNavigationItems.find((item) => isAdminNavigationActive(item, path))
 }

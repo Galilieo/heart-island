@@ -16,16 +16,10 @@ const emit = defineEmits(['search', 'reset'])
       <slot />
     </div>
     <div class="admin-filter-bar__actions">
-      <AdminButton
-        variant="primary"
-        :disabled="loading"
-        @click="emit('search')"
-      >
+      <AdminButton variant="primary" :disabled="loading" @click="emit('search')">
         查询
       </AdminButton>
-      <AdminButton :disabled="loading" @click="emit('reset')">
-        重置
-      </AdminButton>
+      <AdminButton :disabled="loading" @click="emit('reset')"> 重置 </AdminButton>
     </div>
   </div>
 </template>

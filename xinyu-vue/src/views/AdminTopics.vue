@@ -174,26 +174,15 @@ function formatTime(value) {
 
 <template>
   <div class="admin-topics">
-    <AdminPageTitle
-      title="话题管理"
-      desc="新增或编辑话题，设置发帖时可选的话题和排列顺序。"
-    >
+    <AdminPageTitle title="话题管理" desc="新增或编辑话题，设置发帖时可选的话题和排列顺序。">
       <template #actions>
-        <AdminButton
-          variant="primary"
-          :disabled="topicsLoading"
-          @click="openCreateDialog"
-        >
+        <AdminButton variant="primary" :disabled="topicsLoading" @click="openCreateDialog">
           新增话题
         </AdminButton>
       </template>
     </AdminPageTitle>
 
-    <AdminFilterBar
-      :loading="topicsLoading"
-      @search="handleSearch"
-      @reset="handleReset"
-    >
+    <AdminFilterBar :loading="topicsLoading" @search="handleSearch" @reset="handleReset">
       <AdminFilterField size="wide" full>
         <BaseInput
           v-model="topicFilters.keyword"
@@ -221,10 +210,7 @@ function formatTime(value) {
       row-key="id"
     >
       <template #cell-status="{ row }">
-        <AdminStatus
-          :text="statusText(row.status)"
-          :tone="row.status === 1 ? 'ok' : 'bad'"
-        />
+        <AdminStatus :text="statusText(row.status)" :tone="row.status === 1 ? 'ok' : 'bad'" />
       </template>
 
       <template #actions="{ row }">
@@ -256,11 +242,7 @@ function formatTime(value) {
       @close="resetForm"
     >
       <div class="admin-topics__dialog-form">
-        <BaseInput
-          v-model="form.name"
-          label="话题名称"
-          placeholder="例如：学习压力"
-        />
+        <BaseInput v-model="form.name" label="话题名称" placeholder="例如：学习压力" />
 
         <BaseInput
           v-model="form.description"
@@ -277,9 +259,7 @@ function formatTime(value) {
       </div>
 
       <template #footer>
-        <BaseButton variant="plain" @click="closeDialog">
-          取消
-        </BaseButton>
+        <BaseButton variant="plain" @click="closeDialog"> 取消 </BaseButton>
         <BaseButton variant="primary" @click="handleSubmit">
           {{ isEditing ? '保存修改' : '新增话题' }}
         </BaseButton>

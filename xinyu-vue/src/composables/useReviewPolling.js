@@ -49,10 +49,7 @@ export function useReviewPolling({
   function syncPoller() {
     const active = activeStats.value?.active
     const shouldPoll =
-      pageVisible.value &&
-      userStore.isLoggedIn &&
-      Boolean(active?.jobId) &&
-      !pollingTimedOut.value
+      pageVisible.value && userStore.isLoggedIn && Boolean(active?.jobId) && !pollingTimedOut.value
 
     if (!shouldPoll) {
       stopPolling()

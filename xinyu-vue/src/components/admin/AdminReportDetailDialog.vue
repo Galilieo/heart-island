@@ -123,12 +123,14 @@ const emit = defineEmits([
         </ul>
       </section>
 
-      <section v-if="!isPendingTab && detail.resultStatus" class="admin-report-dialog__detail-section">
+      <section
+        v-if="!isPendingTab && detail.resultStatus"
+        class="admin-report-dialog__detail-section"
+      >
         <h3>处理结果</h3>
         <p>
           {{ adminReportResultMeta(detail.resultStatus, detail.hideReason).text }}
-          · 处理人 {{ detail.handlerName || '-' }}
-          · {{ formatFullDateTime(detail.handleTime) }}
+          · 处理人 {{ detail.handlerName || '-' }} · {{ formatFullDateTime(detail.handleTime) }}
         </p>
         <p v-if="detail.handleNote" class="admin-report-dialog__handled-note">
           内部备注：{{ detail.handleNote }}
@@ -178,9 +180,7 @@ const emit = defineEmits([
           </BaseButton>
         </div>
       </div>
-      <BaseButton v-else variant="plain" @click="emit('close')">
-        关闭
-      </BaseButton>
+      <BaseButton v-else variant="plain" @click="emit('close')"> 关闭 </BaseButton>
     </template>
   </BaseDialog>
 </template>

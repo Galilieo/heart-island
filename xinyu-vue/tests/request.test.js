@@ -9,7 +9,7 @@ const server = await createServer({
   root: fileURLToPath(new URL('..', import.meta.url)),
   configFile: false,
   optimizeDeps: { noDiscovery: true, include: [] },
-  server: { middlewareMode: true, hmr: false, ws: false },
+  server: { middlewareMode: true, hmr: false, ws: false }
 })
 let request
 try {
@@ -22,11 +22,11 @@ let storage
 beforeEach(() => {
   storage = new Map([
     ['token', 'fixture-token'],
-    ['loginUser', '{"id":"11"}'],
+    ['loginUser', '{"id":"11"}']
   ])
   globalThis.localStorage = {
     getItem: (key) => storage.get(key) ?? null,
-    removeItem: (key) => storage.delete(key),
+    removeItem: (key) => storage.delete(key)
   }
   globalThis.window = { location: { pathname: '/home', href: '/home' } }
 })
@@ -39,8 +39,8 @@ function failWith(status, message) {
         statusText: '',
         data: { code: status, message, data: null },
         headers: {},
-        config,
-      }),
+        config
+      })
     )
 }
 
@@ -50,7 +50,7 @@ test('HTTP 401 clears the saved session and returns to login regardless of messa
     (error) => {
       assert.equal(error.userMessage, 'Session expired')
       return true
-    },
+    }
   )
   assert.equal(storage.has('token'), false)
   assert.equal(storage.has('loginUser'), false)
@@ -63,7 +63,7 @@ test('HTTP 403 keeps a valid session and exposes the permission message', async 
     (error) => {
       assert.equal(error.userMessage, '权限不足')
       return true
-    },
+    }
   )
   assert.equal(storage.get('token'), 'fixture-token')
   assert.equal(window.location.href, '/home')
@@ -75,8 +75,8 @@ test('legacy HTTP 200 login errors still clear the session during a rolling depl
       status: 200,
       data: { code: 500, message: '请先登录', data: null },
       headers: {},
-      config,
-    }),
+      config
+    })
   })
   assert.equal(storage.has('token'), false)
   assert.equal(window.location.href, '/')
@@ -95,7 +95,7 @@ test('server errors keep the session and expose the existing error message', asy
     (error) => {
       assert.equal(error.userMessage, '服务异常')
       return true
-    },
+    }
   )
   assert.equal(storage.get('token'), 'fixture-token')
 })

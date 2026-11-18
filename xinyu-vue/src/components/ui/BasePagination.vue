@@ -42,12 +42,9 @@ function goto(p) {
 <template>
   <div v-if="pages > 1 || showTotal" class="pgn">
     <span v-if="showTotal && total" class="pgn__total">共 {{ total }} 条</span>
-    <button
-      class="pgn__btn"
-      :disabled="pageNum <= 1"
-      type="button"
-      @click="goto(pageNum - 1)"
-    >‹</button>
+    <button class="pgn__btn" :disabled="pageNum <= 1" type="button" @click="goto(pageNum - 1)">
+      ‹
+    </button>
 
     <button
       v-for="(p, idx) in visiblePages"
@@ -57,14 +54,13 @@ function goto(p) {
       :disabled="p === '…'"
       type="button"
       @click="goto(p)"
-    >{{ p }}</button>
+    >
+      {{ p }}
+    </button>
 
-    <button
-      class="pgn__btn"
-      :disabled="pageNum >= pages"
-      type="button"
-      @click="goto(pageNum + 1)"
-    >›</button>
+    <button class="pgn__btn" :disabled="pageNum >= pages" type="button" @click="goto(pageNum + 1)">
+      ›
+    </button>
   </div>
 </template>
 
@@ -93,7 +89,8 @@ function goto(p) {
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft),
     border-color var(--t-fast) var(--ease-soft);
 }

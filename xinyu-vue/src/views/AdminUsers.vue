@@ -115,16 +115,9 @@ async function handleToggleStatus(user) {
 
 <template>
   <div class="admin-users">
-    <AdminPageTitle
-      title="用户管理"
-      desc="查找用户，启用或禁用账号。"
-    />
+    <AdminPageTitle title="用户管理" desc="查找用户，启用或禁用账号。" />
 
-    <AdminFilterBar
-      :loading="loading"
-      @search="handleSearch"
-      @reset="handleReset"
-    >
+    <AdminFilterBar :loading="loading" @search="handleSearch" @reset="handleReset">
       <AdminFilterField size="wide" full>
         <BaseInput
           v-model="filters.username"
@@ -135,12 +128,7 @@ async function handleToggleStatus(user) {
       </AdminFilterField>
 
       <AdminFilterField size="sm" full>
-        <BaseSelect
-          v-model="filters.status"
-          label="状态"
-          :options="statusOptions"
-          placeholder=""
-        />
+        <BaseSelect v-model="filters.status" label="状态" :options="statusOptions" placeholder="" />
       </AdminFilterField>
     </AdminFilterBar>
 
@@ -152,10 +140,7 @@ async function handleToggleStatus(user) {
       row-key="id"
     >
       <template #cell-status="{ row }">
-        <AdminStatus
-          :text="statusText(row.status)"
-          :tone="row.status === 1 ? 'ok' : 'bad'"
-        />
+        <AdminStatus :text="statusText(row.status)" :tone="row.status === 1 ? 'ok' : 'bad'" />
       </template>
 
       <template #actions="{ row }">
@@ -172,10 +157,7 @@ async function handleToggleStatus(user) {
       </template>
 
       <template #empty>
-        <EmptyState
-          title="暂无用户"
-          hint="没有找到匹配的用户，可以调整筛选条件后再查。"
-        />
+        <EmptyState title="暂无用户" hint="没有找到匹配的用户，可以调整筛选条件后再查。" />
       </template>
 
       <template #pagination>

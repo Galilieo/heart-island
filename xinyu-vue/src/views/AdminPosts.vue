@@ -19,13 +19,7 @@ import { contentStatusMeta, formatFullDateTime } from '../utils/communityReport'
 
 const adminStore = useAdminStore()
 
-const {
-  posts,
-  postsLoading,
-  postsFilters,
-  postPagination,
-  postPages
-} = storeToRefs(adminStore)
+const { posts, postsLoading, postsFilters, postPagination, postPages } = storeToRefs(adminStore)
 
 const statusOptions = [
   { label: '全部状态', value: '' },
@@ -157,11 +151,7 @@ function handlePageChange(pageNum) {
       desc="查看社区帖子，隐藏或恢复违规内容。作者自己删除的帖子只能查看。"
     />
 
-    <AdminFilterBar
-      :loading="postsLoading"
-      @search="handleSearch"
-      @reset="handleReset"
-    >
+    <AdminFilterBar :loading="postsLoading" @search="handleSearch" @reset="handleReset">
       <AdminFilterField size="wide" full>
         <BaseInput
           v-model="postsFilters.keyword"
@@ -215,9 +205,7 @@ function handlePageChange(pageNum) {
       </template>
 
       <template #actions="{ row }">
-        <AdminRowAction @click="openDetail(row)">
-          详情
-        </AdminRowAction>
+        <AdminRowAction @click="openDetail(row)"> 详情 </AdminRowAction>
       </template>
 
       <template #loading>
@@ -225,10 +213,7 @@ function handlePageChange(pageNum) {
       </template>
 
       <template #empty>
-        <EmptyState
-          title="暂无帖子"
-          hint="没有找到匹配的帖子，可以调整筛选条件后再查。"
-        />
+        <EmptyState title="暂无帖子" hint="没有找到匹配的帖子，可以调整筛选条件后再查。" />
       </template>
 
       <template #pagination>

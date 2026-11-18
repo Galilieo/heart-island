@@ -34,7 +34,8 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      previousFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      previousFocused =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null
       document.addEventListener('keydown', onKeydown)
       document.body.style.overflow = 'hidden'
     } else {
@@ -74,7 +75,9 @@ onUnmounted(() => {
               class="dlg-close"
               aria-label="关闭"
               @click="close"
-            >×</button>
+            >
+              ×
+            </button>
           </header>
           <div class="dlg-body"><slot /></div>
           <footer v-if="$slots.footer" class="dlg-foot"><slot name="footer" /></footer>
@@ -110,10 +113,18 @@ onUnmounted(() => {
   animation: dlg-pop var(--t-base) var(--ease-bounce);
 }
 
-.dlg-card--sm { max-width: 380px; }
-.dlg-card--md { max-width: 520px; }
-.dlg-card--lg { max-width: 720px; }
-.dlg-card--xl { max-width: 920px; }
+.dlg-card--sm {
+  max-width: 380px;
+}
+.dlg-card--md {
+  max-width: 520px;
+}
+.dlg-card--lg {
+  max-width: 720px;
+}
+.dlg-card--xl {
+  max-width: 920px;
+}
 
 .dlg-head {
   display: flex;
@@ -169,8 +180,14 @@ onUnmounted(() => {
 }
 
 @keyframes dlg-pop {
-  from { transform: translateY(8px) scale(0.96); opacity: 0; }
-  to   { transform: translateY(0) scale(1); opacity: 1; }
+  from {
+    transform: translateY(8px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 @media (max-width: 768px) {

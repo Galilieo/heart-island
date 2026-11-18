@@ -45,9 +45,7 @@ const dayLabel = computed(() => {
   return String(parsedTime.value.getDate())
 })
 
-const weekdayLabel = computed(
-  () => parsedTime.value ? WEEKDAYS[parsedTime.value.getDay()] : ''
-)
+const weekdayLabel = computed(() => (parsedTime.value ? WEEKDAYS[parsedTime.value.getDay()] : ''))
 
 const timeLabel = computed(() => {
   if (!parsedTime.value) return ''
@@ -77,14 +75,27 @@ const timeLabel = computed(() => {
             @click="aiOpen = !aiOpen"
           >
             {{ supportReply ? '心屿的回复' : '小芽的回复' }}
-            <span class="mood-entry__caret" aria-hidden="true">{{ aiOpen ? '收起 ▴' : '展开 ▾' }}</span>
+            <span class="mood-entry__caret" aria-hidden="true">{{
+              aiOpen ? '收起 ▴' : '展开 ▾'
+            }}</span>
           </button>
-          <XiaoyaNote class="mood-entry__note" :text="mood.aiReply" :support="supportReply" :clamp="3" />
+          <XiaoyaNote
+            class="mood-entry__note"
+            :text="mood.aiReply"
+            :support="supportReply"
+            :clamp="3"
+          />
         </div>
       </template>
 
-      <MoodAiStatus v-else :mood="mood" :now="now" :busy="retrying || deleting"
-        @retry="id => $emit('retry', id)" @refresh="$emit('refresh')" />
+      <MoodAiStatus
+        v-else
+        :mood="mood"
+        :now="now"
+        :busy="retrying || deleting"
+        @retry="(id) => $emit('retry', id)"
+        @refresh="$emit('refresh')"
+      />
 
       <div class="mood-entry__actions">
         <BaseButton
@@ -93,13 +104,11 @@ const timeLabel = computed(() => {
           :loading="detailLoading"
           :disabled="deleting"
           @click="$emit('detail', mood.id)"
-        >查看详情</BaseButton>
-        <BaseButton
-          variant="link"
-          size="sm"
-          :loading="deleting"
-          @click="$emit('delete', mood.id)"
-        >删除</BaseButton>
+          >查看详情</BaseButton
+        >
+        <BaseButton variant="link" size="sm" :loading="deleting" @click="$emit('delete', mood.id)"
+          >删除</BaseButton
+        >
       </div>
     </div>
   </article>

@@ -36,7 +36,13 @@ export const useMoodStore = defineStore('mood', () => {
   const observationEpoch = ref(0)
   const filters = reactive({ moodType: '', startDate: '', endDate: '' })
   const pagination = reactive({ pageNum: 1, pageSize: 5 })
-  const trend = ref({ total: 0, mainMoodType: '', lastMoodType: '', lastRecordTime: '', moodCounts: [] })
+  const trend = ref({
+    total: 0,
+    mainMoodType: '',
+    lastMoodType: '',
+    lastRecordTime: '',
+    moodCounts: []
+  })
   const month = ref(currentMonth())
   const retries = new Map()
 
@@ -55,7 +61,7 @@ export const useMoodStore = defineStore('mood', () => {
   }
 
   function findRecord(id) {
-    return visibleRecords().find(record => same(record.id, id))
+    return visibleRecords().find((record) => same(record.id, id))
   }
 
   function sameSource(a, b) {
@@ -69,13 +75,24 @@ export const useMoodStore = defineStore('mood', () => {
     }
     if (previous.jobRevision > observedAtStart) {
       // 列表查询开始后收到的任务结果更新，不能被该查询的旧快照覆盖；新列表行仍应接收。
-      return { ...record, aiReplyState: previous.aiReplyState, aiReply: previous.aiReply,
-        resultKind: previous.resultKind, aiJob: previous.aiJob, retryAvailableAt: previous.retryAvailableAt,
-        observationIssue: previous.observationIssue, jobRevision: previous.jobRevision }
+      return {
+        ...record,
+        aiReplyState: previous.aiReplyState,
+        aiReply: previous.aiReply,
+        resultKind: previous.resultKind,
+        aiJob: previous.aiJob,
+        retryAvailableAt: previous.retryAvailableAt,
+        observationIssue: previous.observationIssue,
+        jobRevision: previous.jobRevision
+      }
     }
     if (previous.aiReplyState === record.aiReplyState) {
-      return { ...record, aiJob: previous.aiJob, retryAvailableAt: previous.retryAvailableAt,
-        observationIssue: previous.observationIssue }
+      return {
+        ...record,
+        aiJob: previous.aiJob,
+        retryAvailableAt: previous.retryAvailableAt,
+        observationIssue: previous.observationIssue
+      }
     }
     return record
   }
@@ -85,12 +102,17 @@ export const useMoodStore = defineStore('mood', () => {
     const startedSession = session
     const startedRevision = revision
     const observedAtStart = observationRevision
-    const res = await moodApi.list({ moodType: filters.moodType || undefined,
-      startDate: filters.startDate || undefined, endDate: filters.endDate || undefined, ...pagination })
-    const current = requestId === listRequest && startedSession === session && startedRevision === revision
+    const res = await moodApi.list({
+      moodType: filters.moodType || undefined,
+      startDate: filters.startDate || undefined,
+      endDate: filters.endDate || undefined,
+      ...pagination
+    })
+    const current =
+      requestId === listRequest && startedSession === session && startedRevision === revision
     if (res.ok && res.data && current) {
       const records = res.data.records || res.data.list || []
-      list.value = records.map(record => preserveObservation(record, observedAtStart))
+      list.value = records.map((record) => preserveObservation(record, observedAtStart))
       total.value = res.data.total ?? records.length
       pages.value = res.data.pages ?? 0
     }
@@ -200,7 +222,7 @@ export const useMoodStore = defineStore('mood', () => {
       if (!res.ok || startedSession !== session) {
         return res
       }
-      list.value = list.value.filter(record => !same(record.id, id))
+      list.value = list.value.filter((record) => !same(record.id, id))
       if (selected.value && same(selected.value.id, id)) {
         selected.value = null
       }
@@ -245,16 +267,23 @@ export const useMoodStore = defineStore('mood', () => {
   function applyJob(job, allowedPendingId = null) {
     const jobRevision = ++observationRevision
     for (const record of visibleRecords()) {
-      const matches = same(record.id, job.targetId) && same(record.contentVersion, job.targetVersion) &&
+      const matches =
+        same(record.id, job.targetId) &&
+        same(record.contentVersion, job.targetVersion) &&
         same(record.jobId, job.id)
       const blocked = pendingIds.has(String(record.id)) && !same(record.id, allowedPendingId)
       if (!matches || blocked) {
         continue
       }
-      Object.assign(record, { aiReplyState: job.status, aiJob: job, jobRevision,
+      Object.assign(record, {
+        aiReplyState: job.status,
+        aiJob: job,
+        jobRevision,
         aiReply: job.status === 'succeeded' ? job.replyContent : null,
-        resultKind: job.resultKind, observationIssue: null,
-        retryAvailableAt: Date.now() + job.retryAfterSeconds * 1000 })
+        resultKind: job.resultKind,
+        observationIssue: null,
+        retryAvailableAt: Date.now() + job.retryAfterSeconds * 1000
+      })
     }
   }
 
@@ -310,11 +339,19 @@ export const useMoodStore = defineStore('mood', () => {
     }
     try {
       const job = await fetchJob(source.jobId)
-      if (startedSession === session && findRecord(source.id) && sameSource(findRecord(source.id), source)) {
+      if (
+        startedSession === session &&
+        findRecord(source.id) &&
+        sameSource(findRecord(source.id), source)
+      ) {
         applyJob(job, source.id)
       }
     } catch (error) {
-      if (startedSession === session && findRecord(source.id) && sameSource(findRecord(source.id), source)) {
+      if (
+        startedSession === session &&
+        findRecord(source.id) &&
+        sameSource(findRecord(source.id), source)
+      ) {
         markObservation(source.id, 'network', error)
       }
     }
@@ -347,7 +384,13 @@ export const useMoodStore = defineStore('mood', () => {
     list.value = []
     total.value = 0
     pages.value = 0
-    trend.value = { total: 0, mainMoodType: '', lastMoodType: '', lastRecordTime: '', moodCounts: [] }
+    trend.value = {
+      total: 0,
+      mainMoodType: '',
+      lastMoodType: '',
+      lastRecordTime: '',
+      moodCounts: []
+    }
     // 月历请求代次一并失效，避免切换账号后旧账号的回包写入新账号的月历。
     monthRequest++
     month.value = currentMonth()
@@ -356,7 +399,33 @@ export const useMoodStore = defineStore('mood', () => {
     resetFilters()
   }
 
-  return { list, total, pages, selected, filters, pagination, trend, month, pendingIds, observationEpoch,
-    fetchList, fetchTrend, fetchMonth, add, update, remove, openDetail, closeDetail, fetchJob, applyJob,
-    markObservation, retry, refreshObservation, setFilter, setPage, resetFilters, reset }
+  return {
+    list,
+    total,
+    pages,
+    selected,
+    filters,
+    pagination,
+    trend,
+    month,
+    pendingIds,
+    observationEpoch,
+    fetchList,
+    fetchTrend,
+    fetchMonth,
+    add,
+    update,
+    remove,
+    openDetail,
+    closeDetail,
+    fetchJob,
+    applyJob,
+    markObservation,
+    retry,
+    refreshObservation,
+    setFilter,
+    setPage,
+    resetFilters,
+    reset
+  }
 })

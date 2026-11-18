@@ -51,7 +51,7 @@ async function handleLogout() {
   router.push('/')
 }
 
-const navItems = navigationItems.filter(item => item.to !== '/profile')
+const navItems = navigationItems.filter((item) => item.to !== '/profile')
 
 function isActive(item) {
   return isNavigationActive(item, route.path)
@@ -125,16 +125,21 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
           aria-controls="user-menu"
           :aria-label="`${userStore.displayName}的用户菜单`"
         >
-          <img :src="avatarUrl" alt="" aria-hidden="true" width="32" height="32" class="user__avatar" />
+          <img
+            :src="avatarUrl"
+            alt=""
+            aria-hidden="true"
+            width="32"
+            height="32"
+            class="user__avatar"
+          />
           <span class="user__name">{{ userStore.displayName }}</span>
           <span class="user__caret" aria-hidden="true">▾</span>
         </button>
 
         <transition name="menu">
           <div v-if="menuOpen" id="user-menu" class="user__menu" @click.stop>
-            <button type="button" class="user__menu-item" @click="goProfile">
-              个人资料
-            </button>
+            <button type="button" class="user__menu-item" @click="goProfile">个人资料</button>
             <RouterLink
               v-if="userStore.loginUser?.role === 'ADMIN'"
               to="/admin"
@@ -144,9 +149,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
               后台管理
             </RouterLink>
             <div class="user__menu-divider" />
-            <button type="button" class="user__menu-item" @click="handleLogout">
-              退出登录
-            </button>
+            <button type="button" class="user__menu-item" @click="handleLogout">退出登录</button>
           </div>
         </transition>
         <div v-if="menuOpen" class="menu-mask" @click="closeMenu" />
@@ -217,7 +220,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
 }
 
 .nav__item.is-active::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   right: 0;
@@ -246,7 +249,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
   background: var(--bg-card);
   color: var(--ink-2);
   cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft),
     transform var(--t-fast) var(--ease-soft);
 }
@@ -277,7 +281,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
   background: var(--bg-card);
   color: var(--ink-1);
   cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     box-shadow var(--t-fast) var(--ease-soft);
 }
 
@@ -366,16 +371,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
 }
 .menu-enter-active,
 .menu-leave-active {
-  transition: opacity var(--t-fast) var(--ease-soft),
+  transition:
+    opacity var(--t-fast) var(--ease-soft),
     transform var(--t-fast) var(--ease-soft);
 }
 
 @media (max-width: 768px) {
-  .app-header__inner { gap: 12px; }
-  .brand { margin-right: auto; }
-  .brand__logo { height: 26px; }
-  .nav { display: none; }
-  .user__name { display: none; }
+  .app-header__inner {
+    gap: 12px;
+  }
+  .brand {
+    margin-right: auto;
+  }
+  .brand__logo {
+    height: 26px;
+  }
+  .nav {
+    display: none;
+  }
+  .user__name {
+    display: none;
+  }
   .nav__item {
     min-height: 44px;
     padding: 6px 13px;
@@ -388,10 +404,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleEscape))
 }
 
 @media (max-width: 480px) {
-  .app-header__inner { gap: 6px; height: 56px; }
-  .nav { gap: 2px; }
-  .nav__item { padding: 6px 10px; font-size: var(--fs-xs); }
-  .user__caret { display: none; }
-  .user__chip { padding-left: 2px; padding-right: 8px; min-height: 44px; }
+  .app-header__inner {
+    gap: 6px;
+    height: 56px;
+  }
+  .nav {
+    gap: 2px;
+  }
+  .nav__item {
+    padding: 6px 10px;
+    font-size: var(--fs-xs);
+  }
+  .user__caret {
+    display: none;
+  }
+  .user__chip {
+    padding-left: 2px;
+    padding-right: 8px;
+    min-height: 44px;
+  }
 }
 </style>

@@ -33,9 +33,15 @@ defineProps({
   color: var(--ink-3);
 }
 
-.empty--sm { padding: 28px 16px; }
-.empty--md { padding: 48px 24px; }
-.empty--lg { padding: 72px 24px; }
+.empty--sm {
+  padding: 28px 16px;
+}
+.empty--md {
+  padding: 48px 24px;
+}
+.empty--lg {
+  padding: 72px 24px;
+}
 
 .empty__title {
   font-size: var(--fs-md);

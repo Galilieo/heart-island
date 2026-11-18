@@ -141,7 +141,14 @@ async function handleSavePassword() {
     <div class="container profile">
       <!-- 页头：头像 + 昵称 / 用户名 / 概况 / 签名，同其他页面的手账页头 -->
       <header class="profile__head">
-        <img :src="avatarUrl" alt="" aria-hidden="true" width="64" height="64" class="profile__avatar" />
+        <img
+          :src="avatarUrl"
+          alt=""
+          aria-hidden="true"
+          width="64"
+          height="64"
+          class="profile__avatar"
+        />
         <div class="profile__head-text">
           <h1 class="profile__name">{{ userStore.displayName }}</h1>
           <p class="profile__username">@{{ username }}</p>
@@ -194,7 +201,9 @@ async function handleSavePassword() {
             :class="{ 'is-active': activeTab === tab.key }"
             :aria-selected="activeTab === tab.key"
             @click="activeTab = tab.key"
-          >{{ tab.label }}</button>
+          >
+            {{ tab.label }}
+          </button>
         </div>
 
         <!-- 基本资料 -->
@@ -204,34 +213,20 @@ async function handleSavePassword() {
           aria-label="基本资料"
           class="profile__pane"
         >
-          <p class="profile__card-desc">昵称只在顶栏和个人页显示，不填就显示用户名；社区里统一显示为「匿名岛民」。用户名不可修改，其它都可选填。</p>
+          <p class="profile__card-desc">
+            昵称只在顶栏和个人页显示，不填就显示用户名；社区里统一显示为「匿名岛民」。用户名不可修改，其它都可选填。
+          </p>
 
           <div class="profile__form profile__form--grid">
-            <BaseInput
-              label="用户名"
-              :model-value="username"
-              disabled
-            />
-            <BaseInput
-              v-model="nickname"
-              label="昵称"
-              placeholder="不填就显示用户名"
-            />
-            <BaseSelect
-              v-model="gender"
-              label="性别"
-              :options="GENDER_OPTIONS"
-            />
+            <BaseInput label="用户名" :model-value="username" disabled />
+            <BaseInput v-model="nickname" label="昵称" placeholder="不填就显示用户名" />
+            <BaseSelect v-model="gender" label="性别" :options="GENDER_OPTIONS" />
             <BaseDateInput
               v-model="birthday"
               label="生日"
               hint="可直接输入数字，也可以点右侧日历选择"
             />
-            <BaseInput
-              v-model="city"
-              label="城市"
-              placeholder="例如：上海"
-            />
+            <BaseInput v-model="city" label="城市" placeholder="例如：上海" />
             <BaseTextarea
               v-model="bio"
               label="个性签名"
@@ -241,11 +236,9 @@ async function handleSavePassword() {
               class="profile__span"
             />
             <div class="profile__actions profile__span">
-              <BaseButton
-                variant="primary"
-                :loading="savingProfile"
-                @click="handleSaveProfile"
-              >保存资料</BaseButton>
+              <BaseButton variant="primary" :loading="savingProfile" @click="handleSaveProfile"
+                >保存资料</BaseButton
+              >
             </div>
           </div>
         </section>
@@ -280,11 +273,9 @@ async function handleSavePassword() {
               @enter="handleSavePassword"
             />
             <div class="profile__actions">
-              <BaseButton
-                variant="primary"
-                :loading="savingPassword"
-                @click="handleSavePassword"
-              >保存密码</BaseButton>
+              <BaseButton variant="primary" :loading="savingPassword" @click="handleSavePassword"
+                >保存密码</BaseButton
+              >
             </div>
           </div>
         </section>
@@ -435,7 +426,8 @@ async function handleSavePassword() {
   font-size: var(--fs-sm);
   font-weight: 600;
   text-decoration: none;
-  transition: border-color var(--t-fast) var(--ease-soft),
+  transition:
+    border-color var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 
@@ -476,7 +468,8 @@ async function handleSavePassword() {
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 
