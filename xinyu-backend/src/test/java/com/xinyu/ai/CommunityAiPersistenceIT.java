@@ -1,5 +1,6 @@
 package com.xinyu.ai;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
@@ -10,9 +11,11 @@ import com.xinyu.dto.AiReplyResult;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.dto.CommunityReplyAddDTO;
+import com.xinyu.entity.CommunityPost;
 import com.xinyu.mapper.AiReplyMapper;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
+import com.xinyu.mapper.FavoriteMapper;
 import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
@@ -109,6 +112,7 @@ class CommunityAiPersistenceIT {
         configuration.addMapper(CommunityPostMapper.class);
         configuration.addMapper(TopicMapper.class);
         configuration.addMapper(PostLikeMapper.class);
+        configuration.addMapper(FavoriteMapper.class);
         configuration.addMapper(CommunityReplyMapper.class);
         factory.setConfiguration(configuration);
         var pagination = new MybatisPlusInterceptor();
@@ -122,6 +126,7 @@ class CommunityAiPersistenceIT {
         ReflectionTestUtils.setField(posts, "topicMapper", sessions.getMapper(TopicMapper.class));
         ReflectionTestUtils.setField(posts, "aiReplyLogService", logs);
         ReflectionTestUtils.setField(posts, "postLikeMapper", sessions.getMapper(PostLikeMapper.class));
+        ReflectionTestUtils.setField(posts, "favoriteMapper", sessions.getMapper(FavoriteMapper.class));
         // 隔离库用例不关心额度：注入总是放行的替身，保持限流接入前的行为语义。
         ReflectionTestUtils.setField(posts, "rateLimiter", new AlwaysAllowRateLimiter());
         comments = new CommunityReplyService();
@@ -314,12 +319,46 @@ class CommunityAiPersistenceIT {
     }
 
     @Test
+    void pagedPostsAndFavoritesPreserveVisibilityOrderAndRelations() {
+        jdbc.update("INSERT IGNORE INTO user(id) VALUES (2)");
+        jdbc.update("""
+                INSERT INTO community_post (id,user_id,topic_id,mood_type,content,status,like_count,create_time)
+                VALUES (301,1,1,'平静','较早公开帖',1,2,'2026-11-16 12:00:00'),
+                       (302,2,1,'平静','较新公开帖',1,0,'2026-11-16 12:00:00'),
+                       (303,1,1,'平静','隐藏帖',2,9,'2026-11-16 13:00:00'),
+                       (304,1,1,'平静','删除帖',0,9,'2026-11-16 14:00:00')
+                """);
+        jdbc.update("INSERT INTO post_like (user_id,post_id) VALUES (1,301),(2,302)");
+        jdbc.update("""
+                INSERT INTO favorite (user_id,post_id,create_time)
+                VALUES (1,301,'2026-11-16 15:00:00'),(1,302,'2026-11-16 16:00:00'),
+                       (1,303,'2026-11-16 17:00:00'),(1,304,'2026-11-16 18:00:00')
+                """);
+
+        var first = posts.pagePosts(new Page<>(1, 1), 1L, 1L, false, "latest");
+        var second = posts.pagePosts(new Page<>(2, 1), 1L, 1L, false, "latest");
+        assertThat(first.getTotal()).isEqualTo(2);
+        assertThat(first.getRecords()).extracting(CommunityPost::getId).containsExactly(302L);
+        assertThat(second.getRecords()).extracting(CommunityPost::getId).containsExactly(301L);
+        assertThat(first.getRecords().get(0).getLiked()).isFalse();
+        assertThat(first.getRecords().get(0).getFavorited()).isTrue();
+        assertThat(second.getRecords().get(0).getLiked()).isTrue();
+        assertThat(second.getRecords().get(0).getMine()).isTrue();
+
+        var hot = posts.pagePosts(new Page<>(1, 10), 1L, 1L, false, "hot");
+        assertThat(hot.getRecords()).extracting(CommunityPost::getId).containsExactly(301L, 302L);
+        var mine = posts.pagePosts(new Page<>(1, 10), 1L, 1L, true, "latest");
+        assertThat(mine.getRecords()).extracting(CommunityPost::getId).containsExactly(301L);
+        assertThat(posts.listFavorites(1L)).extracting(CommunityPost::getId).containsExactly(302L, 301L);
+    }
+
+    @Test
     void generationIdIsNotExposedInPublicPostJson() {
         upstream.expect(anything()).andRespond(generatedReply("合成回复"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
         long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
 
-        var saved = posts.listByTopicId(null, null, false, "latest").get(0);
+        var saved = posts.pagePosts(new Page<>(1, 10), null, null, false, "latest").getRecords().get(0);
         assertThat(saved.getId()).isEqualTo(id);
         assertThat(saved.getAiGenerationId()).isNotBlank();
         var json = new ObjectMapper().findAndRegisterModules().valueToTree(saved);

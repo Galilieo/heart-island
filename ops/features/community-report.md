@@ -63,10 +63,17 @@
 
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/community/post/list` | 公开（可选登录） | 不返回 `userId`，返回 `mine`（未登录为 `false`） |
+| GET | `/community/post/list` | 公开（`mine=true` 需登录） | 支持 `topicId`、`mine`、`sort`、`pageNum`（默认 1）、`pageSize`（默认 10，上限 50），返回 `Page`（`records`、`total`、`current`、`size`、`pages`）。帖子返回 `mine`，不返回 `userId` |
 | GET | `/community/post/detail` | 公开（可选登录） | 同上；`status=2` 仅作者本人可见，返回 `hidden=true` 与 `hideReason` |
 | GET | `/community/post/favorites` | 登录用户 | 不返回 `userId`，返回 `mine`；自动跳过非 `status=1` 帖子 |
 | GET | `/community/reply/list` | 公开（可选登录） | 不返回 `userId`，返回 `mine`；登录作者额外可见自己在该贴下 `status=2` 回复（带 `hidden=true`、`hideReason`） |
+
+#### 分页与观看者状态
+
+- 社区列表只返回 `status=1` 帖子。页码或条数小于 1 时分别提示“页码不能小于1”或“每页条数不能小于1”，条数大于 50 时按 50 处理。
+- 登录后只为本页批量查询点赞和收藏，各一条 SQL；匿名访问和空页跳过这两条查询。收藏列表保留数组响应，按收藏时间倒序跳过不可见帖子，批量填充点赞状态。
+- 最新按创建时间倒序，最热先按点赞数倒序再按创建时间倒序。同一时间下按帖子 ID 倒序。最热使用偏移分页，两页请求之间的点赞数变化可能造成重复或漏帖。
+- 列表响应从数组改为分页对象，前后端必须同批发布。已打开的旧页面需刷新才能读取新列表，生产首页使用 `no-store`。
 
 ### 2. 用户举报接口
 

@@ -79,3 +79,21 @@ CREATE TABLE `post_like` (
     ON DELETE CASCADE
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帖子点赞表';
+
+CREATE TABLE `favorite` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '收藏ID',
+  `post_id` BIGINT NOT NULL COMMENT '帖子ID',
+  `user_id` BIGINT NOT NULL COMMENT '用户ID',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_favorite_user` (`post_id`, `user_id`),
+  KEY `idx_favorite_user` (`user_id`, `create_time`),
+  CONSTRAINT `fk_favorite_post`
+    FOREIGN KEY (`post_id`) REFERENCES `community_post` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_favorite_user`
+    FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帖子收藏表';

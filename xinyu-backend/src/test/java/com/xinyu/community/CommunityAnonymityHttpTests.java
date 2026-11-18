@@ -11,6 +11,7 @@ import com.xinyu.controller.CommunityReplyController;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.entity.Favorite;
+import com.xinyu.entity.PostLike;
 import com.xinyu.entity.Topic;
 import com.xinyu.entity.User;
 import com.xinyu.mapper.CommunityPostMapper;
@@ -34,8 +35,14 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.LongStream;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -119,7 +126,12 @@ class CommunityAnonymityHttpTests {
 
         when(communityPostMapper.selectList(any())).thenReturn(List.of(post));
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post);
-        when(communityPostMapper.selectPage(any(), any())).thenReturn(pageOf(post));
+        when(communityPostMapper.selectPage(any(), any())).thenAnswer(invocation -> {
+            Page<CommunityPost> page = invocation.getArgument(0);
+            page.setRecords(List.of(post));
+            page.setTotal(1);
+            return page;
+        });
 
         when(communityReplyMapper.selectList(any())).thenReturn(List.of(reply));
         when(communityReplyMapper.selectPage(any(), any())).thenReturn(pageOf(reply));
@@ -135,12 +147,124 @@ class CommunityAnonymityHttpTests {
     }
 
     @Test
+    void publicPostListReturnsDefaultPage() throws Exception {
+        mvc.perform(get("/community/post/list"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.current").value("1"))
+                .andExpect(jsonPath("$.data.size").value("10"))
+                .andExpect(jsonPath("$.data.total").value("1"))
+                .andExpect(jsonPath("$.data.records.length()").value(1));
+    }
+
+    @Test
+    void publicPostListRejectsPageNumberBelowOne() throws Exception {
+        mvc.perform(get("/community/post/list").param("pageNum", "0"))
+                .andExpect(jsonPath("$.message").value("页码不能小于1"));
+    }
+
+    @Test
+    void publicPostListRejectsPageSizeBelowOne() throws Exception {
+        mvc.perform(get("/community/post/list").param("pageSize", "0"))
+                .andExpect(jsonPath("$.message").value("每页条数不能小于1"));
+    }
+
+    @Test
+    void anonymousPostListCapsPageSizeWithoutReadingViewerRelations() throws Exception {
+        mvc.perform(get("/community/post/list").param("pageSize", "51"))
+                .andExpect(jsonPath("$.data.size").value("50"))
+                .andExpect(jsonPath("$.data.records[0].liked").value(false))
+                .andExpect(jsonPath("$.data.records[0].favorited").value(false));
+
+        verifyNoInteractions(postLikeMapper, favoriteMapper);
+    }
+
+    @Test
+    void viewerRelationsUseOneBatchEachForOneOrThirtyPosts() throws Exception {
+        PostLike liked = new PostLike();
+        liked.setPostId(POST_ID);
+        when(postLikeMapper.selectList(any())).thenReturn(List.of(liked));
+
+        Favorite saved = new Favorite();
+        saved.setPostId(POST_ID + 1);
+        when(favoriteMapper.selectList(any())).thenReturn(List.of(saved));
+
+        for (int recordCount : List.of(1, 30)) {
+            List<CommunityPost> records = LongStream.range(POST_ID, POST_ID + recordCount)
+                    .mapToObj(id -> {
+                        CommunityPost post = samplePost();
+                        post.setId(id);
+                        return post;
+                    })
+                    .toList();
+            doAnswer(invocation -> {
+                Page<CommunityPost> page = invocation.getArgument(0);
+                page.setRecords(records);
+                page.setTotal(40);
+                return page;
+            }).when(communityPostMapper).selectPage(any(), any());
+
+            var response = mvc.perform(get("/community/post/list")
+                            .param("pageSize", "30").header("token", authorToken))
+                    .andExpect(jsonPath("$.data.total").value("40"))
+                    .andExpect(jsonPath("$.data.records.length()").value(recordCount))
+                    .andExpect(jsonPath("$.data.records[0].mine").value(true))
+                    .andExpect(jsonPath("$.data.records[0].liked").value(true))
+                    .andExpect(jsonPath("$.data.records[0].favorited").value(false));
+
+            if (recordCount == 30) {
+                response.andExpect(jsonPath("$.data.records[1].liked").value(false))
+                        .andExpect(jsonPath("$.data.records[1].favorited").value(true))
+                        .andExpect(jsonPath("$.data.records[2].liked").value(false))
+                        .andExpect(jsonPath("$.data.records[2].favorited").value(false));
+            }
+            verify(postLikeMapper).selectList(any());
+            verify(favoriteMapper).selectList(any());
+            verifyNoMoreInteractions(postLikeMapper, favoriteMapper);
+            clearInvocations(postLikeMapper, favoriteMapper);
+        }
+    }
+
+    @Test
+    void favoritesKeepFavoriteOrderSkipInvisiblePostsAndBatchLikes() throws Exception {
+        CommunityPost liked = samplePost();
+        CommunityPost newestFavorite = samplePost();
+        newestFavorite.setId(13L);
+        CommunityPost hidden = samplePost();
+        hidden.setId(12L);
+        hidden.setStatus(2);
+        when(communityPostMapper.selectList(any())).thenReturn(List.of(liked, hidden, newestFavorite));
+
+        List<Favorite> favorites = List.of(13L, 12L, 14L, POST_ID).stream().map(id -> {
+            Favorite favorite = new Favorite();
+            favorite.setPostId(id);
+            return favorite;
+        }).toList();
+        when(favoriteMapper.selectList(any())).thenReturn(favorites);
+
+        PostLike knownLike = new PostLike();
+        knownLike.setPostId(POST_ID);
+        when(postLikeMapper.selectList(any())).thenReturn(List.of(knownLike));
+
+        mvc.perform(get("/community/post/favorites").header("token", otherUserToken))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].id").value("13"))
+                .andExpect(jsonPath("$.data[0].liked").value(false))
+                .andExpect(jsonPath("$.data[0].favorited").value(true))
+                .andExpect(jsonPath("$.data[1].id").value("11"))
+                .andExpect(jsonPath("$.data[1].liked").value(true));
+        verify(postLikeMapper).selectList(any());
+        verify(favoriteMapper).selectList(any());
+        verify(communityPostMapper).selectList(any());
+        verifyNoMoreInteractions(postLikeMapper, favoriteMapper, communityPostMapper);
+    }
+
+    @Test
     void anotherUserCannotSeeUserIdAndReceivesMineFalse() throws Exception {
         mvc.perform(get("/community/post/list").header("token", otherUserToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data[0].userId").doesNotExist())
-                .andExpect(jsonPath("$.data[0].mine").value(false));
+                .andExpect(jsonPath("$.data.records[0].userId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].mine").value(false));
 
         mvc.perform(get("/community/post/detail").param("id", String.valueOf(POST_ID))
                         .header("token", otherUserToken))
@@ -167,8 +291,8 @@ class CommunityAnonymityHttpTests {
     void anonymousVisitorCannotSeeUserIdAndReceivesMineFalse() throws Exception {
         mvc.perform(get("/community/post/list"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].userId").doesNotExist())
-                .andExpect(jsonPath("$.data[0].mine").value(false));
+                .andExpect(jsonPath("$.data.records[0].userId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].mine").value(false));
 
         mvc.perform(get("/community/post/detail").param("id", String.valueOf(POST_ID)))
                 .andExpect(status().isOk())
@@ -185,8 +309,8 @@ class CommunityAnonymityHttpTests {
     void authorSeesMineTrueWithoutUserId() throws Exception {
         mvc.perform(get("/community/post/list").header("token", authorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].userId").doesNotExist())
-                .andExpect(jsonPath("$.data[0].mine").value(true));
+                .andExpect(jsonPath("$.data.records[0].userId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].mine").value(true));
 
         mvc.perform(get("/community/post/detail").param("id", String.valueOf(POST_ID))
                         .header("token", authorToken))

@@ -1,11 +1,11 @@
 package com.xinyu.controller;
 
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.common.Result;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
-import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +17,10 @@ import java.util.List;
 @RequestMapping("/community/post")
 public class CommunityPostController {
 
+    // 公开列表分页契约：默认返回 10 条，最多 50 条以限制单页查询和响应量。
+    private static final String DEFAULT_POST_PAGE_SIZE = "10";
+    private static final long MAX_POST_PAGE_SIZE = 50L;
+
     @Autowired
     private CommunityPostService communityPostService;
 
@@ -24,10 +28,13 @@ public class CommunityPostController {
     private JwtUtil jwtUtil;
 
     @GetMapping("/list")
-    public Result<List<CommunityPost>> list(@RequestParam(required = false) Long topicId,
-                                            @RequestParam(required = false) Boolean mine,
-                                            @RequestParam(required = false) String sort,
-                                            @RequestHeader(value = "token", required = false) String token){
+    public Result<Page<CommunityPost>> list(
+            @RequestParam(required = false) Long topicId,
+            @RequestParam(required = false) Boolean mine,
+            @RequestParam(required = false) String sort,
+            @RequestParam(defaultValue = "1") long pageNum,
+            @RequestParam(defaultValue = DEFAULT_POST_PAGE_SIZE) long pageSize,
+            @RequestHeader(value = "token", required = false) String token) {
         Long userId = null;
 
         if (token != null && !token.trim().isEmpty()) {
@@ -38,7 +45,15 @@ public class CommunityPostController {
             return Result.error("请先登录");
         }
 
-        List<CommunityPost> posts = communityPostService.listByTopicId(topicId, userId, mine, sort);
+        if (pageNum < 1) {
+            return Result.error("页码不能小于1");
+        }
+        if (pageSize < 1) {
+            return Result.error("每页条数不能小于1");
+        }
+
+        Page<CommunityPost> page = new Page<>(pageNum, Math.min(pageSize, MAX_POST_PAGE_SIZE));
+        Page<CommunityPost> posts = communityPostService.pagePosts(page, topicId, userId, mine, sort);
         return Result.success(posts);
     }
 

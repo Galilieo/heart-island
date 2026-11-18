@@ -110,6 +110,7 @@ class CommunityVisibilityTests {
 
     @Test
     void hiddenPostIsExcludedFromFavoritesUnlikeUnfavoriteAndNonAuthorDetail() {
+        when(communityPostMapper.selectList(any())).thenReturn(List.of(post(2)));
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
         Favorite fav = new Favorite();
         fav.setPostId(POST_ID);

@@ -16,8 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.vo.AdminPostDetailVO;
 import com.xinyu.vo.AdminPostVO;
@@ -70,7 +74,9 @@ public class CommunityPostService {
     @Autowired
     private RateLimiter rateLimiter;
 
-    public List<CommunityPost> listByTopicId(Long topicId, Long userId, Boolean mine, String sort) {
+    /** 分页查询公开可见的帖子，再批量填充本页的观看者状态。 */
+    public Page<CommunityPost> pagePosts(
+            Page<CommunityPost> page, Long topicId, Long userId, Boolean mine, String sort) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
 
         queryWrapper.eq("status", CommunityReportConstants.STATUS_VISIBLE);
@@ -83,20 +89,14 @@ public class CommunityPostService {
             queryWrapper.eq("user_id", userId);
         }
 
-        // 排序：hot 按点赞数（时间兜底），其余一律按最新
+        // 时间相同的帖子用 ID 确定先后，避免同一批静态数据翻页时排序漂移。
         if ("hot".equals(sort)) {
             queryWrapper.orderByDesc("like_count");
-            queryWrapper.orderByDesc("create_time");
-        } else {
-            queryWrapper.orderByDesc("create_time");
         }
+        queryWrapper.orderByDesc("create_time", "id");
 
-        List<CommunityPost> posts = communityPostMapper.selectList(queryWrapper);
-
-        for (CommunityPost post : posts) {
-            populateViewerState(post, userId, null);
-        }
-
+        Page<CommunityPost> posts = communityPostMapper.selectPage(page, queryWrapper);
+        populateViewerStates(posts.getRecords(), userId, false);
         return posts;
     }
 
@@ -238,20 +238,30 @@ public class CommunityPostService {
         favQuery.orderByDesc("create_time");
 
         List<Favorite> favorites = favoriteMapper.selectList(favQuery);
-
-        List<CommunityPost> result = new ArrayList<>();
-
-        for (Favorite favorite : favorites) {
-            CommunityPost post = communityPostMapper.selectById(favorite.getPostId());
-
-            if (post == null || !post.isVisible()) {
-                continue;
-            }
-
-            populateViewerState(post, userId, true);
-            result.add(post);
+        if (favorites.isEmpty()) {
+            return List.of();
         }
 
+        List<Long> postIds = favorites.stream().map(Favorite::getPostId).toList();
+        QueryWrapper<CommunityPost> postQuery = new QueryWrapper<CommunityPost>()
+                .in("id", postIds)
+                .eq("status", CommunityReportConstants.STATUS_VISIBLE);
+        Map<Long, CommunityPost> visiblePosts = new HashMap<>();
+        for (CommunityPost post : communityPostMapper.selectList(postQuery)) {
+            if (post.isVisible()) {
+                visiblePosts.put(post.getId(), post);
+            }
+        }
+
+        List<CommunityPost> result = new ArrayList<>();
+        for (Long postId : postIds) {
+            CommunityPost post = visiblePosts.get(postId);
+            if (post != null) {
+                result.add(post);
+            }
+        }
+
+        populateViewerStates(result, userId, true);
         return result;
     }
 
@@ -502,14 +512,45 @@ public class CommunityPostService {
             post.setHideReason(null);
         }
 
-        populateViewerState(post, userId, null);
+        populateViewerState(post, userId);
 
         return post;
     }
 
-    private void populateViewerState(CommunityPost post, Long userId, Boolean fixedFavorited) {
+    private void populateViewerState(CommunityPost post, Long userId) {
         post.setLiked(isLiked(post.getId(), userId));
-        post.setFavorited(fixedFavorited != null ? fixedFavorited : isFavorited(post.getId(), userId));
+        post.setFavorited(isFavorited(post.getId(), userId));
+        populateOwnershipAndVisibility(post, userId);
+    }
+
+    private void populateViewerStates(List<CommunityPost> posts, Long userId, boolean alreadyFavorited) {
+        Set<Long> likedIds = Set.of();
+        Set<Long> favoritedIds = Set.of();
+        if (userId != null && !posts.isEmpty()) {
+            List<Long> postIds = posts.stream().map(CommunityPost::getId).toList();
+            QueryWrapper<PostLike> likes = new QueryWrapper<PostLike>()
+                    .select("post_id").eq("user_id", userId).in("post_id", postIds);
+            likedIds = postLikeMapper.selectList(likes).stream()
+                    .map(PostLike::getPostId)
+                    .collect(Collectors.toSet());
+
+            if (!alreadyFavorited) {
+                QueryWrapper<Favorite> favorites = new QueryWrapper<Favorite>()
+                        .select("post_id").eq("user_id", userId).in("post_id", postIds);
+                favoritedIds = favoriteMapper.selectList(favorites).stream()
+                        .map(Favorite::getPostId)
+                        .collect(Collectors.toSet());
+            }
+        }
+
+        for (CommunityPost post : posts) {
+            post.setLiked(likedIds.contains(post.getId()));
+            post.setFavorited(alreadyFavorited || favoritedIds.contains(post.getId()));
+            populateOwnershipAndVisibility(post, userId);
+        }
+    }
+
+    private void populateOwnershipAndVisibility(CommunityPost post, Long userId) {
         post.setMine(userId != null && userId.equals(post.getUserId()));
         if (post.getHidden() == null) {
             post.setHidden(Integer.valueOf(CommunityReportConstants.STATUS_ADMIN_HIDDEN).equals(post.getStatus()));

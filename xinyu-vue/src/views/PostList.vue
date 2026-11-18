@@ -10,6 +10,7 @@ import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'
 import BaseDialog from '../components/ui/BaseDialog.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
+import BasePagination from '../components/ui/BasePagination.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import TopicFilter from '../components/community/TopicFilter.vue'
@@ -23,20 +24,18 @@ const router = useRouter()
 const communityStore = useCommunityStore()
 const toast = useToast()
 
-const { topics, posts, filters } = storeToRefs(communityStore)
+const { topics, posts, filters, postsPage, postsTotal, postsPages } = storeToRefs(communityStore)
 
 const publishRef = ref(null)
 const showPublish = ref(false)
+const listTop = ref(null)
 
 const { run: doFetchPosts, loading: postsLoading } = useAsyncAction(
-  () => communityStore.fetchPosts(),
-  { silent: true }
+  (pageNum) => communityStore.fetchPosts(pageNum),
+  { concurrent: true, errorMsg: '加载帖子失败' }
 )
 
-const { run: doFetchTopics } = useAsyncAction(
-  () => communityStore.fetchTopics(),
-  { silent: true }
-)
+const { run: doFetchTopics } = useAsyncAction(() => communityStore.fetchTopics(), { silent: true })
 
 const { run: doPublish, loading: publishing } = useAsyncAction(
   (payload) => communityStore.publishPost(payload),
@@ -62,6 +61,13 @@ async function setScope(mine) {
 async function setSort(sort) {
   communityStore.setSort(sort)
   await doFetchPosts()
+}
+
+async function changePage(pageNum) {
+  const result = await doFetchPosts(pageNum)
+  if (result.ok && !result.skipped && postsPage.value === pageNum) {
+    listTop.value?.scrollIntoView({ block: 'start' })
+  }
 }
 
 async function handlePublish(payload) {
@@ -131,7 +137,7 @@ onMounted(async () => {
         </aside>
 
         <section class="post-listing">
-          <div class="post-toolbar">
+          <div ref="listTop" class="post-toolbar">
             <h2 class="post-toolbar__topic">{{ selectedTopicName }}</h2>
             <div class="post-toolbar__groups">
               <div class="post-range" role="group" aria-label="排序方式">
@@ -140,13 +146,17 @@ onMounted(async () => {
                   class="post-range__btn"
                   :class="{ 'is-on': filters.sort === 'latest' }"
                   @click="setSort('latest')"
-                >最新</button>
+                >
+                  最新
+                </button>
                 <button
                   type="button"
                   class="post-range__btn"
                   :class="{ 'is-on': filters.sort === 'hot' }"
                   @click="setSort('hot')"
-                >最热</button>
+                >
+                  最热
+                </button>
               </div>
               <div class="post-range" role="group" aria-label="帖子范围">
                 <button
@@ -154,13 +164,17 @@ onMounted(async () => {
                   class="post-range__btn"
                   :class="{ 'is-on': !filters.mine }"
                   @click="setScope(false)"
-                >全部</button>
+                >
+                  全部
+                </button>
                 <button
                   type="button"
                   class="post-range__btn"
                   :class="{ 'is-on': filters.mine }"
                   @click="setScope(true)"
-                >我的</button>
+                >
+                  我的
+                </button>
               </div>
             </div>
           </div>
@@ -190,20 +204,21 @@ onMounted(async () => {
               title="这里还没有帖子"
               hint="换个话题看看，或者写下第一篇。"
             >
-              <BaseButton variant="soft" size="sm" @click="showPublish = true">
-                写一篇
-              </BaseButton>
+              <BaseButton variant="soft" size="sm" @click="showPublish = true"> 写一篇 </BaseButton>
             </EmptyState>
           </TransitionGroup>
+          <BasePagination
+            v-if="postsTotal > 0"
+            class="post-pagination"
+            :page-num="postsPage"
+            :total="postsTotal"
+            :pages="postsPages"
+            @change="changePage"
+          />
         </section>
       </div>
 
-      <BaseDialog
-        v-model="showPublish"
-        title="发布新帖子"
-        width="md"
-        :persistent="publishing"
-      >
+      <BaseDialog v-model="showPublish" title="发布新帖子" width="md" :persistent="publishing">
         <PostPublishForm
           ref="publishRef"
           :topics="topics"
@@ -223,8 +238,8 @@ onMounted(async () => {
   /* 列宽来源同首页：主栏 680 + 侧栏 300 + 间距 40 ≈ 1020，再留两侧留白后取 1100 */
   grid-template-columns: minmax(0, 680px) 300px;
   grid-template-areas:
-    "head rail"
-    "list rail";
+    'head rail'
+    'list rail';
   justify-content: center;
   column-gap: 40px;
   row-gap: 20px;
@@ -233,9 +248,19 @@ onMounted(async () => {
   padding-bottom: 40px;
 }
 
-.post-head { grid-area: head; min-width: 0; }
+.post-head {
+  grid-area: head;
+  min-width: 0;
+}
 
-.post-listing { grid-area: list; min-width: 0; }
+.post-listing {
+  grid-area: list;
+  min-width: 0;
+}
+
+.post-pagination {
+  margin-top: 16px;
+}
 
 .post-rail {
   grid-area: rail;
@@ -294,6 +319,8 @@ onMounted(async () => {
 
 /* ── 列表工具条：当前话题名 + 排序 / 范围按钮 ── */
 .post-toolbar {
+  /* 切页滚动后，工具栏留在 64px 粘性页头下方。 */
+  scroll-margin-top: 72px;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -330,7 +357,8 @@ onMounted(async () => {
   color: var(--ink-2);
   font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-soft),
+  transition:
+    background var(--t-fast) var(--ease-soft),
     color var(--t-fast) var(--ease-soft);
 }
 
@@ -357,9 +385,9 @@ onMounted(async () => {
   .post-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "head"
-      "rail"
-      "list";
+      'head'
+      'rail'
+      'list';
     max-width: 720px;
   }
 }
