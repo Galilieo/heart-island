@@ -28,7 +28,7 @@
 - [多轮对话](feature-plans/ai-chat-session-v1.md) · [长期记忆](feature-plans/mood-memory-v1.md) · [情绪周报](feature-plans/mood-report-v1.md)
 - [RAG知识库](feature-plans/rag-knowledge-base-v1.md) · [工具调用](feature-plans/tool-calling-v1.md) · [回复可选化](feature-plans/ai-reply-optional-v1.md)
 
-这些草稿已由当前总方案和1a契约接管；后续开工时按实际需求重新核对。
+这些草稿已由当前总方案接管。其中“回复可选化”已在 1a 实现（见 [1a 契约](../../ops/features/ai-reply-service-v1a.md)），“情绪周报”已在阶段 2 实现（见 [回顾契约](../../ops/features/mood-review.md)），实现与草稿不同处以契约为准；多轮对话、长期记忆、RAG、工具调用尚未实现，开工时按实际需求重新核对。
 
 ## 历史实施计划与设计
 
