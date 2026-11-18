@@ -1,0 +1,81 @@
+# 第一层：快速检查。每次 push / PR 运行，三端并行，不需要数据库或密钥。
+# 不调用真实模型，不部署；上线仍按 deploy/README.md 人工执行。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # 与本机开发和生产一致，避免默认 UTC 掩盖或制造时间相关问题。
+  TZ: Asia/Shanghai
+
+jobs:
+  frontend:
+    name: 前端
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: xinyu-vue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: xinyu-vue/package-lock.json
+      - run: npm ci
+      - name: 格式检查
+        run: npm run format:check
+      - name: Lint（只检查不修改）
+        run: npm run check:lint
+      - name: 单元测试
+        run: npm test
+      - name: 构建
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: /api
+
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: xinyu-ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: xinyu-ai/uv.lock
+      - run: uv sync --frozen
+      - name: 测试
+        run: uv run --frozen pytest -q
+
+  backend:
+    name: Java 单元与契约
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: xinyu-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: 测试（*Test / *Tests，不含 *IT）
+        run: sh mvnw -B test

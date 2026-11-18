@@ -1,0 +1,78 @@
+# 第二层：后端集成测试。push 到 main 或手动触发时运行。
+# MySQL 与 Redis 均为本 job 的一次性容器，口令只用于该容器，不是任何真实环境的凭据。
+# 合成 Python 服务由 IT 自行从 xinyu-ai/.venv 拉起；不调用真实模型，不部署。
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  backend-it:
+    name: Java 集成测试（MySQL + Redis + 合成 Python）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        # 与生产同为 8.0 大版本（本机开发为 8.4）。
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-root
+          TZ: Asia/Shanghai
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-only-root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+      redis:
+        # 与生产同为 6.0 大版本。
+        image: redis:6.0
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      AI_TEST_DB_USER: root
+      AI_TEST_DB_PASSWORD: ci-only-root
+      AI_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: xinyu-ai/uv.lock
+      - name: 准备合成 Python 服务环境
+        working-directory: xinyu-ai
+        run: uv sync --frozen
+      - name: 逐类运行集成测试
+        run: .github/scripts/run-backend-its.sh
+      - name: 失败时上传 surefire 报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: xinyu-backend/target/surefire-reports/
+          retention-days: 7
