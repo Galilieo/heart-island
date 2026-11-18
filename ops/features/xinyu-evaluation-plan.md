@@ -92,7 +92,7 @@
 
 计划共 100 条，均为合成数据。
 
-**2026-11-11/12 首轮落地已完成**：合成集 `xinyu-ai/evals/mood_reply_set.jsonl`（冻结 SHA 见 `AI_WORKLOG/evals/2026-11-11-mood-reply/frozen-sha256.txt`），检查器与运行脚本在 `xinyu-ai/evals/`；v1 基线、v2、v2b 三轮全集结果与汇总存于 `AI_WORKLOG/evals/2026-11-11-mood-reply/`（v1-final / v2-final / v2b-final），两轮盲评与其更正记录在同目录 blind/、blind-v2-v2b/，总结性结果记录见 `AI_WORKLOG/2026-11-12-mood-reply-v2-adoption.md`。
+**2026-11-11/12 首轮落地已完成**：合成集 `xinyu-ai/evals/mood_reply_set.jsonl`（冻结 SHA 见 `AI_WORKLOG/evals/2026-11-11-mood-reply/frozen-sha256.txt`），检查器与运行脚本在 `xinyu-ai/evals/`；v1 基线、v2、v2b 三轮全集结果与汇总存于 `AI_WORKLOG/evals/2026-11-11-mood-reply/`（v1-final / v2-final / v2b-final），两轮盲评与其更正记录在同目录 blind/、blind-v2-v2b/，总结性结果记录见 `AI_WORKLOG/archive/2026-11-17-first-launch/2026-11-12-mood-reply-v2-adoption.md`。
 
 | 类别 | 说明 | 计划 | 已完成 |
 | --- | --- | ---: | ---: |
