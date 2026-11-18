@@ -1,6 +1,6 @@
 # 心屿阶段 1a Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 先由用户确认方案，再进入业务代码；本轮仅准备计划，不选择或启动代理执行。
+> 阶段检查单：Task1～4 已本地实施；正式效果／性能测评、带读和发布验收仍有待办，见 [当前接续](../../ops/features/xinyu-next-session.md)。下文旧复选框与“本轮／待实施”仅保留编写时的检查语境，不据此重新执行全部任务。按问题定位相关 Task，授权与协作遵守当前 AGENTS／ops/11，不沿用旧模板的技能要求。
 
 修订：2026-11-07校准社区等待初值与失败展示；已补充update防复活、社区HTTP超时、发布/恢复边界与retry CAS；已包含deleted_at和实际行锁；以下删除均指status=0语义。1a增加删除时间，定期硬删除/匿名化仍不在1a实施范围。
 
