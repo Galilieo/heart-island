@@ -1,6 +1,6 @@
 # 阶段 1b：Redis 共享限流
 
-状态：已实现（2026-11-16），未部署。任务书：`AI_WORKLOG/plans/2026-11-16-redis-rate-limit-plan.md`；执行与验证记录：`AI_WORKLOG/2026-11-16-redis-rate-limit.md`。上游依据：总方案第 3.4、7.2 节；1a 契约容量保护与 RETRY-001 冷却。
+状态：已实现（2026-11-16），未部署。任务书：`AI_WORKLOG/plans/2026-11-16-redis-rate-limit-plan.md`；执行与验证记录：`AI_WORKLOG/archive/2026-11-17-first-launch/2026-11-16-redis-rate-limit.md`。上游依据：总方案第 3.4、7.2 节；1a 契约容量保护与 RETRY-001 冷却。
 
 ## 1. 目标
 
