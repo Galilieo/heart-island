@@ -214,7 +214,7 @@ Redis只接收最少事件/缓存内容，私有用户权限仍在Java检查；�
 
 - [x] **阶段2开发前评估共享数据库超时**（2026-11-14 用 2000 行单用户 / 22000 行多用户评估，中位 3–63 ms、峰值约 72 ms，6000 ms 足够，配置不变）：当前共用数据源的socketTimeout=6000ms也影响普通接口／后台查询；结合慢查询与周报负载评估语句预算、网络等待及是否需要独立worker数据源。保留连接、网络及提交／回滚等待保护，不用语句超时简单替换；本项仅评估，当前配置不变。[Connector/J定义](https://dev.mysql.com/doc/connector-j/en/connector-j-connp-props-networking.html)
 
-**实现对照（2026-11-18）**：已上线。实际表名为 `mood_review`（`review_type` 为 WEEK／RECENT_30）与 `mood_review_source`，对应下文设计中的 mood_report／report_source；接口为 `GET /mood/analysis`、`POST /mood/analysis/generate`、`GET /mood/report/week`、`POST /mood/report/week/generate`、`POST /mood/report/week/regenerate`，另有 `GET /mood/report/week/history`。下文为设计时的约定，具体字段与状态以源码（`MoodReviewController`／`MoodReviewService`）为准；独立契约文档待补。
+**实现对照（2026-11-18）**：已上线。实际表名为 `mood_review`（`review_type` 为 WEEK／RECENT_30）与 `mood_review_source`，对应下文设计中的 mood_report／report_source；接口为 `GET /mood/analysis`、`POST /mood/analysis/generate`、`GET /mood/report/week`、`POST /mood/report/week/generate`、`POST /mood/report/week/regenerate`，另有 `GET /mood/report/week/history`。下文为设计时的约定，现行字段、状态与差异见 [阶段2回顾契约](mood-review.md)。
 
 目标：近期分析与周报是独立可用能力，直接依据记录生成，无需聊天或新增标签/强度。
 

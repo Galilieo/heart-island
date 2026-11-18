@@ -30,5 +30,5 @@
 - [社区举报与处理](community-report.md)：治理线 G1 举报、匿名脱敏（`mine` 替代 `userId`）、后台聚合裁决与状态契约；含社区列表分页。
 - [Redis 共享限流](redis-rate-limit.md)：1b 时间窗口额度、原子检查、Redis 故障降级与 429 口径。
 - [测评计划](xinyu-evaluation-plan.md)：L1～L4 指标、当前值与复跑口径；首轮报告见 `AI_WORKLOG/2026-11-17-evaluation-report.md`。
-- 阶段2回顾（周报／近期分析）暂无独立契约，见总方案第 8 节“实现对照”与源码。
+- [近期回顾与周报](mood-review.md)：阶段2统计口径、两表、六个接口、生成去重与限流、任务执行、过期与危机分支。
 - [Redis 共享限流](redis-rate-limit.md)：付费 AI 调用按用户与全站的时间窗口额度，Lua 原子扣减，故障降级本机计数。
