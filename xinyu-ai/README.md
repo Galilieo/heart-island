@@ -94,3 +94,9 @@ uv run --directory xinyu-ai --locked pytest -q
 后端 `AiServiceClientContractIT` 会用本目录 `.venv/bin/python -m tests.java_contract_server` 自动启动随机回环端口，并在结束后停止进程。测试子进程清空继承环境，使用字面量测试配置与合成 Provider，不读取真实模型密钥、不访问数据库。共享 `test-contracts/mood-types.json` 的13种心情、SUPPORT零供应商调用与错误token均走实际Python HTTP接口。
 
 在后端目录显式运行 `sh ./mvnw '-Dtest=AiServiceClientContractIT' test`；需要已准备本服务锁定依赖的虚拟环境和本地端口权限。该IT不由默认 `*Tests` 匹配自动运行，不能只跑默认测试就声称跨服务已验。它只验证内部协议与客户端，worker／数据库／页面闭环在后续批次验收。
+
+## 社区同步回复
+
+`POST /internal/v1/community-replies` 复用内部认证、8 KiB 请求头、16 KiB 正文与错误分类。请求包含 `request_id`、`topic_name`（允许空串、最多 50 UTF-16 单位）、`mood_type`（非空、最多 30 UTF-16 单位，允许历史标签）、`content`（非空白、最多 800 UTF-16 单位）和 `budget_ms`（1～15000）。成功响应包含 `request_id`、`reply_content`、`result_kind`、`model_called`、`model_name` 和 `template_version=community-reply-v1`。危机命中复用内置 SUPPORT 文案且跳过供应商。普通帖子的话题、心情与正文仅作为 user 消息中的 JSON 数据，模型预算沿用 `OPENAI_MAX_TOKENS`。
+
+心情和回顾共享 `AI_SERVICE_CONCURRENCY` 个名额。社区独立使用 `AI_COMMUNITY_CONCURRENCY`，默认 3，至少 1。默认每个 Python 进程两组满载时最多有 6 个供应商请求在途，超额立即返回 `overloaded`。Java 始终启用社区客户端，数据库 worker 仍条件启用。

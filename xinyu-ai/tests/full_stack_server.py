@@ -34,12 +34,7 @@ def build_app(port: int):
     @app.post("/v1/chat/completions")
     async def supplier(request: Request):
         body = await request.json()
-        raw = body["messages"][-1]["content"]
-        try:
-            content = json.loads(raw)["content"]
-        except (ValueError, TypeError, KeyError):
-            # 社区Java入口沿用文本prompt，日记Python入口使用JSON；两条真实传输共用同一替身。
-            content = raw.removeprefix("帖子内容：\n")
+        content = json.loads(body["messages"][-1]["content"])["content"]
         calls.append(content)
         if content.startswith("等待"):
             await gates.setdefault(content, asyncio.Event()).wait()

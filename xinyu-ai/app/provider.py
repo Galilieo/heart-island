@@ -7,13 +7,14 @@ from typing import Literal, Protocol
 import httpx
 from pydantic import ValidationError
 
-from app import review_prompt
+from app import community_prompt, review_prompt
 from app.reviews import ReviewRequest
-from app.contracts import ModelReply, MoodReplyRequest
+from app.contracts import CommunityReplyRequest, ModelReply, MoodReplyRequest
+from app.safety_prompt import SAFETY_SECTION
 from app.settings import Settings
 
 
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = ("""
 你是「心屿」里的小芽。用户在这里随手记下此刻的心情，你回一两句话，像一个和对方差不多年纪的朋友，在手机上看到消息后顺手回的那样。目的只有一个：让对方知道，刚才写的那句话有人认真看了。
 
 # 输入
@@ -56,12 +57,7 @@ SYSTEM_PROMPT = """
 - 说教、套话（“我能感受到你的……”“你并不孤单”“抱抱你”）、夸张的鼓励。
 - 诊断或医疗建议：不说“你可能是抑郁”，不提用药。
 
-# 安全
-如果记录里有想死、自伤、伤害他人，或正在被伤害的迹象：
-- 不给小建议，不淡化，不说“别想太多”
-- 平实地说你有点担心他，希望他现在就联系一个信任的人
-- 建议联系当地经过核验的心理援助渠道；如果有立即的危险，联系当地急救或警方
-- 不自行生成电话号码或其他联系方式，不猜测用户所在地区
+""" + SAFETY_SECTION + """
 
 # 输出
 一段话，只输出回复正文，不加引号、标题或称呼，不用表情符号。
@@ -105,7 +101,7 @@ SYSTEM_PROMPT = """
 
 记录：{"mood_type":"焦虑","content":"下周要给全组做汇报，PPT还没做完，越想越慌，怎么办啊"}
 回复：还有一周，来得及的。先把最难的那一页做掉，剩下的会快很多。
-""".strip()
+""").strip()
 
 # 供应商阶段等待上限（秒），均受本次剩余总时限约束，见 README「请求与结果」。
 CONNECT_TIMEOUT_SECONDS = 2
@@ -125,17 +121,22 @@ class ProviderFailure(Exception):
 class Provider(Protocol):
     """模型适配器协议，供生产 HTTP 调用及离线测试替身共同实现。"""
 
-    async def generate(self, request: MoodReplyRequest | ReviewRequest, deadline: float) -> ModelReply:
+    async def generate(self, request: MoodReplyRequest | ReviewRequest | CommunityReplyRequest, deadline: float) -> ModelReply:
         """在事件循环单调时钟的绝对截止时间前返回回复，失败时抛出分类异常。"""
         ...
 
 
-def messages(request: MoodReplyRequest | ReviewRequest) -> list[dict[str, str]]:
+def messages(request: MoodReplyRequest | ReviewRequest | CommunityReplyRequest) -> list[dict[str, str]]:
     """构造系统指令和用户消息，将心情记录作为 JSON 数据单独传入。"""
     if isinstance(request, ReviewRequest):
         return [
             {"role": "system", "content": review_prompt.REVIEW_SYSTEM_PROMPT},
             {"role": "user", "content": request.model_dump_json(include={"review_type", "records", "ai_enabled_total", "stats"})},
+        ]
+    if isinstance(request, CommunityReplyRequest):
+        return [
+            {"role": "system", "content": community_prompt.COMMUNITY_SYSTEM_PROMPT},
+            {"role": "user", "content": request.model_dump_json(include={"topic_name", "mood_type", "content"})},
         ]
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -143,7 +144,7 @@ def messages(request: MoodReplyRequest | ReviewRequest) -> list[dict[str, str]]:
     ]
 
 
-def _request_body(settings: Settings, request: MoodReplyRequest | ReviewRequest) -> dict:
+def _request_body(settings: Settings, request: MoodReplyRequest | ReviewRequest | CommunityReplyRequest) -> dict:
     """构造非流式 Chat Completions 请求体；思考模式按配置显式传给供应商。"""
     return {
         "model": settings.model_name,
@@ -183,7 +184,7 @@ class HttpProvider:
         self.settings = settings
         self.transport = transport
 
-    async def generate(self, request: MoodReplyRequest | ReviewRequest, deadline: float) -> ModelReply:
+    async def generate(self, request: MoodReplyRequest | ReviewRequest | CommunityReplyRequest, deadline: float) -> ModelReply:
         """调用供应商并校验回复，同时限制阶段等待和整个调用的耗时。
 
         Args:

@@ -1,8 +1,8 @@
 """定义 Java 与 Python 之间的请求、响应及 UTF-16 长度校验规则。"""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # 版本号对应 evals/prompts/mood-reply-v2b.txt（提示词文件见该路径及 AI_WORKLOG 测评记录）。
@@ -39,16 +39,31 @@ def validate_reply(text: str) -> str:
     return text
 
 
+def validate_content(text: str, max_utf16: int) -> str:
+    """校验原始正文并原样返回，避免更改传给提示词的内容。"""
+    if not text.strip() or utf16_length(text) > max_utf16:
+        raise ValueError("invalid_content")
+    return text
+
+
+ReplyText = Annotated[str, AfterValidator(validate_reply)]
+
+
 class Contract(BaseModel):
     """协议模型基类：禁止额外字段、隐式类型转换和错误信息中的输入回显。"""
 
     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
 
 
-class Correlation(Contract):
-    """关联一次任务尝试，供 Java 校验来源版本和迟到结果。"""
+class RequestIdentity(Contract):
+    """内部请求和响应共同使用的追踪标识。"""
 
     request_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+class Correlation(RequestIdentity):
+    """关联一次任务尝试，供 Java 校验来源版本和迟到结果。"""
+
     job_id: str = Field(pattern=r"^[1-9][0-9]{0,18}$")
     attempt: int = Field(ge=1)
     source_version: str = Field(pattern=r"^[1-9][0-9]{0,18}$")
@@ -73,22 +88,14 @@ class MoodReplyRequest(Correlation):
     @classmethod
     def valid_content(cls, value: str) -> str:
         """拒绝空白、超长或包含孤立代理字符的心情内容。"""
-        if not value.strip() or utf16_length(value) > MAX_CONTENT_UTF16:
-            raise ValueError("invalid_content")
-        return value
+        return validate_content(value, MAX_CONTENT_UTF16)
 
 
 class ModelReply(Contract):
     """经过校验的供应商回复，仅保留回复正文和模型名称。"""
 
-    reply_content: str
+    reply_content: ReplyText
     model_name: str = Field(min_length=1, max_length=128)
-
-    @field_validator("reply_content")
-    @classmethod
-    def valid_reply(cls, value: str) -> str:
-        """按统一规则校验并规范化模型回复。"""
-        return validate_reply(value)
 
     @field_validator("model_name")
     @classmethod
@@ -99,20 +106,14 @@ class ModelReply(Contract):
         return value
 
 
-class MoodReplyResponse(Correlation):
+class ReplyResult(Contract):
     """内部接口成功响应，明确区分模型回复和未调用模型的支持性回应。"""
 
-    reply_content: str
+    reply_content: ReplyText
     result_kind: Literal["MODEL", "SUPPORT"]
     model_called: bool
-    template_version: Literal["mood-reply-v2"] = TEMPLATE_VERSION
+    template_version: str
     model_name: str | None
-
-    @field_validator("reply_content")
-    @classmethod
-    def valid_reply(cls, value: str) -> str:
-        """确保所有成功分支都遵守同一回复正文约束。"""
-        return validate_reply(value)
 
     @model_validator(mode="after")
     def result_semantics(self):
@@ -123,3 +124,54 @@ class MoodReplyResponse(Correlation):
         elif self.model_called or self.model_name is not None:
             raise ValueError("invalid_support_result")
         return self
+
+
+class MoodReplyResponse(ReplyResult, Correlation):
+    """回传心情任务的关联字段及通过校验的回应。"""
+
+    template_version: Literal["mood-reply-v2"] = TEMPLATE_VERSION
+
+
+COMMUNITY_TEMPLATE_VERSION = "community-reply-v1"
+# 社区发帖契约与 VARCHAR 列上限，见 1a 契约第 6 节。
+MAX_COMMUNITY_CONTENT_UTF16 = 800
+MAX_TOPIC_NAME_UTF16 = 50
+MAX_COMMUNITY_MOOD_UTF16 = 30
+MAX_COMMUNITY_BUDGET_MS = 15000
+
+
+class CommunityReplyRequest(RequestIdentity):
+    """社区同步回复的输入，仅包含生成所需数据。"""
+
+    topic_name: str
+    mood_type: str
+    content: str
+    budget_ms: int = Field(ge=1, le=MAX_COMMUNITY_BUDGET_MS)
+
+    @field_validator("topic_name")
+    @classmethod
+    def valid_topic_name(cls, value: str) -> str:
+        """允许未指定话题的空串，按 UTF-16 校验长度。"""
+        if utf16_length(value) > MAX_TOPIC_NAME_UTF16:
+            raise ValueError("invalid_topic_name")
+        return value
+
+    @field_validator("mood_type")
+    @classmethod
+    def valid_mood_type(cls, value: str) -> str:
+        """保留历史帖子的心情标签，只校验非空与长度。"""
+        if not value or utf16_length(value) > MAX_COMMUNITY_MOOD_UTF16:
+            raise ValueError("invalid_mood_type")
+        return value
+
+    @field_validator("content")
+    @classmethod
+    def valid_content(cls, value: str) -> str:
+        """按发帖上限校验正文，拒绝空白与孤立代理。"""
+        return validate_content(value, MAX_COMMUNITY_CONTENT_UTF16)
+
+
+class CommunityReplyResponse(ReplyResult, RequestIdentity):
+    """返回社区回复及元数据，由 Java 负责生成代次检查。"""
+
+    template_version: Literal["community-reply-v1"] = COMMUNITY_TEMPLATE_VERSION

@@ -7,9 +7,11 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from app.contracts import ModelReply, MoodReplyRequest, MoodReplyResponse
+from app.contracts import (
+    CommunityReplyRequest, CommunityReplyResponse, ModelReply, MoodReplyRequest, MoodReplyResponse,
+)
 from app.reviews import ReviewRequest, validate_output, success_response
 from app.provider import HttpProvider, Provider, ProviderFailure
 from app.safety import build_support_reply
@@ -59,10 +61,10 @@ async def _read_limited_body(request: Request, limit: int = MAX_BODY_BYTES) -> b
     return bytes(body)
 
 
-def _parse_request(body: bytes, review: bool = False) -> MoodReplyRequest | ReviewRequest | None:
+def _parse_request[RequestModel: BaseModel](body: bytes, model: type[RequestModel]) -> RequestModel | None:
     """解析并校验内部请求；非 JSON、结构不符或非法 Unicode 均返回 None。"""
     try:
-        return (ReviewRequest if review else MoodReplyRequest).model_validate(json.loads(body))
+        return model.model_validate(json.loads(body))
     except (ValueError, TypeError, RecursionError):
         return None
 
@@ -70,6 +72,25 @@ def _parse_request(body: bytes, review: bool = False) -> MoodReplyRequest | Revi
 def _deadline_reached(deadline: float) -> bool:
     """判断事件循环单调时钟是否已到达绝对截止时间。"""
     return asyncio.get_running_loop().time() >= deadline
+
+
+class GenerationGate:
+    """同一事件循环内的生成名额，超过容量立即拒绝。"""
+
+    def __init__(self, capacity: int):
+        self._capacity = capacity
+        self._active = 0
+
+    def try_acquire(self) -> bool:
+        """检查并占用名额；不得在检查和递增之间让出事件循环。"""
+        if self._active >= self._capacity:
+            return False
+        self._active += 1
+        return True
+
+    def release(self) -> None:
+        """归还已通过准入的一次生成名额。"""
+        self._active -= 1
 
 
 def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
@@ -85,7 +106,8 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
     """
     provider = provider if provider is not None else HttpProvider(settings)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    active = 0
+    mood_gate = GenerationGate(settings.max_concurrent_requests)
+    community_gate = GenerationGate(settings.community_max_concurrent_requests)
 
     def error(code: str, request_id: str | None = None) -> JSONResponse:
         """将内部错误分类映射为 HTTP 响应，仅记录安全追踪字段。"""
@@ -114,8 +136,10 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
             success_response(data, validated_text.body, validated_text.ps, validated_model.model_name)
         )
 
-    async def handle_mood_reply(data: MoodReplyRequest, deadline: float) -> JSONResponse:
-        """执行单条心情回应的风险分流、模型调用与响应封装。"""
+    async def handle_single_reply(
+        data: MoodReplyRequest | CommunityReplyRequest, deadline: float,
+    ) -> JSONResponse:
+        """心情和社区共用风险分流与供应商回复校验。"""
         support = build_support_reply(data.content)
         if _deadline_reached(deadline):
             raise TimeoutError
@@ -130,8 +154,15 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                 return error("invalid_model_response", data.request_id)
             text, kind, called, model = validated.reply_content, "MODEL", True, validated.model_name
 
-        response = MoodReplyResponse(
-            **data.model_dump(include={"request_id", "job_id", "attempt", "source_version"}),
+        if isinstance(data, CommunityReplyRequest):
+            response_type = CommunityReplyResponse
+            correlation = {"request_id": data.request_id}
+        else:
+            response_type = MoodReplyResponse
+            correlation = data.model_dump(include={"request_id", "job_id", "attempt", "source_version"})
+
+        response = response_type(
+            **correlation,
             reply_content=text,
             result_kind=kind,
             model_called=called,
@@ -144,11 +175,11 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
         """返回应用就绪状态，不探测供应商，也不暴露配置。"""
         return {"ready": True}
 
+    @app.post("/internal/v1/community-replies")
     @app.post("/internal/v1/mood-reviews")
     @app.post("/internal/v1/mood-replies")
     async def reply(request: Request):
         """在总时限内完成认证、输入校验、风险分流和单次回应。"""
-        nonlocal active
         start = asyncio.get_running_loop().time()
         request_id = None
         try:
@@ -159,35 +190,39 @@ def create_app(settings: Settings, provider: Provider | None = None) -> FastAPI:
                 if not _authenticate(headers, settings):
                     return error("unauthorized")
 
-                is_review = request.url.path == "/internal/v1/mood-reviews"
-                body_limit = MAX_REVIEW_BODY_BYTES if is_review else MAX_BODY_BYTES
+                path = request.url.path
+                if path == "/internal/v1/mood-reviews":
+                    request_type, gate, body_limit = ReviewRequest, mood_gate, MAX_REVIEW_BODY_BYTES
+                elif path == "/internal/v1/community-replies":
+                    request_type, gate, body_limit = CommunityReplyRequest, community_gate, MAX_BODY_BYTES
+                else:
+                    request_type, gate, body_limit = MoodReplyRequest, mood_gate, MAX_BODY_BYTES
+
                 body = await _read_limited_body(request, body_limit)
                 if body is None:
                     return error("invalid_request")
 
-                data = _parse_request(body, is_review)
+                data = _parse_request(body, request_type)
                 if data is None:
                     return error("invalid_request")
                 request_id = data.request_id
 
-                if active >= settings.max_concurrent_requests:
+                if not gate.try_acquire():
                     return error("overloaded", request_id)
-                # 检查与计数递增之间不能出现 await，避免同一事件循环中的请求交错准入。
-                active += 1
                 try:
                     deadline = min(start + settings.request_timeout_seconds, start + data.budget_ms / 1000)
                     if _deadline_reached(deadline):
                         raise TimeoutError
                     async with asyncio.timeout_at(deadline):
                         result = await (
-                            handle_review(data, deadline) if is_review else handle_mood_reply(data, deadline)
+                            handle_review(data, deadline) if isinstance(data, ReviewRequest) else handle_single_reply(data, deadline)
                         )
                         # 异步超时无法抢占同步校验和序列化，返回成功前必须再次检查截止时间。
                         if _deadline_reached(deadline):
                             raise TimeoutError
                         return result
                 finally:
-                    active -= 1
+                    gate.release()
         except TimeoutError:
             return error("provider_timeout", request_id)
         except ProviderFailure as failure:

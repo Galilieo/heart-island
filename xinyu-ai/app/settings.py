@@ -24,6 +24,8 @@ class Settings(BaseModel):
     # 单进程生成名额，Task3初值3；与Java执行槽位独立配置，超出直接拒绝。
     max_concurrent_requests: int = Field(default=3, strict=True, ge=1)
 
+    community_max_concurrent_requests: int = Field(default=3, strict=True, ge=1)
+
     @field_validator("internal_token", "model_api_key")
     @classmethod
     def required_secret(cls, value: SecretStr) -> SecretStr:
@@ -63,6 +65,7 @@ class Settings(BaseModel):
                 model_thinking_mode=os.environ["DEEPSEEK_THINKING_MODE"],
                 model_max_tokens=int(os.environ.get("OPENAI_MAX_TOKENS", "4096")),
                 max_concurrent_requests=int(os.environ.get("AI_SERVICE_CONCURRENCY", "3")),
+                community_max_concurrent_requests=int(os.environ.get("AI_COMMUNITY_CONCURRENCY", "3")),
             )
         except (KeyError, ValueError):
             raise ValueError("invalid_ai_service_configuration") from None
