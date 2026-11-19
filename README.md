@@ -125,8 +125,8 @@ uv run --locked uvicorn app.main:app_from_env --factory --host 127.0.0.1 --port 
 | `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` | 数据库连接 |
 | `JWT_SECRET` | 必填，至少 32 字节的随机值；缺失或过短时拒绝启动 |
 | `AI_WORKER_ENABLED` | `true` 才会领取并执行心情／回顾任务；`false` 时记录照常保存，任务停在排队 |
-| `AI_SERVICE_BASE_URL`、`AI_INTERNAL_TOKEN` | worker 开启时必填；令牌与 Python 服务一致 |
-| `DEEPSEEK_API_KEY` | 社区帖子 AI 回应使用 |
+| `AI_SERVICE_BASE_URL`、`AI_INTERNAL_TOKEN` | 所有 Java 实例必填；令牌与 Python 服务一致 |
+| `AI_COMMUNITY_CONCURRENCY` | 社区同步生成独立名额，Java 与 Python 默认各 3 |
 | `REDIS_URL` | 可选；为空时限流使用本机内存计数 |
 
 ```bash

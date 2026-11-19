@@ -130,7 +130,8 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
         assert database.execute('SELECT COUNT(*) FROM ai_job;', name).strip() == '0'
         assert database.execute('SELECT status FROM community_post;', name).strip() == '0'
         assert database.execute('SELECT status FROM community_reply;', name).strip() == '0'
-        report['checks'].append('five_migrations_backfill_and_original_fields_preserved')
+        assert database.execute('SELECT COUNT(ai_result_kind) FROM community_post;', name).strip() == '0'
+        report['checks'].append('migrations_backfill_and_original_fields_preserved')
         # 与初始化路径再次核对，不因带种子数据的 AUTO_INCREMENT 差异误报。
         fresh = database.create('rehearsal_fresh')
         database.initialize(fresh, (ROOT / 'sql/xinyu.sql').read_text())
@@ -182,17 +183,9 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
                                 AI_WORKER_ENABLED='false', AI_WORKER_CONCURRENCY='3',
                                 AI_SERVICE_BASE_URL='http://127.0.0.1:28000',
                                 SERVER_ADDRESS='127.0.0.1', SERVER_PORT='28080',
-                                DEEPSEEK_API_KEY='synthetic-unused-provider-key',
-                                DEEPSEEK_BASEURL='http://127.0.0.1:28100/v1',
                                 OPENAI_BASE_URL='http://127.0.0.1:28100/v1', OPENAI_API_KEY='synthetic-provider-key',
                                 OPENAI_MODEL='synthetic-deploy-model', DEEPSEEK_THINKING_MODE='disabled',
-                                AI_SERVICE_CONCURRENCY='3', OPENAI_MAX_TOKENS='4096')
-        java_binary = str(Path(os.environ['JAVA_HOME']) / 'bin/java')
-        java = start([java_binary, '-jar', str(artifacts / 'xinyu-backend.jar')], build, test_environment, 'java-worker-off')
-        base = 'http://127.0.0.1:28080'
-        wait_ready(base + '/hello', processes)
-        report['checks'].append('redis_then_java_worker_disabled_started')
-
+                                AI_SERVICE_CONCURRENCY='3', AI_COMMUNITY_CONCURRENCY='3', OPENAI_MAX_TOKENS='4096')
         class Supplier(http.server.BaseHTTPRequestHandler):
             def log_message(self, *args):
                 pass
@@ -215,6 +208,12 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
                         '--host','127.0.0.1','--port','28000','--workers','1','--no-access-log'],
                        runtime, test_environment, 'python')
         wait_ready('http://127.0.0.1:28000/health', processes)
+
+        java_binary = str(Path(os.environ['JAVA_HOME']) / 'bin/java')
+        java = start([java_binary, '-jar', str(artifacts / 'xinyu-backend.jar')], build, test_environment, 'java-worker-off')
+        base = 'http://127.0.0.1:28080'
+        wait_ready(base + '/hello', processes)
+        report['checks'].append('redis_then_python_then_java_worker_disabled_started')
 
         class Frontend(http.server.SimpleHTTPRequestHandler):
             # 本机静态/代理替身，仅验证打包产物和路径；真实Nginx在B/D段核验。
@@ -256,12 +255,19 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
         assert expect_api(base,'/mood/ai-job/'+str(pending['jobId']),member)['status'] == 'queued'
         assert not supplier_calls
         api(base,'/community/post/add',{'topicId':1,'moodType':'平静','content':'关闭AI的部署合成帖子','needAiReply':False},member)
+        api(base,'/community/post/add',{'topicId':1,'moodType':'平静','content':'需回复的部署合成帖子','needAiReply':True},member)
+        api(base,'/community/post/add',{'topicId':1,'moodType':'平静','content':'我不想活了','needAiReply':True},member)
+        kinds = database.execute(
+            "SELECT ai_result_kind FROM community_post WHERE ai_result_kind IS NOT NULL ORDER BY id;", name)
+        assert kinds.splitlines() == ['MODEL', 'SUPPORT']
+        assert len(supplier_calls) == 1
+        report['checks'].append('worker_off_community_model_and_support')
         smoke_env = dict(test_environment, SMOKE_BACKEND_URL=base, SMOKE_PYTHON_URL='http://127.0.0.1:28000',
                          SMOKE_FRONTEND_URL='http://127.0.0.1:28081',SMOKE_USER_TOKEN=member,SMOKE_ADMIN_TOKEN=admin)
         smoke = subprocess.run([sys.executable,str(ROOT/'deploy/check/smoke.py')],env=smoke_env,capture_output=True,text=True)
         assert smoke.returncode == 0, 'worker关闭时只读冒烟失败: '+smoke.stderr.strip()
         report['smoke_before_worker'] = json.loads(smoke.stdout)
-        report['checks'].append('worker_off_keeps_queue_and_no_upstream_calls')
+        report['checks'].append('worker_off_keeps_mood_queued')
         stop(java)
         assert all(p.poll() is None for p in processes)
         # 只保留一个由本脚本管理的 Java；旧进程实际退出后才启用新worker。
@@ -277,9 +283,9 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
         assert job['status']=='succeeded', '合成worker任务未成功'
         assert job['replyContent']==REPLY
         assert job['resultKind']=='MODEL'
-        assert len(supplier_calls)==1
+        assert len(supplier_calls)==2
         assert expect_api(base,'/mood/detail/'+str(pending['id']),member)['aiReply']==REPLY
-        assert database.execute('SELECT COUNT(*) FROM ai_reply;',name).strip()=='1'
+        assert database.execute('SELECT COUNT(*) FROM ai_reply;',name).strip()=='2'
         redis_env['REDISCLI_AUTH']=redis_password
         keys = subprocess.run(['redis-cli','-p','28379','--scan','--pattern','xinyu:test:deploy:*'],
                               env=redis_env,capture_output=True,text=True)

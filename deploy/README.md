@@ -2,6 +2,16 @@
 
 对应任务书 `AI_WORKLOG/plans/2026-11-17-deploy-plan.md`。这里只提供模板与逐步核查，不是自动部署脚本。A 段交付后停靠点 1；用户确认后才进入 B 段。服务器与云数据库的写操作按停靠点在聊天中明确确认：文件准备、核查及不启停服务的单元加载可在用户允许后连续完成；停写、数据库写入、启动/切换服务、生产凭据变更、提交及 push 等关键动作仍在对应停靠点单独确认，不合并成一次笼统授权。
 
+## 社区同步回复迁移的发布顺序
+
+本次增量发布按 **迁移 → Python → Java 与前端同批**。
+
+1. 备份并确认 `community_post.ai_result_kind` 不存在。按 [迁移核查单](MIGRATIONS.md) 的第 6 项验证迁移前后行数和原回复计数。
+2. 切换 Python 包，确认 `/health` 返回 200，新版本已注册社区内部端点。沿用 Java 与 Python 共享的内部令牌，两端按模板设定社区名额。
+3. 同批切换 Java 和前端，所有 Java 实例都需配置内部地址和令牌。核对 Java 健康、公开帖子里的 `resultKind` 和管理端筛选，并确认旧 Java 退出后再启用唯一 worker。Python 未就绪时暂停 Java 切换。
+
+下文保留 2026-11-17 首次完整上线的背景与流程，其中 Java 先于 Python 的顺序对应当时的心情模板切换。
+
 ## 上线原因 / 风险
 
 本次把旧同步版本升级为单实例异步心情回复、Python 服务、回顾/周报、Redis 限流、社区举报和昵称选填，前后端必须同批。
@@ -10,19 +20,19 @@
 
 ## 文件、环境与发布顺序
 
-- `env/*.env.example` 是占位模板，不能原样启动；Java环境逐项对照 `application.yml`、`AiServiceClientConfig`、`AiJobRuntimeConfig`、`RestTemplateConfig`、`JwtUtil`；Python对照 `app/settings.py`。不使用旧说明中不存在的 JWT 配置项。
+- `env/*.env.example` 是占位模板，不能原样启动；Java环境逐项对照 `application.yml`、`AiServiceClientConfig`、`AiJobRuntimeConfig`、`JwtUtil`；Python对照 `app/settings.py`。不使用旧说明中不存在的 JWT 配置项。
 - Java17；Python3.12与 `uv.lock`；前端构建Node `^20.19.0 || >=22.12.0`。Python生产包只含 `app/`、`pyproject.toml`、`uv.lock`，不部署测试控制端点；提示词已在app模块内，不依赖测评目录。
 - Java只监听回环8080、Python只监听回环8000且1个uvicorn worker；Redis只监听回环6379。所有真实路径和运行用户由B段现场确定，模板中的`<...>`不代表实际部署值。
 - Redis64MiB为准备值，B段按余量确认；关闭RDB/AOF、allkeys-lru、密码认证。只保存短期计数，重启丢计数是已接受代价。额度保持20次心情/小时、100次/日、10次社区/小时、10次回顾/日、全站1000次/小时。
 - 环境变量宽松绑定必须使用模板的 `XINYU_RATELIMIT_*`（如`XINYU_RATELIMIT_KEYPREFIX`），连字符不转换成额外层级；不能照抄旧说明的`XINYU_RATE_LIMIT_...`写法。本机预演通过Redis键前缀验证。
 
-唯一顺序：**停写前完成运行时、依赖、Redis和发布材料准备（旧应用继续运行）** → 到用户确定的时间停止旧应用 → 备份与恢复验证 → 逐份迁移（结构已在生产完成的跳过）→ 新Java（worker关）→ Python → 前端/Nginx → 基础冒烟 → 确认唯一Java后开启worker → 完整冒烟 → 恢复服务 → 观察30分钟。Java先接受v2模板，Python才能开始返回v2；前后端同批。
+2026-11-17 首次完整上线顺序：**停写前完成运行时、依赖、Redis和发布材料准备（旧应用继续运行）** → 到用户确定的时间停止旧应用 → 备份与恢复验证 → 逐份迁移（结构已在生产完成的跳过）→ 新Java（worker关）→ Python → 前端/Nginx → 基础冒烟 → 确认唯一Java后开启worker → 完整冒烟 → 恢复服务 → 观察30分钟。Java先接受v2模板，Python才能开始返回v2；前后端同批。
 
 ## A：本地准备与预演
 
 在任务专属临时构建副本执行，保留用户和测评执行者文件/产物；不能在工作区运行会`--fix`的lint。先`lsof`确认28080/28000/28100/28081/28379空闲，不使用8080/5173/8000和测评18000/18080/18081/18100。仅使用终端已有的`AI_TEST_JDBC_URL`（回环、`xinyu_test_`前缀）、`AI_TEST_DB_USER`、`AI_TEST_DB_PASSWORD`，脚本不会打印它们。
 
-1. `python3 -B deploy/check/local_schema.py --output deploy/check/schema-after.json`：新库与`2036e7a`旧库+5份迁移对比，重复初始化后再次比对；成功为12表无结构差异，finally清理自己创建的库。失败先检查错误码，不改业务库或增量文件。
+1. `python3 -B deploy/check/local_schema.py --output deploy/check/schema-after.json`：新库与`2036e7a` 旧库依次应用现有迁移后对比，重复初始化后再次比对；成功为12表无结构差异，finally清理自己创建的库。失败先检查错误码，不改业务库或增量文件。
 2. 在临时源码副本分别运行 `mvn test`、`mvn -DskipTests package`（Java17），Python `python -m pytest -q`、前端 `node --test tests/*.test.js`，`VITE_API_BASE_URL=/api npm run build`。测试使用`src/test/resources/application.properties`合成JWT配置，绝不将该资源打入生产jar。
 3. 若本机Mockito自挂载不可用，可在**测试命令**的`argLine`提供已解析的Mockito测试agent，不改生产配置。启用回环HTTP/隔离MySQL所需的本机测试权限，不修改测试预期来掩盖环境失败。
 4. `JAVA_HOME`指向本机JDK17后，执行`python3 -B deploy/check/rehearse.py --build-root "$LOCAL_BUILD_ROOT" --output deploy/check/rehearsal.json`。`LOCAL_BUILD_ROOT`必须位于`/private/tmp`且已含打包结果、Python环境与前端dist。预演创建合成旧库、备份恢复验证、逐份迁移、启动Redis/Java/Python/前端静态代理替身、跑只读冒烟，确认worker关闭不领取，再停止旧Java、启动唯一worker走通一次合成生成并核对持久化。失败自动停止自身进程并清理自身测试库，日志只在临时构建目录中。
@@ -86,7 +96,9 @@ MySQL8.0客户端不支持8.4的`--no-login-paths`。服务器mysql/mysqldump使
 
 推送以明确确认的发布提交为源，不推当前HEAD上尚未确认的提交；推送前核对远端当前提交并重算发布包大小/SHA-256，推送后只读核对远端。
 
-## D：逐步部署（每一项独立确认）
+## D：首次完整上线部署步骤（2026-11-17）
+
+本节记录首次完整上线顺序。社区增量发布使用文首的 Python 先行步骤。
 
 上传、安装依赖、创建目录、写配置、启动/重启/启用服务、修改软链接或Nginx都属于服务器写操作；先给具体动作/目标/校验/失败处理，再请求相应授权。只执行用户同意的那一步。
 

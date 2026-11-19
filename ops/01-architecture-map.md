@@ -20,7 +20,7 @@ AI 相关的三条路径：
   前端 ai-job-polling.js 轮询 /mood/ai-job/{id}
 
 社区帖子回应：
-  发帖／编辑请求内同步调用模型（AiReplyService 直连供应商，不经 Python），生成代次保护防止旧结果回写
+  发帖／编辑先保存，再经 Python 同步生成。社区独立 3 个名额，危机命中走固定回应，代次保护防止旧结果回写
 
 付费调用额度：
   RateLimiter（Redis 时间窗口；不可用时 FallbackRateLimiter 降级为本机计数）在准入事务外预检
