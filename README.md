@@ -197,7 +197,7 @@ GitHub Actions 分两层：每次 push／PR 运行三端快速检查；推送到
 | 查测评口径与结果 | [测评计划](ops/features/xinyu-evaluation-plan.md) |
 | 部署上线 | [上线运行手册](deploy/README.md)、[迁移核查单](deploy/MIGRATIONS.md) |
 | 查 Agent 工作规则 | [AGENTS.md](AGENTS.md) 与 `ops/` |
-| 查项目资料与历史方案 | [docs/README.md](docs/README.md)、[历史归档](docs/history/README.md) |
+| 查项目资料与历史方案 | [docs/README.md](docs/README.md)；1a 前的旧文档已删除，可在标签 `docs-history-2026-11-19` 中查看 |
 
 `AI_WORKLOG/` 为本地工作记录，大部分未纳入 Git。
 

@@ -8,6 +8,6 @@
 | 阶段路线与边界 | [升级总方案](../ops/features/xinyu-upgrade-master-plan.md) |
 | 部署上线 | [部署与运行说明](project/部署与运行说明.md) |
 | 执行记录 | 本地 `AI_WORKLOG/`，多数文件不随克隆提供；已结束阶段见其中的 `archive/README.md` |
-| 查旧设计与交付说明 | [历史归档](history/README.md) |
+| 查旧设计与交付说明 | 已删除，可在标签 `docs-history-2026-11-19` 的 `docs/history/` 中查看 |
 
-`project/` 保持简短入口；旧设计与已结束阶段放到 `history/`，不另维护重复的进度或路线。
+`project/` 保持简短入口，不另维护重复的进度或路线；已结束阶段的执行记录放在本地 `AI_WORKLOG/archive/`。

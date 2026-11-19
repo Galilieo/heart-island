@@ -13,4 +13,4 @@
 | 部署上线 | [部署与运行说明](部署与运行说明.md) |
 | 当前进度与下一步 | [接续状态](../../ops/features/xinyu-next-session.md) |
 
-1a 升级前的 01～11 交付文档（同步 AI 版本）已移到[历史目录](../history/project-before-1a/README.md)，仅作演变参考；现行行为以上表资料和源码为准。
+1a 升级前的 01～11 交付文档（同步 AI 版本）已于 2026-11-19 删除，需要追溯时用 `git show docs-history-2026-11-19:docs/history/README.md` 查看。现行行为以上表资料和源码为准；新一套交付文档在当前阶段完成后按版本快照重建。

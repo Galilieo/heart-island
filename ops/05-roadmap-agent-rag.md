@@ -5,4 +5,4 @@
 - 继续开发：[接续状态](features/xinyu-next-session.md)。
 - 当前契约：[1a AI 回应](features/ai-reply-service-v1a.md)、[阶段2回顾](features/mood-review.md)、[举报与分页](features/community-report.md)、[Redis 限流](features/redis-rate-limit.md)；测评口径见[测评计划](features/xinyu-evaluation-plan.md)。
 - 执行清单：[1a 实施计划](../AI_WORKLOG/plans/2026-11-07-ai-reply-1a-plan.md)（本地文件）；已结束阶段记录见[归档索引](../AI_WORKLOG/archive/README.md)（本地文件）。
-- 查历史：[旧路线与早期功能草稿](../docs/history/README.md)。旧编号不用于当前实施。
+- 查历史：旧路线与早期功能草稿已删除，可在标签 `docs-history-2026-11-19` 的 `docs/history/` 中查看。旧编号不用于当前实施。

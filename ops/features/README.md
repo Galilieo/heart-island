@@ -21,7 +21,7 @@
 
 ## 需要时再查
 
-- [阶段归档](../../AI_WORKLOG/archive/README.md)：已结束阶段接续与执行证据；[历史方案](../../docs/history/README.md)：早期草稿与旧路线。均只在追溯时读取，不直接执行。
+- [阶段归档](../../AI_WORKLOG/archive/README.md)：已结束阶段接续与执行证据；早期草稿与旧路线已删除，可在标签 `docs-history-2026-11-19` 的 `docs/history/` 中查看。均只在追溯时读取，不直接执行。
 - [参考方案与品牌素材](references/README.md)：用户提供的方案及当前唯一的小芽素材版本；待评估，未因归档自动进入实施。
 - [新功能模板](feature-template.md)：只有开始一个需要独立契约的新功能时才使用，不按聊天轮次重复建方案。
 
