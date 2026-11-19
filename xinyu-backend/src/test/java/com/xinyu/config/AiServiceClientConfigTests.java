@@ -10,8 +10,10 @@ class AiServiceClientConfigTests {
     private final ApplicationContextRunner runner = new ApplicationContextRunner().withUserConfiguration(AiServiceClientConfig.class);
 
     @Test
-    void disabledDoesNotRequireCredentialsOrCreateClient() {
-        runner.run(context -> assertThat(context).hasNotFailed().doesNotHaveBean(AiServiceClient.class));
+    void disabledDoesNotCreateWorkerClientWithValidSharedCredentials() {
+        runner.withPropertyValues("AI_SERVICE_BASE_URL=http://127.0.0.1:1",
+                        "AI_INTERNAL_TOKEN=fixture-worker-disabled")
+                .run(context -> assertThat(context).hasNotFailed().doesNotHaveBean(AiServiceClient.class));
     }
 
     @Test

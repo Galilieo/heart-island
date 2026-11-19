@@ -14,6 +14,7 @@ EXPLAIN ANALYZE 单独对手工代入参数的代表 SQL 执行，保存原始�
 import argparse
 import json
 import os
+from pathlib import Path
 import re
 import socket
 import subprocess
@@ -102,7 +103,13 @@ def setup_tier(tier, *, run_id=None, service="java_new"):
     db = f"xinyu_test_eval_b5_{tier['tag']}"
     if run_id is not None:
         db = f"xinyu_test_eval_b5_paging_{tier['tag']}_{run_id}"
-    lib.create_database(db, lib.new_schema_parts(), replace_existing=run_id is None)
+    # B5 启动当前工作区构建的 Java，社区查询需要基线之后新增的回复类型列。
+    migration = "sql/migrations/20261119_01_community_ai_result_kind.sql"
+    schema = lib.new_schema_parts()
+    if all(name != migration for name, _ in schema):
+        path = Path(lib.REPO_ROOT) / migration
+        schema.append((migration, path.read_text(encoding="utf-8")))
+    lib.create_database(db, schema, replace_existing=run_id is None)
     # 先把 Java 指向本档库再注册用户（否则注册会写进上一段的库）
     S.stop(service, wait_s=4 if run_id is not None else 40)
     time.sleep(2)
@@ -180,9 +187,6 @@ def run_community_paging():
     run_id = str(time.time_ns())
     service = f"java_b5_paging_{run_id}"
     os.environ.update({
-        "AI_WORKER_ENABLED": "false",
-        "AI_SERVICE_BASE_URL": "http://127.0.0.1:18000",
-        "DEEPSEEK_API_KEY": "",
         "SERVER_ADDRESS": "127.0.0.1",
     })
     summary = {}

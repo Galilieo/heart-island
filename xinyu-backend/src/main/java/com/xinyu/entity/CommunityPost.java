@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xinyu.common.CommunityReportConstants;
 
 import java.time.LocalDateTime;
@@ -26,6 +27,8 @@ public class CommunityPost {
     private String content;
 
     private String aiReply;
+
+    private String aiResultKind;
 
     /** 当前保存发起的AI生成标识；NULL表示无有效生成，仅服务端用于条件回写。 */
     @JsonIgnore
@@ -87,6 +90,15 @@ public class CommunityPost {
 
     public String getAiReply() {
         return aiReply;
+    }
+
+    @JsonProperty("resultKind")
+    public String getAiResultKind() {
+        return aiResultKind;
+    }
+
+    public void setAiResultKind(String aiResultKind) {
+        this.aiResultKind = aiResultKind;
     }
 
     public String getAiGenerationId() {

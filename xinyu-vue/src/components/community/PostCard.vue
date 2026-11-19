@@ -10,7 +10,7 @@ import MoodTag from '../mood/MoodTag.vue'
 import XiaoyaNote from '../ui/XiaoyaNote.vue'
 import Xiaoya from '../ui/Xiaoya.vue'
 import MoreMenu from './MoreMenu.vue'
-import { formatTime } from '../../utils/mood'
+import { formatTime, isSupportReply } from '../../utils/mood'
 import { reasonLabel } from '../../utils/communityReport'
 
 const props = defineProps({
@@ -36,6 +36,7 @@ const authorName = computed(() => {
 })
 
 const isOwner = computed(() => Boolean(props.post.mine))
+const supportReply = computed(() => isSupportReply(props.post))
 
 // 有数量时统一写「抱抱 N」，无数量按是否已抱抱区分
 const likeLabel = computed(() => {
@@ -53,7 +54,7 @@ const likeLabel = computed(() => {
     @click="variant === 'card' ? $emit('open', post.id) : null"
   >
     <div v-if="variant === 'detail' && post.hidden" class="pc__hidden-banner" role="status">
-      <Xiaoya expression="thinking" :size="40" />
+      <Xiaoya v-if="!supportReply" expression="thinking" :size="40" />
       <div class="pc__hidden-copy">
         <strong>这条内容因违反社区规范已被隐藏，仅你自己可见。</strong>
         <p>
@@ -65,7 +66,7 @@ const likeLabel = computed(() => {
     </div>
 
     <header class="pc__meta">
-      <MoodTag :mood-type="post.moodType" size="sm" />
+      <MoodTag :mood-type="post.moodType" :hide-mascot="supportReply" size="sm" />
       <span class="pc__meta-item">{{ authorName }}</span>
       <span class="pc__meta-sep" aria-hidden="true">·</span>
       <span class="pc__meta-item">{{ topicName }}</span>
@@ -80,7 +81,12 @@ const likeLabel = computed(() => {
 
     <p class="pc__content" :class="variant === 'card' ? 'clamp-3' : ''">{{ post.content }}</p>
 
-    <XiaoyaNote v-if="variant === 'card' && post.aiReply" :text="post.aiReply" :clamp="2" />
+    <XiaoyaNote
+      v-if="variant === 'card' && post.aiReply"
+      :text="post.aiReply"
+      :support="supportReply"
+      :clamp="2"
+    />
 
     <footer class="pc__actions" @click.stop>
       <button

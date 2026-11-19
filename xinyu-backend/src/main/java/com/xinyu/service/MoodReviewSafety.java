@@ -16,4 +16,9 @@ public final class MoodReviewSafety {
     public static boolean matches(String content) {
         return RISK.matcher(content).find() || COLLOQUIAL.matcher(content).find();
     }
+
+    /** 判断内部服务是否返回原样的 SUPPORT 文案。 */
+    public static boolean isSupportReply(String resultKind, String content) {
+        return "SUPPORT".equals(resultKind) && SUPPORT_TEXT.equals(content);
+    }
 }

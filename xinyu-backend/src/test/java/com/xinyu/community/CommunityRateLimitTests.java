@@ -1,6 +1,7 @@
 package com.xinyu.community;
 
 import com.xinyu.common.CommunityReportConstants;
+import com.xinyu.dto.CommunityAiResponse;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
@@ -10,7 +11,9 @@ import com.xinyu.mapper.TopicMapper;
 import com.xinyu.ratelimit.RateLimiter;
 import com.xinyu.ratelimit.RateLimitScope;
 import com.xinyu.service.AiReplyLogService;
-import com.xinyu.service.AiReplyService;
+import com.xinyu.service.AiServiceException;
+import com.xinyu.service.MoodReviewSafety;
+import com.xinyu.service.CommunityAiClient;
 import com.xinyu.service.CommunityPostService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +38,7 @@ class CommunityRateLimitTests {
     private TopicMapper topicMapper;
 
     @Mock
-    private AiReplyService aiReplyService;
+    private CommunityAiClient communityAiClient;
 
     @Mock
     private AiReplyLogService aiReplyLogService;
@@ -66,7 +69,7 @@ class CommunityRateLimitTests {
         assertThat(result.saved()).isTrue();
         assertThat(result.aiReplyLimited()).isTrue();
         // 不发起同步生成，也不把限流当成生成失败写日志。
-        verifyNoInteractions(aiReplyService);
+        verifyNoInteractions(communityAiClient);
         verifyNoInteractions(aiReplyLogService);
         verify(communityPostMapper, never()).update(any(), any());
     }
@@ -94,7 +97,7 @@ class CommunityRateLimitTests {
 
         assertThat(result.saved()).isTrue();
         assertThat(result.aiReplyLimited()).isTrue();
-        verifyNoInteractions(aiReplyService);
+        verifyNoInteractions(communityAiClient);
         verifyNoInteractions(aiReplyLogService);
     }
 
@@ -110,7 +113,7 @@ class CommunityRateLimitTests {
         assertThat(result.saved()).isTrue();
         assertThat(result.aiReplyLimited()).isFalse();
         verifyNoInteractions(rateLimiter);
-        verifyNoInteractions(aiReplyService);
+        verifyNoInteractions(communityAiClient);
     }
 
     @Test
@@ -118,15 +121,34 @@ class CommunityRateLimitTests {
         when(topicMapper.selectById(1L)).thenReturn(activeTopic());
         when(communityPostMapper.insert(any(CommunityPost.class))).thenReturn(1);
         when(rateLimiter.check(any(), anyLong())).thenReturn(RateLimiter.Decision.allow());
-        com.xinyu.dto.AiReplyResult reply = new com.xinyu.dto.AiReplyResult();
-        reply.setSuccess(Boolean.FALSE);
-        when(aiReplyService.generateReplyForPost(anyString(), anyString(), anyString())).thenReturn(reply);
+        when(communityAiClient.generateReplyForPost(anyString(), anyString(), anyString()))
+                .thenThrow(new AiServiceException("provider_error"));
 
         CommunityPostService.PostSaveResult result = postService.add(add(), 1L);
 
         assertThat(result.saved()).isTrue();
         assertThat(result.aiReplyLimited()).isFalse();
-        verify(aiReplyService).generateReplyForPost(anyString(), anyString(), anyString());
+        verify(communityAiClient).generateReplyForPost(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void 危机帖保存后直接发起生成且不扣额度() {
+        when(topicMapper.selectById(1L)).thenReturn(activeTopic());
+        when(communityPostMapper.insert(any(CommunityPost.class))).thenReturn(1);
+        lenient().when(rateLimiter.check(any(), anyLong()))
+                .thenReturn(RateLimiter.Decision.deny(RateLimitScope.COMMUNITY_HOUR, 900));
+        CommunityPostAddDTO dto = add();
+        dto.setContent("我不想活了");
+        when(communityAiClient.generateReplyForPost(anyString(), anyString(), anyString()))
+                .thenReturn(new CommunityAiResponse("synthetic", MoodReviewSafety.SUPPORT_TEXT,
+                        "SUPPORT", false, "community-reply-v1", null));
+
+        CommunityPostService.PostSaveResult result = postService.add(dto, 1L);
+
+        assertThat(result.saved()).isTrue();
+        assertThat(result.aiReplyLimited()).isFalse();
+        verifyNoInteractions(rateLimiter, aiReplyLogService);
+        verify(communityAiClient).generateReplyForPost(anyString(), anyString(), anyString());
     }
 
     private static Topic activeTopic() {

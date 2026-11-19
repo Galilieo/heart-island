@@ -34,6 +34,7 @@ public class AdminPostController {
                                           @RequestParam(required = false) Long postId,
                                           @RequestParam(required = false) Long userId,
                                           @RequestParam(required = false) String keyword,
+                                          @RequestParam(required = false) String resultKind,
                                           @RequestParam(required = false) Long pageNum,
                                           @RequestParam(required = false) Long pageSize) {
         Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
@@ -58,12 +59,17 @@ public class AdminPostController {
             return Result.error("每页条数不能小于1");
         }
 
+        if (resultKind != null && !"MODEL".equals(resultKind) && !"SUPPORT".equals(resultKind)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "回复类型不合法");
+        }
+
         Page<AdminPostVO> page = communityPostService.pageAdminPosts(
                 status,
                 topicId,
                 postId,
                 userId,
                 keyword,
+                resultKind,
                 pageNum,
                 pageSize
         );

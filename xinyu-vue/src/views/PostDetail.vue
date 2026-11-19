@@ -23,6 +23,7 @@ import { useCommunityStore } from '../stores/community'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
+import { isSupportReply } from '../utils/mood'
 
 const route = useRoute()
 const router = useRouter()
@@ -217,10 +218,11 @@ onMounted(async () => {
           @report="openReport('POST', $event)"
         />
 
-        <!-- AI 批注统一用小芽「页边手写」样式；提示语来自原 PostAiReply，不能丢 -->
         <div v-if="currentPost.aiReply" class="detail__note">
-          <XiaoyaNote :text="currentPost.aiReply" />
-          <p class="detail__note-hint">这条回复由 AI 自动生成，不代表平台立场</p>
+          <XiaoyaNote :text="currentPost.aiReply" :support="isSupportReply(currentPost)" />
+          <p v-if="!isSupportReply(currentPost)" class="detail__note-hint">
+            这条回复由 AI 自动生成，不代表平台立场
+          </p>
         </div>
 
         <p v-if="currentPost.hidden" class="detail__hidden-reply-tip">

@@ -36,7 +36,7 @@ public class AiReplyLogService {
         log.setStatus(success ? 1 : 0);
         log.setReplyContent(success ? result.getReplyContent() : null);
         log.setErrorMessage(success ? null : result.getErrorMessage());
-        // 不新增prompt副本；失败无兜底正文，错误详情由调用端遮蔽凭据后传入。
+        // 不新增 prompt 副本；新生成失败只记录调用方传入的错误分类。
         aiReplyMapper.insert(log);
     }
 

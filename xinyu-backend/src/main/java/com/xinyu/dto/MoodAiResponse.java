@@ -24,10 +24,10 @@ public record MoodAiResponse(
     /** 校验关联字段和结果语义，返回清理首尾白字符后的正文。 */
     public String validatedReply(long expectedJobId, int expectedAttempt, String expectedRequestId, long expectedVersion) {
         if (expectedJobId <= 0 || expectedVersion <= 0 || expectedAttempt < 1) {
-            throw invalid();
+            throw ReplyResultValidation.invalid();
         }
         if (expectedRequestId == null || expectedRequestId.isBlank()) {
-            throw invalid();
+            throw ReplyResultValidation.invalid();
         }
 
         if (!Long.toString(expectedJobId).equals(jobId)
@@ -35,49 +35,8 @@ public record MoodAiResponse(
                 || !Objects.equals(expectedRequestId, requestId)
                 || !Long.toString(expectedVersion).equals(sourceVersion)
                 || !ACCEPTED_TEMPLATE_VERSIONS.contains(templateVersion)) {
-            throw invalid();
+            throw ReplyResultValidation.invalid();
         }
-        String text = stripUnicode(replyContent);
-        if (text == null || text.isEmpty() || text.length() > 2000) throw invalid();
-        requireValidUnicode(text);
-        if ("MODEL".equals(resultKind)) {
-            String name = stripUnicode(modelName);
-            if (!Boolean.TRUE.equals(modelCalled) || name == null || name.isEmpty()
-                    || modelName.length() > 128) throw invalid();
-            requireValidUnicode(modelName);
-        } else if ("SUPPORT".equals(resultKind)) {
-            if (!Boolean.FALSE.equals(modelCalled) || modelName != null) throw invalid();
-        } else {
-            throw invalid();
-        }
-        return text;
-    }
-
-    /** 与 Python str.strip 的 Unicode 白字符口径保持一致。 */
-    private static String stripUnicode(String value) {
-        if (value == null) return null;
-        int start = 0, end = value.length();
-        while (start < end && isWhitespace(value.charAt(start))) start++;
-        while (end > start && isWhitespace(value.charAt(end - 1))) end--;
-        return value.substring(start, end);
-    }
-
-    private static boolean isWhitespace(char unit) {
-        return Character.isWhitespace(unit) || Character.isSpaceChar(unit) || unit == 0x85;
-    }
-
-    private static void requireValidUnicode(String text) {
-        for (int i = 0; i < text.length(); i++) {
-            char unit = text.charAt(i);
-            if (Character.isHighSurrogate(unit)) {
-                if (++i >= text.length() || !Character.isLowSurrogate(text.charAt(i))) throw invalid();
-            } else if (Character.isLowSurrogate(unit)) {
-                throw invalid();
-            }
-        }
-    }
-
-    private static IllegalArgumentException invalid() {
-        return new IllegalArgumentException("invalid_model_response");
+        return ReplyResultValidation.validatedReply(replyContent, resultKind, modelCalled, modelName);
     }
 }

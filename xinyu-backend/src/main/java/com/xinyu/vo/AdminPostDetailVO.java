@@ -13,6 +13,7 @@ public class AdminPostDetailVO {
     private Long topicId;
     private String topicName;
     private String moodType;
+    private String resultKind;
     private String content;
     private String aiReply;
     private String anonymousName;
@@ -151,5 +152,13 @@ public class AdminPostDetailVO {
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getResultKind() {
+        return resultKind;
+    }
+
+    public void setResultKind(String resultKind) {
+        this.resultKind = resultKind;
     }
 }

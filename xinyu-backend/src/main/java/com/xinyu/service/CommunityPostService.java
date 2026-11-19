@@ -3,6 +3,7 @@ package com.xinyu.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.xinyu.common.CommunityReportConstants;
+import com.xinyu.dto.CommunityAiResponse;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
@@ -63,7 +64,7 @@ public class CommunityPostService {
     private TopicMapper topicMapper;
 
     @Autowired
-    private AiReplyService aiReplyService;
+    private CommunityAiClient communityAiClient;
 
     @Autowired
     private AiReplyLogService aiReplyLogService;
@@ -100,7 +101,10 @@ public class CommunityPostService {
         return posts;
     }
 
-    public Page<AdminPostVO> pageAdminPosts(Integer status, Long topicId, Long postId, Long userId, String keyword, Long pageNum, Long pageSize){
+    /** 查询后台帖子分页，可按发布状态、归属、正文和回复类型收窄结果。 */
+    public Page<AdminPostVO> pageAdminPosts(
+            Integer status, Long topicId, Long postId, Long userId,
+            String keyword, String resultKind, Long pageNum, Long pageSize) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
 
         if(status != null){
@@ -123,6 +127,7 @@ public class CommunityPostService {
             queryWrapper.like("content", keyword.trim());
         }
 
+        queryWrapper.eq(resultKind != null, "ai_result_kind", resultKind);
         queryWrapper.orderByDesc("create_time");
 
         Page<CommunityPost> postPage = communityPostMapper.selectPage(
@@ -148,6 +153,7 @@ public class CommunityPostService {
                         post.getLikeCount(),
                         post.getStatus(),
                         post.getHideReason(),
+                        post.getAiResultKind(),
                         post.getCreateTime(),
                         post.getUpdateTime()
                 ))
@@ -175,6 +181,7 @@ public class CommunityPostService {
         detail.setMoodType(post.getMoodType());
         detail.setContent(post.getContent());
         detail.setAiReply(post.getAiReply());
+        detail.setResultKind(post.getAiResultKind());
         detail.setAnonymousName(post.getAnonymousName());
         detail.setReplyCount(post.getReplyCount());
         detail.setLikeCount(post.getLikeCount());
@@ -302,7 +309,7 @@ public class CommunityPostService {
 
         // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
         // 用户选择不要 AI 回复时跳过生成（也不写调用日志）。
-        boolean quotaAllowed = needAiReply && reserveAiReplyQuota(userId);
+        boolean quotaAllowed = needAiReply && reserveAiReplyQuota(post.getContent(), userId);
 
         // 额度不足时帖子照常保存、不发起生成（契约 2.4）：ai_reply 保持 NULL，
         // 不写失败兜底文案，也不记成生成失败。
@@ -357,6 +364,7 @@ public class CommunityPostService {
         post.setMoodType(dto.getMoodType().trim());
         post.setContent(dto.getContent().trim());
         post.setAiReply(null);
+        post.setAiResultKind(null);
         boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
         post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
 
@@ -369,6 +377,7 @@ public class CommunityPostService {
         edit.set("mood_type", post.getMoodType());
         edit.set("content", post.getContent());
         edit.set("ai_reply", null);
+        edit.set("ai_result_kind", null);
         edit.set("ai_generation_id", post.getAiGenerationId());
         int rows = communityPostMapper.update(null, edit);
         if (rows <= 0) {
@@ -381,7 +390,7 @@ public class CommunityPostService {
         }
 
         // 内容已落库，AI 回复同步重新生成；额度不足时不发起、旧回复已被编辑清掉。
-        boolean quotaAllowed = reserveAiReplyQuota(userId);
+        boolean quotaAllowed = reserveAiReplyQuota(post.getContent(), userId);
         if (quotaAllowed) {
             attachAiReply(post);
         }
@@ -389,9 +398,9 @@ public class CommunityPostService {
         return PostSaveResult.saved(!quotaAllowed);
     }
 
-    /** 社区同步生成的额度预扣；社区调用直连供应商、无危机分流，每次生成都消耗额度（契约 2.1）。 */
-    private boolean reserveAiReplyQuota(Long userId) {
-        return rateLimiter.check(RateLimitType.COMMUNITY_POST, userId).allowed();
+    /** Java 只预检危机额度豁免，最终生成分流由 Python 判定。 */
+    private boolean reserveAiReplyQuota(String content, Long userId) {
+        return MoodReviewSafety.matches(content) || rateLimiter.check(RateLimitType.COMMUNITY_POST, userId).allowed();
     }
 
     @Transactional
@@ -564,29 +573,45 @@ public class CommunityPostService {
      * 回复回写／日志失败不改变已保存帖子的结果；调用日志记录生成结果，不代表回复已发布。
      */
     private void attachAiReply(CommunityPost post) {
-        String topicName = null;
         Topic topic = topicMapper.selectById(post.getTopicId());
-        if (topic != null) {
-            topicName = topic.getName();
+        String topicName = topic == null ? "" : topic.getName();
+
+        CommunityAiResponse result;
+        try {
+            result = communityAiClient.generateReplyForPost(topicName, post.getMoodType(), post.getContent());
+        } catch (AiServiceException failure) {
+            saveAiReplyLog(post, AiReplyResult.failure(null, null, null, failure.code()));
+            return;
         }
 
-        AiReplyResult result = aiReplyService.generateReplyForPost(
-                topicName, post.getMoodType(), post.getContent());
+        publishAiReply(post, result);
+        if (Boolean.FALSE.equals(result.modelCalled())) {
+            logger.info("社区AI回复 postId={} kind=SUPPORT", post.getId());
+            return;
+        }
+        saveAiReplyLog(post, AiReplyResult.success(result.replyContent(), null, result.modelName()));
+    }
 
-        if (Boolean.TRUE.equals(result.getSuccess())) {
-            UpdateWrapper<CommunityPost> reply = new UpdateWrapper<>();
-            reply.eq("id", post.getId()).eq("user_id", post.getUserId()).eq("status", CommunityReportConstants.STATUS_VISIBLE);
-            reply.eq("ai_generation_id", post.getAiGenerationId());
-            reply.set("ai_reply", result.getReplyContent());
-            try {
-                if (communityPostMapper.update(null, reply) > 0) {
-                    post.setAiReply(result.getReplyContent());
-                }
-            } catch (DataAccessException problem) {
-                logger.warn("社区AI回复回写失败 postId={} code=internal_error", post.getId());
+    private void publishAiReply(CommunityPost post, CommunityAiResponse result) {
+        UpdateWrapper<CommunityPost> reply = new UpdateWrapper<>();
+        reply.eq("id", post.getId())
+                .eq("user_id", post.getUserId())
+                .eq("status", CommunityReportConstants.STATUS_VISIBLE)
+                .eq("ai_generation_id", post.getAiGenerationId());
+        reply.set("ai_reply", result.replyContent());
+        reply.set("ai_result_kind", result.resultKind());
+
+        try {
+            if (communityPostMapper.update(null, reply) > 0) {
+                post.setAiReply(result.replyContent());
+                post.setAiResultKind(result.resultKind());
             }
+        } catch (DataAccessException problem) {
+            logger.warn("社区AI回复回写失败 postId={} code=internal_error", post.getId());
         }
+    }
 
+    private void saveAiReplyLog(CommunityPost post, AiReplyResult result) {
         try {
             aiReplyLogService.savePostReply(post.getUserId(), post.getId(), result);
         } catch (DataAccessException problem) {

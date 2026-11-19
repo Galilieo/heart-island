@@ -137,15 +137,12 @@ def java_env(database, port, worker=True, rate_limits=None, redis_url=""):
         "DB_USERNAME": lib.TEST_ENV["AI_TEST_DB_USER"],
         "DB_PASSWORD": lib.TEST_ENV["AI_TEST_DB_PASSWORD"],
         "REDIS_URL": redis_url,
+        "AI_WORKER_ENABLED": "true" if worker else "false",
+        "AI_SERVICE_BASE_URL": f"http://127.0.0.1:{PY_PORT}",
+        "AI_INTERNAL_TOKEN": AI_TOKEN,
         # 仅本机测评用的一次性签名密钥（≥32 字节），不入库不入仓。
         "JWT_SECRET": "eval-only-jwt-secret-0123456789abcdef",
     })
-    if worker:
-        env.update({
-            "AI_WORKER_ENABLED": "true",
-            "AI_SERVICE_BASE_URL": f"http://127.0.0.1:{PY_PORT}",
-            "AI_INTERNAL_TOKEN": AI_TOKEN,
-        })
     if rate_limits:
         for key, value in rate_limits.items():
             env[f"XINYU_RATE_LIMIT_{key.upper()}"] = str(value)

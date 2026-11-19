@@ -95,7 +95,8 @@ class CommunityReportPersistenceIT {
                 new ClassPathResource("ai/schema.sql"),
                 new ClassPathResource("ai/community-schema.sql"),
                 new FileSystemResource(Path.of("../sql/migrations/20261111_01_community_ai_generation.sql").toAbsolutePath()),
-                new FileSystemResource(Path.of("../sql/migrations/20261114_01_community_report.sql").toAbsolutePath())
+                new FileSystemResource(Path.of("../sql/migrations/20261114_01_community_report.sql").toAbsolutePath()),
+                new FileSystemResource(Path.of("../sql/migrations/20261119_01_community_ai_result_kind.sql").toAbsolutePath())
         ).execute(source);
         // 补建测试所需的最小 user 列（ai/schema.sql 仅建 id 列），供 UserMapper 查询管理员名称
         jdbc.execute("ALTER TABLE user ADD COLUMN username VARCHAR(50) NULL, ADD COLUMN nickname VARCHAR(50) NULL, "

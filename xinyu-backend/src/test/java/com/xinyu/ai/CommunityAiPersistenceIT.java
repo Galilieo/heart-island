@@ -20,11 +20,11 @@ import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.service.AiReplyLogService;
+import com.xinyu.service.AiServiceClient;
+import com.xinyu.service.CommunityAiClient;
+import com.xinyu.service.MoodReviewSafety;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.service.CommunityReplyService;
-import com.xinyu.config.RestTemplateConfig;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.http.MediaType;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -40,25 +40,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.test.web.client.ResponseCreator;
-import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.time.Duration;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.xinyu.ai.AiServiceClientTests.respond;
 import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.anything;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
 /** 真实MySQL与Mapper，供应商传输替换为合成响应；专用空测试库与心情IT分开运行。 */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -66,7 +63,9 @@ class CommunityAiPersistenceIT {
     private JdbcTemplate jdbc;
     private CommunityPostService posts;
     private AiReplyLogService logs;
-    private MockRestServiceServer upstream;
+    private final Queue<AiServiceClientTests.Reply> expectedReplies = new ConcurrentLinkedQueue<>();
+    private AiServiceClientTests.Peer pythonPeer;
+    private CommunityAiClient client;
     private CommunityReplyService comments;
     private final PostCounterInterleaving counterInterleaving = new PostCounterInterleaving();
 
@@ -97,12 +96,14 @@ class CommunityAiPersistenceIT {
         Path reportMigration = Path.of("../sql/migrations/20261114_01_community_report.sql").toAbsolutePath();
         new ResourceDatabasePopulator(
                 new FileSystemResource(migration),
-                new FileSystemResource(reportMigration)
+                new FileSystemResource(reportMigration),
+                new FileSystemResource(Path.of("../sql/migrations/20261119_01_community_ai_result_kind.sql"))
         ).execute(source);
-        var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id FROM community_post");
+        var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id,ai_result_kind FROM community_post");
         assertThat(legacy.get("content")).isEqualTo("迁移前内容");
         assertThat(legacy.get("ai_reply")).isEqualTo("迁移前回复");
         assertThat(legacy.get("ai_generation_id")).isNull();
+        assertThat(legacy.get("ai_result_kind")).isNull();
 
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
@@ -135,13 +136,35 @@ class CommunityAiPersistenceIT {
     }
 
     @BeforeEach
-    void resetSyntheticRowsAndProvider() {
+    void resetSyntheticRowsAndProvider() throws Exception {
         jdbc.update("DELETE FROM community_post");
         jdbc.update("DELETE FROM ai_reply");
         jdbc.update("INSERT IGNORE INTO topic(id,name,status) VALUES (1,'合成话题',1)");
-        RestTemplate http = new RestTemplate();
-        upstream = MockRestServiceServer.bindTo(http).build();
-        ReflectionTestUtils.setField(posts, "aiReplyService", CommunityAiServiceTests.service(http));
+        pythonPeer = new AiServiceClientTests.Peer((socket, input, wire) -> {
+            assertThat(wire.path()).isEqualTo("/internal/v1/community-replies");
+            var reply = expectedReplies.poll();
+            assertThat(reply).as("必须事先安排本次合成 Python 响应").isNotNull();
+            reply.send(socket, input, wire);
+        });
+        client = new CommunityAiClient(pythonPeer.url(), CommunityAiServiceTests.TEST_TOKEN,
+                3, AiServiceClient.Limits.COMMUNITY);
+        ReflectionTestUtils.setField(posts, "communityAiClient", client);
+    }
+
+    @AfterEach
+    void verifyAndStopSyntheticPeer() throws Exception {
+        try {
+            if (client != null) {
+                client.close();
+            }
+            if (pythonPeer != null) {
+                pythonPeer.close();
+                assertThat(pythonPeer.failure.get()).isNull();
+            }
+            assertThat(expectedReplies).isEmpty();
+        } finally {
+            expectedReplies.clear();
+        }
     }
 
     @Test
@@ -182,36 +205,35 @@ class CommunityAiPersistenceIT {
     @Test
     void editClearsOldReplyBeforeProviderRunsAndFailureKeepsItNull() {
         long id = existingPost();
-        upstream.expect(anything()).andRespond(request -> {
+        expectedReplies.add((socket, input, wire) -> {
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
                     .as("旧回复必须在网络请求前清除").isNull();
-            return withSuccess("{}", MediaType.APPLICATION_JSON).createResponse(request);
+            assertThat(jdbc.queryForObject("SELECT ai_result_kind FROM community_post WHERE id=?", String.class, id))
+                    .isNull();
+            respond(socket, 200, "{}");
         });
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
         var saved = jdbc.queryForMap("SELECT * FROM community_post WHERE id=?", id);
         assertThat(saved.get("content")).isEqualTo("合成新内容");
         assertThat(saved.get("ai_reply")).isNull();
+        assertThat(saved.get("ai_result_kind")).isNull();
         assertThat(saved.get("like_count")).isEqualTo(7);
         assertThat(jdbc.queryForObject("SELECT status FROM ai_reply", Integer.class)).isZero();
-        upstream.verify();
     }
 
     @Test
     void disablingAiWithUnchangedContentRejectsAlreadyGeneratingReply() {
         long id = existingPost();
-        upstream.expect(anything()).andRespond(request -> {
+        expectedReplies.add((socket, input, wire) -> {
             // 旧请求尚未返回时保存相同内容并关闭AI，随后才放行旧响应。
             assertThat(posts.update(edit(id, false), 1L).saved()).isTrue();
-            return withSuccess(
-                    "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"过期回复\"}}]}",
-                    MediaType.APPLICATION_JSON).createResponse(request);
+            generatedReply("过期回复").send(socket, input, wire);
         });
 
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
 
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
                 .as("关闭AI后，进行中的旧响应也不能恢复回复").isNull();
-        upstream.verify();
     }
 
     @ParameterizedTest(name = "旧回复不得覆盖后续编辑：{0}")
@@ -227,7 +249,7 @@ class CommunityAiPersistenceIT {
             default -> { /* 相同内容和ABA最终均保存原文，仍必须区分生成代次。 */ }
         }
 
-        upstream.expect(anything()).andRespond(request -> {
+        expectedReplies.add((socket, input, wire) -> {
             // 旧响应返回前完成后续编辑及其生成，稳定构造迟到覆盖顺序，无需sleep。
             if ("ABA".equals(change)) {
                 var intermediate = edit(id, false);
@@ -235,25 +257,25 @@ class CommunityAiPersistenceIT {
                 assertThat(posts.update(intermediate, 1L).saved()).isTrue();
             }
             assertThat(posts.update(newer, 1L).saved()).isTrue();
-            return generatedReply("过期回复").createResponse(request);
+            response("SUPPORT", MoodReviewSafety.SUPPORT_TEXT).send(socket, input, wire);
         });
-        upstream.expect(anything()).andRespond(generatedReply("当前回复"));
+        expectedReplies.add(generatedReply("当前回复"));
 
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
 
-        var saved = jdbc.queryForMap("SELECT content,mood_type,topic_id,ai_reply FROM community_post WHERE id=?", id);
+        var saved = jdbc.queryForMap("SELECT content,mood_type,topic_id,ai_reply,ai_result_kind FROM community_post WHERE id=?", id);
         assertThat(saved.get("content")).isEqualTo(newer.getContent());
         assertThat(saved.get("mood_type")).isEqualTo(newer.getMoodType());
         assertThat(((Number) saved.get("topic_id")).longValue()).isEqualTo(newer.getTopicId());
         assertThat(saved.get("ai_reply")).isEqualTo("当前回复");
-        upstream.verify();
+        assertThat(saved.get("ai_result_kind")).isEqualTo("MODEL");
     }
 
     @ParameterizedTest(name = "旧生成在帖子失效后不得回写：{0}")
     @ValueSource(strings = {"删除", "隐藏", "隐藏后恢复", "删除后恢复"})
     void removingOrHidingPostInvalidatesPendingReply(String action) {
         long id = existingPost();
-        upstream.expect(anything()).andRespond(request -> {
+        expectedReplies.add((socket, input, wire) -> {
             if (action.startsWith("删除")) {
                 assertThat(posts.delete(id, 1L)).isTrue();
                 if (action.endsWith("恢复")) {
@@ -266,17 +288,17 @@ class CommunityAiPersistenceIT {
                     assertThat(posts.updateAdminStatus(id, 1, null)).isNotNull();
                 }
             }
-            return generatedReply("过期回复").createResponse(request);
+            generatedReply("过期回复").send(socket, input, wire);
         });
 
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
 
-        var saved = jdbc.queryForMap("SELECT status,ai_reply,ai_generation_id FROM community_post WHERE id=?", id);
+        var saved = jdbc.queryForMap("SELECT status,ai_reply,ai_generation_id,ai_result_kind FROM community_post WHERE id=?", id);
         int expectedStatus = "隐藏后恢复".equals(action) ? 1 : ("隐藏".equals(action) ? 2 : 0);
         assertThat(((Number) saved.get("status")).intValue()).isEqualTo(expectedStatus);
         assertThat(saved.get("ai_reply")).isNull();
+        assertThat(saved.get("ai_result_kind")).isNull();
         assertThat(saved.get("ai_generation_id")).isNull();
-        upstream.verify();
     }
 
     @Test
@@ -285,7 +307,7 @@ class CommunityAiPersistenceIT {
         CountDownLatch oldWaiting = new CountDownLatch(1);
         CountDownLatch releaseOld = new CountDownLatch(1);
         ExecutorService editor = Executors.newSingleThreadExecutor();
-        upstream.expect(anything()).andRespond(request -> {
+        expectedReplies.add((socket, input, wire) -> {
             oldWaiting.countDown();
             try {
                 assertThat(releaseOld.await(10, TimeUnit.SECONDS)).as("旧响应必须显式放行").isTrue();
@@ -293,9 +315,9 @@ class CommunityAiPersistenceIT {
                 Thread.currentThread().interrupt();
                 throw new IOException("合成响应等待被中断", interrupted);
             }
-            return generatedReply("过期回复").createResponse(request);
+            response("SUPPORT", MoodReviewSafety.SUPPORT_TEXT).send(socket, input, wire);
         });
-        upstream.expect(anything()).andRespond(generatedReply("当前回复"));
+        expectedReplies.add(generatedReply("当前回复"));
 
         try {
             var oldSave = editor.submit(() -> posts.update(edit(id, true), 1L));
@@ -310,7 +332,8 @@ class CommunityAiPersistenceIT {
 
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
                     .as("真实双线程交错下，迟到旧响应不能覆盖已保存的新回复").isEqualTo("当前回复");
-            upstream.verify();
+            assertThat(jdbc.queryForObject("SELECT ai_result_kind FROM community_post WHERE id=?", String.class, id))
+                    .isEqualTo("MODEL");
         } finally {
             releaseOld.countDown();
             editor.shutdownNow();
@@ -354,7 +377,7 @@ class CommunityAiPersistenceIT {
 
     @Test
     void generationIdIsNotExposedInPublicPostJson() {
-        upstream.expect(anything()).andRespond(generatedReply("合成回复"));
+        expectedReplies.add(generatedReply("合成回复"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
         long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
 
@@ -364,6 +387,8 @@ class CommunityAiPersistenceIT {
         var json = new ObjectMapper().findAndRegisterModules().valueToTree(saved);
         assertThat(json.has("aiGenerationId")).isFalse();
         assertThat(json.path("aiReply").asText()).isEqualTo("合成回复");
+        assertThat(json.path("resultKind").asText()).isEqualTo("MODEL");
+        assertThat(json.has("aiResultKind")).isFalse();
     }
 
     @ParameterizedTest(name = "互动计数不得恢复旧正文或生成标识：{0}")
@@ -406,6 +431,7 @@ class CommunityAiPersistenceIT {
             var saved = jdbc.queryForMap("SELECT * FROM community_post WHERE id=?", id);
             assertThat(saved.get("content")).isEqualTo("合成新内容");
             assertThat(saved.get("ai_reply")).isNull();
+            assertThat(saved.get("ai_result_kind")).isNull();
             assertThat(saved.get("ai_generation_id")).isNull();
             int expectedLikes = switch (action) {
                 case "点赞" -> 8;
@@ -426,45 +452,67 @@ class CommunityAiPersistenceIT {
         assertThat(posts.update(edit(id, false), 1L).saved()).isTrue();
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id)).isNull();
         assertThat(jdbc.queryForObject("SELECT ai_generation_id FROM community_post WHERE id=?", String.class, id)).isNull();
+        assertThat(jdbc.queryForObject("SELECT ai_result_kind FROM community_post WHERE id=?", String.class, id)).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply", Integer.class)).isZero();
-        upstream.verify();
     }
 
     @Test
     void validProviderReplyStillAppearsOnSavedPost() {
-        upstream.expect(anything()).andRespond(withSuccess(
-                "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"合成回复\"}}]}",
-                MediaType.APPLICATION_JSON));
+        expectedReplies.add(generatedReply("合成回复"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isEqualTo("合成回复");
+        assertThat(jdbc.queryForObject("SELECT ai_result_kind FROM community_post", String.class)).isEqualTo("MODEL");
         assertThat(jdbc.queryForObject("SELECT prompt FROM ai_reply", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT status FROM ai_reply", Integer.class)).isEqualTo(1);
     }
 
     @Test
-    void newProviderFailureRetainsDetailsForAdminWithoutConfiguredApiKey() {
-        upstream.expect(anything()).andRespond(withStatus(org.springframework.http.HttpStatus.BAD_GATEWAY)
-                .body("合成上游详细错误 synthetic-private-token").contentType(MediaType.TEXT_PLAIN));
+    void providerFailureKeepsBothColumnsNullAndOnlyLogsTheCategory() {
+        expectedReplies.add((socket, input, wire) ->
+                respond(socket, 502, "{\"request_id\":null,\"code\":\"provider_error\"}"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
 
         var row = jdbc.queryForMap("SELECT * FROM ai_reply");
         assertThat(row.get("status")).isEqualTo(0);
         assertThat(row.get("reply_content")).isNull();
-        assertThat((String) row.get("error_message")).contains("502", "合成上游详细错误", "[REDACTED]")
-                .doesNotContain("synthetic-private-token");
-        assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
-        upstream.verify();
+        assertThat(row.get("error_message")).isEqualTo("provider_error");
+        var post = jdbc.queryForMap("SELECT ai_reply,ai_result_kind FROM community_post");
+        assertThat(post.get("ai_reply")).isNull();
+        assertThat(post.get("ai_result_kind")).isNull();
+    }
+
+    @Test
+    void supportPersistsFixedTextAndKindWithoutAnAiCallLog() {
+        expectedReplies.add(response("SUPPORT", MoodReviewSafety.SUPPORT_TEXT));
+        var dto = add();
+        dto.setContent("我不想活了");
+        assertThat(posts.add(dto, 1L).saved()).isTrue();
+
+        var saved = jdbc.queryForMap("SELECT ai_reply,ai_result_kind FROM community_post");
+        assertThat(saved.get("ai_reply")).isEqualTo(MoodReviewSafety.SUPPORT_TEXT);
+        assertThat(saved.get("ai_result_kind")).isEqualTo("SUPPORT");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply", Integer.class)).isZero();
+    }
+
+    @Test
+    void wrongSupportTextNeverAppearsOnThePost() {
+        expectedReplies.add(response("SUPPORT", "合成错误文案"));
+        assertThat(posts.add(add(), 1L).saved()).isTrue();
+
+        var saved = jdbc.queryForMap("SELECT ai_reply,ai_result_kind FROM community_post");
+        assertThat(saved.get("ai_reply")).isNull();
+        assertThat(saved.get("ai_result_kind")).isNull();
+        assertThat(saved.get("ai_result_kind")).isNull();
+        assertThat(jdbc.queryForObject("SELECT error_message FROM ai_reply", String.class))
+                .isEqualTo("invalid_model_response");
     }
 
     @Test
     void realSlowProviderPreservesNewPostAndClearsReplyOnEdit() throws Exception {
         AtomicInteger requests = new AtomicInteger();
         try (var peer = CommunityAiTimeoutTests.stalledPeer(new CompletableFuture<>(), requests, false);
-             var transport = RestTemplateConfig.createClient(Duration.ofMillis(150), Duration.ofMillis(150))) {
-            var http = new RestTemplate(new HttpComponentsClientHttpRequestFactory(transport));
-            var generator = CommunityAiServiceTests.service(http);
-            ReflectionTestUtils.setField(generator, "baseUrl", peer.url());
-            ReflectionTestUtils.setField(posts, "aiReplyService", generator);
+             var generator = CommunityAiTimeoutTests.shortTimeoutClient(peer.url())) {
+            ReflectionTestUtils.setField(posts, "communityAiClient", generator);
 
             assertThat(posts.add(add(), 1L).saved()).isTrue();
             long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
@@ -484,7 +532,7 @@ class CommunityAiPersistenceIT {
         jdbc.execute("CREATE TRIGGER xinyu_test_fail_community_log BEFORE INSERT ON ai_reply "
                 + "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='synthetic-private-db-error'");
         try {
-            upstream.expect(anything()).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+            expectedReplies.add((socket, input, wire) -> respond(socket, 200, "{}"));
             assertThat(posts.add(add(), 1L).saved()).isTrue();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM community_post", Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
@@ -501,18 +549,23 @@ class CommunityAiPersistenceIT {
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT ai_generation_id FROM community_post", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply", Integer.class)).isZero();
-        upstream.verify();
     }
 
     private long existingPost() {
-        jdbc.update("INSERT INTO community_post(user_id,topic_id,mood_type,content,ai_reply,like_count) "
-                + "VALUES (1,1,'平静','合成旧内容','合成旧回复',7)");
+        jdbc.update("INSERT INTO community_post(user_id,topic_id,mood_type,content,ai_reply,ai_result_kind,like_count) "
+                + "VALUES (1,1,'平静','合成旧内容','合成旧回复','MODEL',7)");
         return jdbc.queryForObject("SELECT id FROM community_post", Long.class);
     }
 
-    private static ResponseCreator generatedReply(String content) {
-        return withSuccess("{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"%s\"}}]}"
-                .formatted(content), MediaType.APPLICATION_JSON);
+    private static AiServiceClientTests.Reply generatedReply(String content) {
+        return response("MODEL", content);
+    }
+
+    private static AiServiceClientTests.Reply response(String kind, String content) {
+        return (socket, input, wire) -> {
+            String requestId = new ObjectMapper().readTree(wire.body()).path("request_id").asText();
+            respond(socket, 200, CommunityAiServiceTests.success(requestId, kind, content));
+        };
     }
 
     /** 仅在测试指定的一次帖子写入前安排编辑，不替换原SQL或结果；其余调用直接透传。 */

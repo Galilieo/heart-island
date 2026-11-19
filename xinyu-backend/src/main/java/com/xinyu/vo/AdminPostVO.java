@@ -11,6 +11,7 @@ public class AdminPostVO {
     private String userId;
     private Long topicId;
     private String moodType;
+    private String resultKind;
     private String content;
     private String anonymousName;
     private Integer replyCount;
@@ -29,12 +30,12 @@ public class AdminPostVO {
                        String anonymousName, Integer replyCount, Integer likeCount, Integer status,
                        LocalDateTime createTime, LocalDateTime updateTime) {
         this(id, userId, topicId, moodType, content, anonymousName, replyCount, likeCount,
-                status, null, createTime, updateTime);
+                status, null, null, createTime, updateTime);
     }
 
     public AdminPostVO(String id, String userId, Long topicId, String moodType, String content,
                        String anonymousName, Integer replyCount, Integer likeCount, Integer status,
-                       String hideReason, LocalDateTime createTime, LocalDateTime updateTime) {
+                       String hideReason, String resultKind, LocalDateTime createTime, LocalDateTime updateTime) {
         this.id = id;
         this.userId = userId;
         this.topicId = topicId;
@@ -45,6 +46,7 @@ public class AdminPostVO {
         this.likeCount = likeCount;
         this.status = status;
         this.hideReason = hideReason;
+        this.resultKind = resultKind;
         this.createTime = createTime;
         this.updateTime = updateTime;
     }
@@ -143,5 +145,13 @@ public class AdminPostVO {
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getResultKind() {
+        return resultKind;
+    }
+
+    public void setResultKind(String resultKind) {
+        this.resultKind = resultKind;
     }
 }

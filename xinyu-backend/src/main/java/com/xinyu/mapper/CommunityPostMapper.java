@@ -11,7 +11,7 @@ import org.apache.ibatis.annotations.Update;
 public interface CommunityPostMapper extends BaseMapper<CommunityPost> {
 
     /** 对单篇帖子加行级写锁，用于串联后台举报裁决，避免多条举报索引状态并发修改产生间隙死锁。 */
-    @Select("SELECT id, user_id, topic_id, mood_type, content, ai_reply, ai_generation_id, anonymous_name, "
+    @Select("SELECT id, user_id, topic_id, mood_type, content, ai_reply, ai_result_kind, ai_generation_id, anonymous_name, "
             + "reply_count, like_count, status, hide_reason, create_time, update_time "
             + "FROM community_post WHERE id = #{id} FOR UPDATE")
     CommunityPost selectByIdForUpdate(@Param("id") Long id);

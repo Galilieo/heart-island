@@ -131,9 +131,7 @@ class AiReplyContractIT {
                 "--spring.datasource.hikari.data-source-properties.socketTimeout=6000",
                 "--server.address=127.0.0.1", "--server.port=0",
                 "--AI_WORKER_ENABLED=true", "--AI_WORKER_CONCURRENCY=3",
-                "--AI_SERVICE_BASE_URL=" + pythonUrl, "--AI_INTERNAL_TOKEN=test-internal-secret",
-                "--deepseek.api-key=test-provider-secret", "--deepseek.base-url=" + pythonUrl + "/v1",
-                "--deepseek.model=test-model");
+                "--AI_SERVICE_BASE_URL=" + pythonUrl, "--AI_INTERNAL_TOKEN=test-internal-secret");
         int port = ((ServletWebServerApplicationContext) application).getWebServer().getPort();
         baseUrl = "http://127.0.0.1:" + port;
     }
@@ -236,6 +234,47 @@ class AiReplyContractIT {
 
     @Test
     @Order(7)
+    void communitySaveUsesPythonForModelAndSupportAndAdminCanFilter() throws Exception {
+        jdbc.update("INSERT INTO topic(id,name,status) VALUES (1,'合成联调话题',1)");
+        var regular = publishPost("散步闻到桂花的合成帖子");
+        var crisis = publishPost("我不想活了");
+
+        assertThat(regular.path("resultKind").asText()).isEqualTo("MODEL");
+        assertThat(regular.path("aiReply").asText()).isNotBlank();
+        assertThat(crisis.path("resultKind").asText()).isEqualTo("SUPPORT");
+        assertThat(crisis.path("aiReply").asText()).isEqualTo(com.xinyu.service.MoodReviewSafety.SUPPORT_TEXT);
+        assertThat(crisis.has("aiGenerationId")).isFalse();
+        assertThat(supplierCalls()).contains(regular.path("content").asText()).doesNotContain("我不想活了");
+
+        String filter = "/admin/post/page?resultKind=SUPPORT";
+        assertThat(javaRequest("GET", filter, null).status()).isEqualTo(403);
+        jdbc.update("UPDATE user SET role='ADMIN' WHERE id=?", userId);
+        try {
+            var records = data("GET", filter, null).path("records");
+            assertThat(records.size()).isEqualTo(1);
+            assertThat(records.get(0).path("id").asText()).isEqualTo(crisis.path("id").asText());
+            assertThat(records.get(0).path("resultKind").asText()).isEqualTo("SUPPORT");
+            var detail = data("GET", "/admin/post/" + crisis.path("id").asText(), null);
+            assertThat(detail.path("resultKind").asText()).isEqualTo("SUPPORT");
+        } finally {
+            jdbc.update("UPDATE user SET role='USER' WHERE id=?", userId);
+        }
+    }
+
+    @Test
+    @Order(8)
+    void communityPythonTimeoutLeavesPostVisibleWithNoReplyAndLogsOnlyCategory() throws Exception {
+        var slow = publishPost("超时合成社区帖子");
+        assertThat(slow.path("aiReply").isNull()).isTrue();
+        assertThat(slow.path("resultKind").isNull()).isTrue();
+        String code = jdbc.queryForObject(
+                "SELECT error_message FROM ai_reply WHERE target_type='POST' AND target_id=?",
+                String.class, slow.path("id").asLong());
+        assertThat(code).isEqualTo("provider_timeout");
+    }
+
+    @Test
+    @Order(9)
     void unavailablePythonStillAllowsSavingAndExposesGenerationFailure() throws Exception {
         python.destroy();
         assertThat(python.waitFor(5, TimeUnit.SECONDS)).isTrue();
@@ -243,6 +282,15 @@ class AiReplyContractIT {
         assertThat(saved.path("id").asLong()).isPositive();
         await(() -> job(saved).path("status").asText().equals("failed"));
         assertThat(job(saved).path("errorCode").asText()).isEqualTo("provider_error");
+    }
+
+    private JsonNode publishPost(String content) throws Exception {
+        var result = javaRequest("POST", "/community/post/add",
+                Map.of("topicId", 1, "moodType", "平静", "content", content, "needAiReply", true));
+        assertThat(result.body().path("code").asInt()).isEqualTo(200);
+        Long id = jdbc.queryForObject("SELECT id FROM community_post WHERE user_id=? AND content=?",
+                Long.class, userId, content);
+        return data("GET", "/community/post/detail?id=" + id, null);
     }
 
     private JsonNode save(String content, boolean enabled) throws Exception {

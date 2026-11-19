@@ -17,7 +17,7 @@ import com.xinyu.mapper.FavoriteMapper;
 import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.service.AiReplyLogService;
-import com.xinyu.service.AiReplyService;
+import com.xinyu.service.CommunityAiClient;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.service.CommunityReplyService;
 import com.xinyu.service.UserService;
@@ -82,7 +82,7 @@ class AdminModerationHttpTests {
     private TopicMapper topicMapper;
 
     @MockitoBean
-    private AiReplyService aiReplyService;
+    private CommunityAiClient communityAiClient;
 
     @MockitoBean
     private AiReplyLogService aiReplyLogService;

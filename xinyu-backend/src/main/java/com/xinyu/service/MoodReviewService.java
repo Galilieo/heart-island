@@ -299,9 +299,7 @@ public class MoodReviewService {
                 }
                 ReviewAiRequest expected = buildRequest(row, locked, context.records(), context.crisis());
                 response.validate(expected);
-                if (context.crisis()
-                        && (!"SUPPORT".equals(response.resultKind())
-                                || !MoodReviewSafety.SUPPORT_TEXT.equals(response.body()))) {
+                if (context.crisis() && !MoodReviewSafety.isSupportReply(response.resultKind(), response.body())) {
                     throw new IllegalArgumentException("invalid_model_response");
                 }
             } catch (IllegalArgumentException invalid) {

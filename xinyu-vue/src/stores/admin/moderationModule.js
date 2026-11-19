@@ -14,6 +14,7 @@ export function createModerationModule() {
   const posts = ref([])
   const postsLoading = ref(false)
   const postsFilters = reactive({
+    resultKind: '',
     status: '',
     topicId: '',
     postId: '',
@@ -67,6 +68,7 @@ export function createModerationModule() {
     appendTrimmedFilter(params, 'postId', postsFilters.postId)
     appendTrimmedFilter(params, 'userId', postsFilters.userId)
     appendTrimmedFilter(params, 'keyword', postsFilters.keyword)
+    appendTrimmedFilter(params, 'resultKind', postsFilters.resultKind)
 
     try {
       const res = await adminApi.postPage(params)
@@ -102,6 +104,7 @@ export function createModerationModule() {
     postsFilters.postId = ''
     postsFilters.userId = ''
     postsFilters.keyword = ''
+    postsFilters.resultKind = ''
     postPagination.pageNum = 1
     return searchPosts()
   }

@@ -101,6 +101,7 @@ CREATE TABLE `community_post` (
   `mood_type` VARCHAR(30) NOT NULL COMMENT '帖子心情类型',
   `content` TEXT NOT NULL COMMENT '帖子内容',
   `ai_reply` TEXT DEFAULT NULL COMMENT 'AI 心屿回复内容（最新一次成功回复的快照）',
+  `ai_result_kind` VARCHAR(10) NULL DEFAULT NULL COMMENT 'AI回复类型：MODEL 模型生成，SUPPORT 危机固定文案；NULL 表示无回复或历史数据',
   `ai_generation_id` VARCHAR(36) DEFAULT NULL COMMENT '当前AI生成标识，NULL表示无有效生成',
   `anonymous_name` VARCHAR(50) NOT NULL DEFAULT '匿名岛民' COMMENT '匿名展示名',
   `reply_count` INT NOT NULL DEFAULT 0 COMMENT '回复数冗余字段',

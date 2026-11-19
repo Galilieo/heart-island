@@ -15,6 +15,7 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import { useAdminContentDetail } from '../composables/useAdminContentDetail'
 import { useAdminStore } from '../stores/admin'
+import { isSupportReply } from '../utils/mood'
 import { contentStatusMeta, formatFullDateTime } from '../utils/communityReport'
 
 const adminStore = useAdminStore()
@@ -26,6 +27,12 @@ const statusOptions = [
   { label: '正常展示', value: '1' },
   { label: '已隐藏', value: '2' },
   { label: '作者已删除', value: '0' }
+]
+
+const resultKindOptions = [
+  { label: '全部类型', value: '' },
+  { label: '危机固定回应', value: 'SUPPORT' },
+  { label: '模型生成', value: 'MODEL' }
 ]
 
 const {
@@ -66,7 +73,7 @@ const detailSections = computed(() => {
   }
   return [
     { title: '帖子内容', content: detail.content },
-    { title: '小芽回复', content: detail.aiReply }
+    { title: isSupportReply(detail) ? '危机固定回应' : '小芽回复', content: detail.aiReply }
   ]
 })
 
@@ -115,6 +122,13 @@ const columns = [
     format: (row) => row.likeCount || 0
   },
   { key: 'status', title: '状态', width: 96, mobile: 'status' },
+  {
+    key: 'resultKind',
+    title: 'AI 回复',
+    width: 112,
+    mobile: 'meta',
+    format: (row) => (isSupportReply(row) ? '危机固定回应' : '—')
+  },
   {
     key: 'createTime',
     title: '发布时间',
@@ -184,6 +198,14 @@ function handlePageChange(pageNum) {
           v-model="postsFilters.status"
           label="状态"
           :options="statusOptions"
+          placeholder=""
+        />
+      </AdminFilterField>
+      <AdminFilterField size="md" full>
+        <BaseSelect
+          v-model="postsFilters.resultKind"
+          label="回复类型"
+          :options="resultKindOptions"
           placeholder=""
         />
       </AdminFilterField>
