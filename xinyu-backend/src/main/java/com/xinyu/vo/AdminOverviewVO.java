@@ -10,6 +10,8 @@ public class AdminOverviewVO {
     private Long postHidden;
     private Long replyTotal;
     private Long replyHidden;
+    private Long riskPendingPosts;
+    private Long riskPendingReplies;
     private Long aiReplyTotal;
     private Long aiReplySuccess;
     private Long aiReplyFailed;
@@ -22,6 +24,7 @@ public class AdminOverviewVO {
     public AdminOverviewVO(Long userTotal, Long userDisabled,
                            Long postTotal, Long postHidden,
                            Long replyTotal, Long replyHidden,
+                           Long riskPendingPosts, Long riskPendingReplies,
                            Long aiReplyTotal, Long aiReplySuccess, Long aiReplyFailed,
                            String rateLimitBackend, Map<String, Long> rateLimitRejections) {
         this.userTotal = userTotal;
@@ -30,6 +33,8 @@ public class AdminOverviewVO {
         this.postHidden = postHidden;
         this.replyTotal = replyTotal;
         this.replyHidden = replyHidden;
+        this.riskPendingPosts = riskPendingPosts;
+        this.riskPendingReplies = riskPendingReplies;
         this.aiReplyTotal = aiReplyTotal;
         this.aiReplySuccess = aiReplySuccess;
         this.aiReplyFailed = aiReplyFailed;
@@ -59,6 +64,14 @@ public class AdminOverviewVO {
 
     public Long getReplyHidden() {
         return replyHidden;
+    }
+
+    public Long getRiskPendingPosts() {
+        return riskPendingPosts;
+    }
+
+    public Long getRiskPendingReplies() {
+        return riskPendingReplies;
     }
 
     public Long getAiReplyTotal() {

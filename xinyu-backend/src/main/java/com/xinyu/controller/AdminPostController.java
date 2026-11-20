@@ -35,6 +35,7 @@ public class AdminPostController {
                                           @RequestParam(required = false) Long userId,
                                           @RequestParam(required = false) String keyword,
                                           @RequestParam(required = false) String resultKind,
+                                          @RequestParam(required = false) String riskStatus,
                                           @RequestParam(required = false) Long pageNum,
                                           @RequestParam(required = false) Long pageSize) {
         Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
@@ -63,6 +64,8 @@ public class AdminPostController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "回复类型不合法");
         }
 
+        AdminContentStatusHelper.validateRiskStatus(riskStatus);
+
         Page<AdminPostVO> page = communityPostService.pageAdminPosts(
                 status,
                 topicId,
@@ -70,6 +73,7 @@ public class AdminPostController {
                 userId,
                 keyword,
                 resultKind,
+                riskStatus,
                 pageNum,
                 pageSize
         );
@@ -96,6 +100,18 @@ public class AdminPostController {
         }
 
         return Result.success("查询成功", detail);
+    }
+
+    /** 管理员将一条待关注帖子标为已关注。 */
+    @PutMapping("/{id}/risk-review")
+    public Result<Boolean> reviewRisk(
+            @RequestHeader(value = "token", required = false) String token, @PathVariable Long id) {
+        if (AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService) == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "权限不足");
+        }
+
+        AdminStatusResult outcome = communityPostService.reviewRisk(id);
+        return AdminContentStatusHelper.toRiskReviewResult(outcome, "帖子");
     }
 
     @PutMapping("/{id}/status")

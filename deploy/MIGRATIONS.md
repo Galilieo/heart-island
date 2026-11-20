@@ -12,6 +12,7 @@ B 段先执行 `check/migrations/00-inventory.sql`（只读）。需要 MySQL 8.
 | 4 `20261113_01_mood_review.sql` | `04-before.sql` → 脚本 → `04-after.sql` | 两张回顾表、JSON、复合主键/唯一键/索引/外键与脚本一致，均为空 | 不可重复；回退停相关入口并保留表，不自动DROP |
 | 5 `20261114_01_community_report.sql` | `05-before.sql` → 脚本 → `05-after.sql` | 举报表及约束/3索引、两列隐藏原因；状态分布不变 | 不可重复；停入口并保留结构；不自动修历史状态 |
 | 6 `20261119_01_community_ai_result_kind.sql` | `06-before.sql` → 脚本 → `06-after.sql` | 社区回复类型 varchar(10) 可空，初始 NULL；原数据和回复数量不变 | 不可重复；备份后执行，回退保留可空列 |
+| 7 `20261120_01_community_risk_status.sql` | `07-before.sql` → 脚本 → `07-after.sql` | 两张社区表各新增三列，均可空且全为 NULL，两表行数不变 | 不可重复；回退保留可空列 |
 
 每次核查不符合预期立即停靠点 4，不能执行下一个脚本，也不能在脚本报错后自动重试。DDL 隐式提交，不能依靠 ROLLBACK 撤销整份文件；例如第5份创建表成功、后续ALTER失败会留下部分完成状态，需要对照实际结构另给恢复方案。
 

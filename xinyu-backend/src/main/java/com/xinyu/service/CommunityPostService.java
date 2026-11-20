@@ -16,6 +16,7 @@ import com.xinyu.mapper.PostLikeMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,14 +41,15 @@ public class CommunityPostService {
     private static final Logger logger = LoggerFactory.getLogger(CommunityPostService.class);
 
     /** 发布 / 编辑结果：帖子一律照常保存；aiReplyLimited 表示本次因额度不足未发起生成。 */
-    public record PostSaveResult(boolean saved, boolean aiReplyLimited) {
+    public record PostSaveResult(boolean saved, boolean aiReplyLimited, String supportText) {
 
-        public static PostSaveResult saved(boolean aiReplyLimited) {
-            return new PostSaveResult(true, aiReplyLimited);
+        public static PostSaveResult saved(boolean aiReplyLimited, boolean riskHit) {
+            String supportText = riskHit ? MoodReviewSafety.SUPPORT_TEXT : null;
+            return new PostSaveResult(true, aiReplyLimited, supportText);
         }
 
         public static PostSaveResult failed() {
-            return new PostSaveResult(false, false);
+            return new PostSaveResult(false, false, null);
         }
     }
 
@@ -104,7 +106,7 @@ public class CommunityPostService {
     /** 查询后台帖子分页，可按发布状态、归属、正文和回复类型收窄结果。 */
     public Page<AdminPostVO> pageAdminPosts(
             Integer status, Long topicId, Long postId, Long userId,
-            String keyword, String resultKind, Long pageNum, Long pageSize) {
+            String keyword, String resultKind, String riskStatus, Long pageNum, Long pageSize) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
 
         if(status != null){
@@ -128,7 +130,7 @@ public class CommunityPostService {
         }
 
         queryWrapper.eq(resultKind != null, "ai_result_kind", resultKind);
-        queryWrapper.orderByDesc("create_time");
+        CommunityRisk.applyListFilter(queryWrapper, riskStatus);
 
         Page<CommunityPost> postPage = communityPostMapper.selectPage(
                 new Page<>(pageNum,pageSize),
@@ -142,24 +144,35 @@ public class CommunityPostService {
         );
 
         voPage.setRecords(postPage.getRecords().stream()
-                .map(post -> new AdminPostVO(
-                        String.valueOf(post.getId()),
-                        String.valueOf(post.getUserId()),
-                        post.getTopicId(),
-                        post.getMoodType(),
-                        post.getContent(),
-                        post.getAnonymousName(),
-                        post.getReplyCount(),
-                        post.getLikeCount(),
-                        post.getStatus(),
-                        post.getHideReason(),
-                        post.getAiResultKind(),
-                        post.getCreateTime(),
-                        post.getUpdateTime()
-                ))
+                .map(post -> {
+                    AdminPostVO row = new AdminPostVO(
+                            String.valueOf(post.getId()),
+                            String.valueOf(post.getUserId()),
+                            post.getTopicId(),
+                            post.getMoodType(),
+                            post.getContent(),
+                            post.getAnonymousName(),
+                            post.getReplyCount(),
+                            post.getLikeCount(),
+                            post.getStatus(),
+                            post.getHideReason(),
+                            post.getAiResultKind(),
+                            post.getCreateTime(),
+                            post.getUpdateTime()
+                    );
+                    row.setRiskStatus(post.getRiskStatus());
+                    row.setRiskHitTime(post.getRiskHitTime());
+                    row.setRiskReviewedTime(post.getRiskReviewedTime());
+                    return row;
+                })
                 .toList());
 
         return voPage;
+    }
+
+    /** 仅将待关注的帖子标为已关注。 */
+    public AdminStatusResult reviewRisk(Long id) {
+        return CommunityRisk.markReviewed(communityPostMapper, id);
     }
 
     /** 管理员查看帖子详情（含小芽回复全文与待处理举报摘要）。 */
@@ -187,6 +200,9 @@ public class CommunityPostService {
         detail.setLikeCount(post.getLikeCount());
         detail.setStatus(post.getStatus());
         detail.setHideReason(post.getHideReason());
+        detail.setRiskStatus(post.getRiskStatus());
+        detail.setRiskHitTime(post.getRiskHitTime());
+        detail.setRiskReviewedTime(post.getRiskReviewedTime());
         detail.setPendingReportCount(pending.count());
         detail.setPendingReasons(pending.reasons());
         detail.setCreateTime(post.getCreateTime());
@@ -300,6 +316,12 @@ public class CommunityPostService {
         post.setLikeCount(0);
         post.setStatus(CommunityReportConstants.STATUS_VISIBLE);
 
+        boolean riskHit = MoodReviewSafety.matches(post.getContent());
+        if (riskHit) {
+            post.setRiskStatus(CommunityRisk.PENDING);
+            post.setRiskHitTime(LocalDateTime.now());
+        }
+
         boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
         post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
         int rows = communityPostMapper.insert(post);
@@ -309,7 +331,7 @@ public class CommunityPostService {
 
         // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
         // 用户选择不要 AI 回复时跳过生成（也不写调用日志）。
-        boolean quotaAllowed = needAiReply && reserveAiReplyQuota(post.getContent(), userId);
+        boolean quotaAllowed = needAiReply && reserveAiReplyQuota(riskHit, userId);
 
         // 额度不足时帖子照常保存、不发起生成（契约 2.4）：ai_reply 保持 NULL，
         // 不写失败兜底文案，也不记成生成失败。
@@ -317,7 +339,7 @@ public class CommunityPostService {
             attachAiReply(post);
         }
 
-        return PostSaveResult.saved(needAiReply && !quotaAllowed);
+        return PostSaveResult.saved(needAiReply && !quotaAllowed, riskHit);
     }
 
     @Transactional
@@ -379,6 +401,12 @@ public class CommunityPostService {
         edit.set("ai_reply", null);
         edit.set("ai_result_kind", null);
         edit.set("ai_generation_id", post.getAiGenerationId());
+
+        boolean riskHit = MoodReviewSafety.matches(post.getContent());
+        if (riskHit) {
+            CommunityRisk.markHit(edit);
+        }
+
         int rows = communityPostMapper.update(null, edit);
         if (rows <= 0) {
             return PostSaveResult.failed();
@@ -386,21 +414,21 @@ public class CommunityPostService {
 
         if (!needAiReply) {
             // 旧回复已经清除；不生成，也不写调用日志。
-            return PostSaveResult.saved(false);
+            return PostSaveResult.saved(false, riskHit);
         }
 
         // 内容已落库，AI 回复同步重新生成；额度不足时不发起、旧回复已被编辑清掉。
-        boolean quotaAllowed = reserveAiReplyQuota(post.getContent(), userId);
+        boolean quotaAllowed = reserveAiReplyQuota(riskHit, userId);
         if (quotaAllowed) {
             attachAiReply(post);
         }
 
-        return PostSaveResult.saved(!quotaAllowed);
+        return PostSaveResult.saved(!quotaAllowed, riskHit);
     }
 
     /** Java 只预检危机额度豁免，最终生成分流由 Python 判定。 */
-    private boolean reserveAiReplyQuota(String content, Long userId) {
-        return MoodReviewSafety.matches(content) || rateLimiter.check(RateLimitType.COMMUNITY_POST, userId).allowed();
+    private boolean reserveAiReplyQuota(boolean riskHit, Long userId) {
+        return riskHit || rateLimiter.check(RateLimitType.COMMUNITY_POST, userId).allowed();
     }
 
     @Transactional

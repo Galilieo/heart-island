@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRoute } from 'vue-router'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import AdminFilterBar from '../components/admin/AdminFilterBar.vue'
 import AdminFilterField from '../components/admin/AdminFilterField.vue'
@@ -16,9 +17,11 @@ import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import { useAdminContentDetail } from '../composables/useAdminContentDetail'
 import { useAdminStore } from '../stores/admin'
 import { isSupportReply } from '../utils/mood'
+import { PENDING_RISK, RISK_STATUS_OPTIONS, riskStatusMeta } from '../utils/communityRisk'
 import { contentStatusMeta, formatFullDateTime } from '../utils/communityReport'
 
 const adminStore = useAdminStore()
+const route = useRoute()
 
 const { posts, postsLoading, postsFilters, postPagination, postPages } = storeToRefs(adminStore)
 
@@ -41,12 +44,15 @@ const {
   currentDetail,
   selectedHideReason,
   savingStatus,
+  reviewingRisk,
   openDetail,
   closeDetail,
-  handleStatusAction
+  handleStatusAction,
+  handleRiskReview
 } = useAdminContentDetail({
   fetchDetail: (id) => adminStore.fetchPostDetail(id),
   updateStatus: (id, status, hideReason) => adminStore.updatePostStatus(id, status, hideReason),
+  reviewRisk: (id) => adminStore.reviewPostRisk(id),
   loadErrorText: '加载帖子详情失败',
   hideSuccessText: '已隐藏帖子'
 })
@@ -142,6 +148,12 @@ const columns = [
 ]
 
 onMounted(() => {
+  const riskStatus = route.query.riskStatus
+  if (riskStatusMeta(riskStatus)) {
+    adminStore.resetPostFilters(riskStatus)
+    return
+  }
+
   adminStore.fetchPosts()
 })
 
@@ -162,7 +174,7 @@ function handlePageChange(pageNum) {
   <div class="admin-posts">
     <AdminPageTitle
       title="帖子管理"
-      desc="查看社区帖子，隐藏或恢复违规内容。作者自己删除的帖子只能查看。"
+      desc="查看社区帖子，隐藏或恢复违规内容。作者删除的帖子无法恢复显示。"
     />
 
     <AdminFilterBar :loading="postsLoading" @search="handleSearch" @reset="handleReset">
@@ -209,6 +221,14 @@ function handlePageChange(pageNum) {
           placeholder=""
         />
       </AdminFilterField>
+      <AdminFilterField size="md" full>
+        <BaseSelect
+          v-model="postsFilters.riskStatus"
+          label="关注状态"
+          :options="RISK_STATUS_OPTIONS"
+          placeholder=""
+        />
+      </AdminFilterField>
     </AdminFilterBar>
 
     <AdminDataTable
@@ -217,12 +237,18 @@ function handlePageChange(pageNum) {
       :total="Number(postPagination.total)"
       :loading="postsLoading"
       row-key="id"
-      order-hint="按发布时间倒序"
+      :order-hint="postsFilters.riskStatus === PENDING_RISK ? '按最近命中倒序' : '按发布时间倒序'"
     >
       <template #cell-status="{ row }">
         <AdminStatus
           :text="contentStatusMeta(row.status).text"
           :tone="contentStatusMeta(row.status).tone"
+        />
+        <AdminStatus
+          v-if="riskStatusMeta(row.riskStatus)"
+          class="admin-risk-status"
+          :text="riskStatusMeta(row.riskStatus).text"
+          :tone="riskStatusMeta(row.riskStatus).tone"
         />
       </template>
 
@@ -258,14 +284,21 @@ function handlePageChange(pageNum) {
       :grid-items="detailGridItems"
       :sections="detailSections"
       :saving-status="savingStatus"
-      readonly-tip="作者自己删除的帖子只能查看。"
+      :reviewing-risk="reviewingRisk"
+      readonly-tip="作者删除的帖子无法恢复显示。"
       @close="closeDetail"
       @status-action="handleStatusAction"
+      @risk-review="handleRiskReview"
     />
   </div>
 </template>
 
 <style scoped>
+.admin-risk-status {
+  display: flex;
+  margin-block-start: 2px;
+}
+
 .admin-posts {
   display: flex;
   flex-direction: column;

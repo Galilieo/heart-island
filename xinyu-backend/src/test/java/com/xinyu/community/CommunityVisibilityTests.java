@@ -136,7 +136,7 @@ class CommunityVisibilityTests {
         CommunityReplyUpdateDTO editDto = new CommunityReplyUpdateDTO();
         editDto.setId(REPLY_ID);
         editDto.setContent("帖子隐藏后仍试图改回复");
-        assertThat(replyService.update(editDto, AUTHOR_ID)).isFalse();
+        assertThat(replyService.update(editDto, AUTHOR_ID).saved()).isFalse();
         verify(communityReplyMapper, never()).update(any(), any());
     }
 
@@ -147,10 +147,10 @@ class CommunityVisibilityTests {
         dto.setContent("尝试回复被隐藏帖子");
 
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(2));
-        assertThat(replyService.add(dto, OTHER_USER_ID)).isFalse();
+        assertThat(replyService.add(dto, OTHER_USER_ID).saved()).isFalse();
 
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(0));
-        assertThat(replyService.add(dto, OTHER_USER_ID)).isFalse();
+        assertThat(replyService.add(dto, OTHER_USER_ID).saved()).isFalse();
 
         verify(communityReplyMapper, never()).insert(any(CommunityReply.class));
         verify(communityPostMapper, never()).adjustReplyCount(anyLong(), anyInt());
@@ -164,7 +164,7 @@ class CommunityVisibilityTests {
         CommunityReplyUpdateDTO editDto = new CommunityReplyUpdateDTO();
         editDto.setId(REPLY_ID);
         editDto.setContent("试图修改被隐藏回复");
-        assertThat(replyService.update(editDto, AUTHOR_ID)).isFalse();
+        assertThat(replyService.update(editDto, AUTHOR_ID).saved()).isFalse();
 
         when(communityReplyMapper.update(any(), any())).thenReturn(1);
         assertThat(replyService.delete(REPLY_ID, AUTHOR_ID)).isTrue();

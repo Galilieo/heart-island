@@ -180,3 +180,23 @@ test('列表迟到的旧快照不覆盖已确认的点赞和收藏', async () =>
 
   assert.deepEqual(store.posts[0], { id: '1', liked: true, likeCount: 3, favorited: true })
 })
+
+test('评论发布或编辑已保存时，列表刷新失败仍保留支持文案', async () => {
+  const supportText = '合成服务端支持文字'
+  request.defaults.adapter = async (config) => {
+    if (config.method === 'get') {
+      throw new Error('刷新失败')
+    }
+    return ok(config, { supportText })
+  }
+  const store = useCommunityStore()
+  const reply = { postId: '11', content: '合成正文' }
+
+  const publish = await store.publishReply(reply)
+  const update = await store.updateReply({ id: '22', content: reply.content }, reply.postId)
+  for (const result of [publish, update]) {
+    assert.equal(result.ok, true)
+    assert.equal(result.refreshFailed, true)
+    assert.equal(result.data.supportText, supportText)
+  }
+})

@@ -20,6 +20,10 @@ public class AdminPostVO {
     private Integer status;
     /** 隐藏原因编码（ATTACK / AD / PRIVACY / ILLEGAL）。 */
     private String hideReason;
+
+    private String riskStatus;
+    private LocalDateTime riskHitTime;
+    private LocalDateTime riskReviewedTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -153,5 +157,29 @@ public class AdminPostVO {
 
     public void setResultKind(String resultKind) {
         this.resultKind = resultKind;
+    }
+
+    public String getRiskStatus() {
+        return riskStatus;
+    }
+
+    public void setRiskStatus(String riskStatus) {
+        this.riskStatus = riskStatus;
+    }
+
+    public LocalDateTime getRiskHitTime() {
+        return riskHitTime;
+    }
+
+    public void setRiskHitTime(LocalDateTime riskHitTime) {
+        this.riskHitTime = riskHitTime;
+    }
+
+    public LocalDateTime getRiskReviewedTime() {
+        return riskReviewedTime;
+    }
+
+    public void setRiskReviewedTime(LocalDateTime riskReviewedTime) {
+        this.riskReviewedTime = riskReviewedTime;
     }
 }

@@ -238,18 +238,18 @@ export const useCommunityStore = defineStore('community', () => {
 
   async function publishReply(payload) {
     const res = await communityApi.createReply(payload)
-    if (res.ok) {
-      await fetchReplies(payload.postId)
-    }
-    return res
+    if (!res.ok) return res
+
+    const refreshFailed = await refreshAfterSave(() => fetchReplies(payload.postId))
+    return { ...res, refreshFailed }
   }
 
   async function updateReply(payload, postId) {
     const res = await communityApi.updateReply(payload)
-    if (res.ok && postId) {
-      await fetchReplies(postId)
-    }
-    return res
+    if (!res.ok || !postId) return res
+
+    const refreshFailed = await refreshAfterSave(() => fetchReplies(postId))
+    return { ...res, refreshFailed }
   }
 
   async function removeReply(id, postId) {

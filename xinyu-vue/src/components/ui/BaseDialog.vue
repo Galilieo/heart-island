@@ -1,7 +1,7 @@
 <script setup>
 // 通用弹窗。Teleport 到 body，自动锁滚动条 / 按 ESC 关闭 / 点击遮罩关闭。
 // persistent 时禁用 ESC 与遮罩点击关闭，用于"保存中不能误关"的场景。
-import { watch, onUnmounted } from 'vue'
+import { watch, onUnmounted, useId } from 'vue'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -17,6 +17,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'close'])
+const titleId = useId()
 
 let previousFocused = null
 
@@ -64,11 +65,12 @@ onUnmounted(() => {
         :class="{ 'dlg-mask--sheet': mobileSheet }"
         role="dialog"
         aria-modal="true"
+        :aria-labelledby="title ? titleId : undefined"
         @click.self="persistent ? null : close()"
       >
         <div class="dlg-card" :class="`dlg-card--${width}`">
           <header v-if="title || closable" class="dlg-head">
-            <h3 v-if="title">{{ title }}</h3>
+            <h3 v-if="title" :id="titleId">{{ title }}</h3>
             <button
               v-if="closable"
               type="button"

@@ -27,6 +27,10 @@ export const adminApi = {
     return unwrap(request.get('/admin/ai-replies/page', { params }))
   },
 
+  reviewPostRisk(id) {
+    return unwrapHttp(request.put(`/admin/post/${id}/risk-review`))
+  },
+
   updatePostStatus(id, status, hideReason) {
     const params = hideReason ? { status, hideReason } : { status }
     return unwrapHttp(request.put(`/admin/post/${id}/status`, null, { params }))
@@ -42,6 +46,10 @@ export const adminApi = {
 
   replyDetail(id) {
     return unwrapHttp(request.get(`/admin/reply/${id}`))
+  },
+
+  reviewReplyRisk(id) {
+    return unwrapHttp(request.put(`/admin/reply/${id}/risk-review`))
   },
 
   updateReplyStatus(id, status, hideReason) {

@@ -14,6 +14,7 @@ import BaseButton from '../components/ui/BaseButton.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import PostCard from '../components/community/PostCard.vue'
+import CommunitySupportDialog from '../components/community/CommunitySupportDialog.vue'
 import XiaoyaNote from '../components/ui/XiaoyaNote.vue'
 import PostReplyForm from '../components/community/PostReplyForm.vue'
 import PostReplyList from '../components/community/PostReplyList.vue'
@@ -22,6 +23,7 @@ import ReportDialog from '../components/community/ReportDialog.vue'
 import { useCommunityStore } from '../stores/community'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
+import { communitySupportText } from '../utils/communityRisk'
 import { useConfirm } from '../composables/useConfirm'
 import { isSupportReply } from '../utils/mood'
 
@@ -29,6 +31,7 @@ const route = useRoute()
 const router = useRouter()
 const communityStore = useCommunityStore()
 const toast = useToast()
+const supportText = ref(null)
 const { confirm } = useConfirm()
 
 const { currentPost, replies, topics, reportedTargets } = storeToRefs(communityStore)
@@ -56,8 +59,13 @@ const { run: doFetchReplies, loading: repliesLoading } = useAsyncAction(
 const { run: doFetchTopics } = useAsyncAction(() => communityStore.fetchTopics(), { silent: true })
 
 const { run: doSubmitReply, loading: replySubmitting } = useAsyncAction(
-  (content) => communityStore.publishReply({ postId: Number(route.params.id), content }),
+  (content) => communityStore.publishReply({ postId: route.params.id, content }),
   { successMsg: '回复成功' }
+)
+
+const { run: doEditReply } = useAsyncAction(
+  (payload) => communityStore.updateReply(payload, route.params.id),
+  { successMsg: '修改成功', errorMsg: '修改失败' }
 )
 
 const { run: doUpdatePost, loading: postUpdating } = useAsyncAction(
@@ -69,20 +77,31 @@ async function handleSubmitReply(content) {
   const res = await doSubmitReply(content)
   if (res.ok) {
     replyFormRef.value?.reset()
+    showReplySupport(res)
     await doFetch()
   }
 }
 
 async function handleEditReply({ id, content }, done) {
+  if (updatingReplyId.value !== null) return
+
   updatingReplyId.value = id
-  const res = await communityStore.updateReply({ id, content }, route.params.id)
-  updatingReplyId.value = null
-  if (res.ok) {
-    toast.success('修改成功')
-    done?.()
-  } else {
-    toast.error(res.message || '修改失败')
+  try {
+    const res = await doEditReply({ id, content })
+    if (res.ok) {
+      done?.()
+      showReplySupport(res)
+    }
+  } finally {
+    updatingReplyId.value = null
   }
+}
+
+function showReplySupport(result) {
+  if (result.refreshFailed) {
+    toast.warn('回复已保存，列表刷新失败，请刷新查看')
+  }
+  supportText.value = communitySupportText(result)
 }
 
 async function handleDeleteReply(reply) {
@@ -122,6 +141,7 @@ async function handleSavePost(payload) {
     if (res.refreshFailed) toast.warn('帖子已保存，页面刷新失败，请刷新查看')
     // 额度不足时帖子已保存但没重新生成小芽回复；后端会把提示延长，成功 toast 后补一句。
     if (res.message && res.message !== '修改成功') toast.info(res.message)
+    supportText.value = communitySupportText(res, payload.needAiReply)
   }
 }
 
@@ -269,6 +289,7 @@ onMounted(async () => {
         @submit="handleSubmitReport"
       />
     </div>
+    <CommunitySupportDialog :text="supportText" @close="supportText = null" />
   </AppShell>
 </template>
 

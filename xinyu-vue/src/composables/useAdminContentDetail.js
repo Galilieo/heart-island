@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useToast } from './useToast'
+import { PENDING_RISK } from '../utils/communityRisk'
 
 /**
  * 后台帖子/回复详情弹窗与隐藏恢复状态操作复用。
@@ -7,6 +8,7 @@ import { useToast } from './useToast'
 export function useAdminContentDetail({
   fetchDetail,
   updateStatus,
+  reviewRisk,
   loadErrorText,
   hideSuccessText
 }) {
@@ -17,6 +19,7 @@ export function useAdminContentDetail({
   const currentDetail = ref(null)
   const selectedHideReason = ref('ILLEGAL')
   const savingStatus = ref(false)
+  const reviewingRisk = ref(false)
 
   async function openDetail(row) {
     detailVisible.value = true
@@ -37,7 +40,7 @@ export function useAdminContentDetail({
   }
 
   function closeDetail() {
-    if (savingStatus.value) {
+    if (savingStatus.value || reviewingRisk.value) {
       return
     }
     detailVisible.value = false
@@ -45,7 +48,7 @@ export function useAdminContentDetail({
   }
 
   async function handleStatusAction(nextStatus) {
-    if (!currentDetail.value || savingStatus.value) {
+    if (!currentDetail.value || savingStatus.value || reviewingRisk.value) {
       return
     }
     savingStatus.value = true
@@ -68,14 +71,48 @@ export function useAdminContentDetail({
     }
   }
 
+  async function handleRiskReview() {
+    const detail = currentDetail.value
+    if (detail?.riskStatus !== PENDING_RISK || savingStatus.value || reviewingRisk.value) {
+      return
+    }
+
+    reviewingRisk.value = true
+    try {
+      const result = await reviewRisk(detail.id)
+      if (result.ok) {
+        toast.success('已标为关注')
+      } else if (result.status === 409) {
+        toast.warn(result.message || '这条内容已不在待关注状态')
+      } else {
+        toast.error(result.message || '标记失败')
+      }
+
+      if (result.refreshFailed) {
+        toast.warn('列表刷新失败，请刷新查看')
+      }
+
+      if (result.ok || result.status === 409) {
+        detailVisible.value = false
+        currentDetail.value = null
+      }
+    } catch (error) {
+      toast.error(error?.userMessage || '操作结果待确认，请刷新列表')
+    } finally {
+      reviewingRisk.value = false
+    }
+  }
+
   return {
     detailVisible,
     detailLoading,
     currentDetail,
     selectedHideReason,
     savingStatus,
+    reviewingRisk,
     openDetail,
     closeDetail,
-    handleStatusAction
+    handleStatusAction,
+    handleRiskReview
   }
 }

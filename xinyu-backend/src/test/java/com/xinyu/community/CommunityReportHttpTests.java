@@ -146,7 +146,10 @@ class CommunityReportHttpTests {
                 .andExpect(jsonPath("$.data.records[0].status").value("HIDDEN"))
                 .andExpect(jsonPath("$.data.records[0].handleNote").doesNotExist())
                 .andExpect(jsonPath("$.data.records[0].handlerId").doesNotExist())
-                .andExpect(jsonPath("$.data.records[0].targetUserId").doesNotExist());
+                .andExpect(jsonPath("$.data.records[0].targetUserId").doesNotExist())
+                .andExpect(jsonPath("$.data.records[0].riskStatus").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data.records[0].riskHitTime").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data.records[0].riskReviewedTime").doesNotHaveJsonPath());
 
         when(communityReportService.listReportedTargets(OTHER_USER_ID, POST_ID))
                 .thenReturn(List.of(new ReportedTargetVO("POST", String.valueOf(POST_ID), "PENDING")));
@@ -155,7 +158,10 @@ class CommunityReportHttpTests {
                         .header("token", otherToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].targetType").value("POST"))
-                .andExpect(jsonPath("$.data[0].status").value("PENDING"));
+                .andExpect(jsonPath("$.data[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.data[0].riskStatus").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data[0].riskHitTime").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data[0].riskReviewedTime").doesNotHaveJsonPath());
     }
 
     @Test
@@ -166,6 +172,9 @@ class CommunityReportHttpTests {
         hiddenPost.setContent("作者可见被隐藏正文");
         hiddenPost.setStatus(2);
         hiddenPost.setHideReason("PRIVACY");
+        hiddenPost.setRiskStatus("REVIEWED");
+        hiddenPost.setRiskHitTime(LocalDateTime.now());
+        hiddenPost.setRiskReviewedTime(LocalDateTime.now());
         when(communityPostMapper.selectById(POST_ID)).thenReturn(hiddenPost);
         when(postLikeMapper.selectCount(any())).thenReturn(0L);
         when(favoriteMapper.selectCount(any())).thenReturn(0L);
@@ -176,7 +185,10 @@ class CommunityReportHttpTests {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.hidden").value(true))
                 .andExpect(jsonPath("$.data.hideReason").value("PRIVACY"))
-                .andExpect(jsonPath("$.data.mine").value(true));
+                .andExpect(jsonPath("$.data.mine").value(true))
+                .andExpect(jsonPath("$.data.riskStatus").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data.riskHitTime").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data.riskReviewedTime").doesNotHaveJsonPath());
 
         mvc.perform(get("/community/post/detail").param("id", String.valueOf(POST_ID))
                         .header("token", otherToken))
@@ -190,13 +202,19 @@ class CommunityReportHttpTests {
         authorHiddenReply.setContent("被隐藏回复");
         authorHiddenReply.setStatus(2);
         authorHiddenReply.setHideReason("AD");
+        authorHiddenReply.setRiskStatus("REVIEWED");
+        authorHiddenReply.setRiskHitTime(LocalDateTime.now());
+        authorHiddenReply.setRiskReviewedTime(LocalDateTime.now());
         when(communityReplyMapper.selectList(any())).thenReturn(List.of(authorHiddenReply));
 
         mvc.perform(get("/community/reply/list").param("postId", String.valueOf(POST_ID))
                         .header("token", authorToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].hidden").value(true))
-                .andExpect(jsonPath("$.data[0].hideReason").value("AD"));
+                .andExpect(jsonPath("$.data[0].hideReason").value("AD"))
+                .andExpect(jsonPath("$.data[0].riskStatus").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data[0].riskHitTime").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data[0].riskReviewedTime").doesNotHaveJsonPath());
     }
 
     @Test

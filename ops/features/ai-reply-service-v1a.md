@@ -130,6 +130,8 @@ DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解�
 
 ### 6.1 社区同步回复（2026-11-19）
 
+社区帖子和评论在保存时独立识别危机内容，识别不依赖 AI 开关。作者提示与管理员关注见[社区举报与处理契约](community-report.md#危机内容识别与关注)。
+
 `POST /internal/v1/community-replies` 使用相同内部认证、8 KiB 请求头上限、16 KiB 正文上限和上述六类错误。只接收 `request_id`、`topic_name`（允许空串，最多 50 UTF-16 单位）、`mood_type`（非空，最多 30 UTF-16 单位，接受历史标签）、`content`（非空白，最多 800 UTF-16 单位）和 `budget_ms`（1～15000）。禁止未知字段、隐式类型转换和孤立代理字符。帖子归属与代次由 Java 保持。
 
 成功回包为 `request_id`、`reply_content`、`result_kind`、`model_called`、`model_name`、`template_version=community-reply-v1`。正文和 MODEL／SUPPORT 语义复用心情规则。Java 额外要求 SUPPORT 正文逐字等于既有固定文案，校验失败按 `invalid_model_response`。危机命中跳过供应商，Java 预检命中免扣社区及全站额度，最终分流以 Python 为准。普通帖子把话题、心情和正文作为 user 消息中的 JSON，system 使用固定规则和心情模板共用的安全节。生成沿用 Python 的模型、思考模式和 `OPENAI_MAX_TOKENS`。

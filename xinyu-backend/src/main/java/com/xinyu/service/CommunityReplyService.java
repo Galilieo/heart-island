@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -80,7 +81,10 @@ public class CommunityReplyService {
                 && userId.equals(post.getUserId());
     }
 
-    public Page<AdminReplyVO> pageAdminReplies(Integer status, Long postId, Long userId, String keyword, Long pageNum, Long pageSize) {
+    /** 查询后台回复分页，可同时按可见状态和危机关注状态筛选。 */
+    public Page<AdminReplyVO> pageAdminReplies(
+            Integer status, Long postId, Long userId, String keyword,
+            String riskStatus, Long pageNum, Long pageSize) {
         QueryWrapper<CommunityReply> queryWrapper = new QueryWrapper<>();
 
         if (status != null) {
@@ -99,7 +103,7 @@ public class CommunityReplyService {
             queryWrapper.like("content", keyword.trim());
         }
 
-        queryWrapper.orderByDesc("create_time");
+        CommunityRisk.applyListFilter(queryWrapper, riskStatus);
 
         Page<CommunityReply> replyPage = communityReplyMapper.selectPage(
                 new Page<>(pageNum, pageSize),
@@ -113,20 +117,31 @@ public class CommunityReplyService {
         );
 
         voPage.setRecords(replyPage.getRecords().stream()
-                .map(reply -> new AdminReplyVO(
-                        String.valueOf(reply.getId()),
-                        String.valueOf(reply.getPostId()),
-                        String.valueOf(reply.getUserId()),
-                        reply.getContent(),
-                        reply.getAnonymousName(),
-                        reply.getStatus(),
-                        reply.getHideReason(),
-                        reply.getCreateTime(),
-                        reply.getUpdateTime()
-                ))
+                .map(reply -> {
+                    AdminReplyVO row = new AdminReplyVO(
+                            String.valueOf(reply.getId()),
+                            String.valueOf(reply.getPostId()),
+                            String.valueOf(reply.getUserId()),
+                            reply.getContent(),
+                            reply.getAnonymousName(),
+                            reply.getStatus(),
+                            reply.getHideReason(),
+                            reply.getCreateTime(),
+                            reply.getUpdateTime()
+                    );
+                    row.setRiskStatus(reply.getRiskStatus());
+                    row.setRiskHitTime(reply.getRiskHitTime());
+                    row.setRiskReviewedTime(reply.getRiskReviewedTime());
+                    return row;
+                })
                 .toList());
 
         return voPage;
+    }
+
+    /** 仅将待关注的回复标为已关注。 */
+    public AdminStatusResult reviewRisk(Long id) {
+        return CommunityRisk.markReviewed(communityReplyMapper, id);
     }
 
     /** 管理员查看回复详情（含所属帖子摘录及待处理举报摘要）。 */
@@ -149,6 +164,9 @@ public class CommunityReplyService {
         detail.setAnonymousName(reply.getAnonymousName());
         detail.setStatus(reply.getStatus());
         detail.setHideReason(reply.getHideReason());
+        detail.setRiskStatus(reply.getRiskStatus());
+        detail.setRiskHitTime(reply.getRiskHitTime());
+        detail.setRiskReviewedTime(reply.getRiskReviewedTime());
         detail.setPendingReportCount(pending.count());
         detail.setPendingReasons(pending.reasons());
         detail.setCreateTime(reply.getCreateTime());
@@ -202,11 +220,23 @@ public class CommunityReplyService {
                 : AdminStatusResult.CONFLICT;
     }
 
+    /** 回复保存的结果及仅返回提交者的支持文案。 */
+    public record ReplySaveResult(boolean saved, String supportText) {
+
+        private static ReplySaveResult saved(boolean riskHit) {
+            return new ReplySaveResult(true, riskHit ? MoodReviewSafety.SUPPORT_TEXT : null);
+        }
+
+        private static ReplySaveResult failed() {
+            return new ReplySaveResult(false, null);
+        }
+    }
+
     @Transactional
-    public Boolean add(CommunityReplyAddDTO dto, Long userId) {
+    public ReplySaveResult add(CommunityReplyAddDTO dto, Long userId) {
         CommunityPost post = communityPostMapper.selectById(dto.getPostId());
         if (post == null || !post.isVisible()) {
-            return false;
+            return ReplySaveResult.failed();
         }
 
         CommunityReply reply = new CommunityReply();
@@ -217,13 +247,20 @@ public class CommunityReplyService {
         reply.setAnonymousName("匿名岛民");
         reply.setStatus(CommunityReportConstants.STATUS_VISIBLE);
 
-        int rows = communityReplyMapper.insert(reply);
-
-        if (rows > 0) {
-            communityPostMapper.adjustReplyCount(dto.getPostId(), 1);
+        boolean riskHit = MoodReviewSafety.matches(reply.getContent());
+        if (riskHit) {
+            reply.setRiskStatus(CommunityRisk.PENDING);
+            reply.setRiskHitTime(LocalDateTime.now());
         }
 
-        return rows > 0;
+        int rows = communityReplyMapper.insert(reply);
+
+        if (rows <= 0) {
+            return ReplySaveResult.failed();
+        }
+
+        communityPostMapper.adjustReplyCount(dto.getPostId(), 1);
+        return ReplySaveResult.saved(riskHit);
     }
 
     @Transactional
@@ -257,21 +294,29 @@ public class CommunityReplyService {
     }
 
     @Transactional
-    public Boolean update(CommunityReplyUpdateDTO dto, Long userId) {
+    public ReplySaveResult update(CommunityReplyUpdateDTO dto, Long userId) {
         CommunityReply existing = communityReplyMapper.selectById(dto.getId());
         if (existing == null || !Integer.valueOf(CommunityReportConstants.STATUS_VISIBLE).equals(existing.getStatus())) {
-            return false;
+            return ReplySaveResult.failed();
         }
         CommunityPost post = communityPostMapper.selectById(existing.getPostId());
         if (post == null || !post.isVisible()) {
-            return false;
+            return ReplySaveResult.failed();
         }
 
+        String content = dto.getContent().trim();
         UpdateWrapper<CommunityReply> edit = new UpdateWrapper<>();
         edit.eq("id", dto.getId())
                 .eq("user_id", userId)
                 .eq("status", CommunityReportConstants.STATUS_VISIBLE)
-                .set("content", dto.getContent().trim());
-        return communityReplyMapper.update(null, edit) > 0;
+                .set("content", content);
+
+        boolean riskHit = MoodReviewSafety.matches(content);
+        if (riskHit) {
+            CommunityRisk.markHit(edit);
+        }
+
+        int rows = communityReplyMapper.update(null, edit);
+        return rows > 0 ? ReplySaveResult.saved(riskHit) : ReplySaveResult.failed();
     }
 }

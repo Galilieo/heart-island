@@ -6,6 +6,7 @@ import com.xinyu.dto.CommunityReplyUpdateDTO;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.service.CommunityReplyService;
 import com.xinyu.utils.JwtUtil;
+import com.xinyu.vo.CommunityWriteVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,10 +52,9 @@ public class CommunityReplyController {
 
         Long userId = jwtUtil.getUserId(token);
 
-        Boolean success = communityReplyService.add(dto, userId);
-
-        if (success) {
-            return Result.success("回复成功");
+        CommunityReplyService.ReplySaveResult result = communityReplyService.add(dto, userId);
+        if (result.saved()) {
+            return Result.success("回复成功", new CommunityWriteVO(result.supportText()));
         }
 
         return Result.error("回复失败");
@@ -93,10 +93,9 @@ public class CommunityReplyController {
         }
 
         Long userId = jwtUtil.getUserId(token);
-        Boolean success = communityReplyService.update(dto, userId);
-
-        if (success) {
-            return Result.success("修改成功");
+        CommunityReplyService.ReplySaveResult result = communityReplyService.update(dto, userId);
+        if (result.saved()) {
+            return Result.success("修改成功", new CommunityWriteVO(result.supportText()));
         }
 
         return Result.error("修改失败");

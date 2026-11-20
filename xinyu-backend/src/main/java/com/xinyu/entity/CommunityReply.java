@@ -31,6 +31,13 @@ public class CommunityReply {
     /** 管理员隐藏原因编码，见 {@link CommunityReportConstants#VALID_HIDE_REASONS}。 */
     private String hideReason;
 
+    @JsonIgnore
+    private String riskStatus;
+    @JsonIgnore
+    private LocalDateTime riskHitTime;
+    @JsonIgnore
+    private LocalDateTime riskReviewedTime;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
@@ -133,5 +140,29 @@ public class CommunityReply {
 
     public void setHidden(Boolean hidden) {
         this.hidden = hidden;
+    }
+
+    public String getRiskStatus() {
+        return riskStatus;
+    }
+
+    public void setRiskStatus(String riskStatus) {
+        this.riskStatus = riskStatus;
+    }
+
+    public LocalDateTime getRiskHitTime() {
+        return riskHitTime;
+    }
+
+    public void setRiskHitTime(LocalDateTime riskHitTime) {
+        this.riskHitTime = riskHitTime;
+    }
+
+    public LocalDateTime getRiskReviewedTime() {
+        return riskReviewedTime;
+    }
+
+    public void setRiskReviewedTime(LocalDateTime riskReviewedTime) {
+        this.riskReviewedTime = riskReviewedTime;
     }
 }

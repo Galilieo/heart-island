@@ -33,6 +33,7 @@ public class AdminReplyController {
                                            @RequestParam(required = false) Long postId,
                                            @RequestParam(required = false) Long userId,
                                            @RequestParam(required = false) String keyword,
+                                           @RequestParam(required = false) String riskStatus,
                                            @RequestParam(required = false) Long pageNum,
                                            @RequestParam(required = false) Long pageSize) {
         Long adminId = AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService);
@@ -57,11 +58,14 @@ public class AdminReplyController {
             return Result.error("每页条数不能小于1");
         }
 
+        AdminContentStatusHelper.validateRiskStatus(riskStatus);
+
         Page<AdminReplyVO> page = communityReplyService.pageAdminReplies(
                 status,
                 postId,
                 userId,
                 keyword,
+                riskStatus,
                 pageNum,
                 pageSize
         );
@@ -88,6 +92,18 @@ public class AdminReplyController {
         }
 
         return Result.success("查询成功", detail);
+    }
+
+    /** 管理员将一条待关注回复标为已关注。 */
+    @PutMapping("/{id}/risk-review")
+    public Result<Boolean> reviewRisk(
+            @RequestHeader(value = "token", required = false) String token, @PathVariable Long id) {
+        if (AdminContentStatusHelper.resolveAdminId(token, jwtUtil, userService) == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "权限不足");
+        }
+
+        AdminStatusResult outcome = communityReplyService.reviewRisk(id);
+        return AdminContentStatusHelper.toRiskReviewResult(outcome, "回复");
     }
 
     @PutMapping("/{id}/status")

@@ -3,6 +3,7 @@ package com.xinyu.controller;
 import com.xinyu.common.CommunityReportConstants;
 import com.xinyu.common.Result;
 import com.xinyu.service.AdminStatusResult;
+import com.xinyu.service.CommunityRisk;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
 import org.springframework.http.HttpStatus;
@@ -58,5 +59,22 @@ final class AdminContentStatusHelper {
             throw new ResponseStatusException(HttpStatus.CONFLICT, targetLabel + "状态已变化，请刷新后重试");
         }
         return Result.success(successMessage, true);
+    }
+
+    static void validateRiskStatus(String riskStatus) {
+        if (riskStatus != null && !CommunityRisk.PENDING.equals(riskStatus)
+                && !CommunityRisk.REVIEWED.equals(riskStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "关注状态不合法");
+        }
+    }
+
+    static Result<Boolean> toRiskReviewResult(AdminStatusResult outcome, String targetLabel) {
+        if (outcome == AdminStatusResult.NOT_FOUND) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, targetLabel + "不存在");
+        }
+        if (outcome == AdminStatusResult.CONFLICT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, targetLabel + "已不在待关注状态，列表已变化");
+        }
+        return Result.success("已标为关注", true);
     }
 }

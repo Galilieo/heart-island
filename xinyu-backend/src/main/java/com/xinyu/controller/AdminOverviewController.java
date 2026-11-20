@@ -12,6 +12,7 @@ import com.xinyu.mapper.CommunityReplyMapper;
 import com.xinyu.mapper.UserMapper;
 import com.xinyu.ratelimit.FallbackRateLimiter;
 import com.xinyu.ratelimit.RateLimitMetrics;
+import com.xinyu.service.CommunityRisk;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
 import com.xinyu.vo.AdminOverviewVO;
@@ -71,6 +72,11 @@ public class AdminOverviewController {
                 new QueryWrapper<CommunityReply>().eq("status", 2)
         );
 
+        Long riskPendingPosts = communityPostMapper.selectCount(
+                new QueryWrapper<CommunityPost>().eq(CommunityRisk.STATUS_COLUMN, CommunityRisk.PENDING));
+        Long riskPendingReplies = communityReplyMapper.selectCount(
+                new QueryWrapper<CommunityReply>().eq(CommunityRisk.STATUS_COLUMN, CommunityRisk.PENDING));
+
         Long aiReplyTotal = aiReplyMapper.selectCount(null);
         Long aiReplySuccess = aiReplyMapper.selectCount(
                 new QueryWrapper<AiReply>().eq("status", 1)
@@ -86,6 +92,8 @@ public class AdminOverviewController {
                 postHidden,
                 replyTotal,
                 replyHidden,
+                riskPendingPosts,
+                riskPendingReplies,
                 aiReplyTotal,
                 aiReplySuccess,
                 aiReplyFailed,

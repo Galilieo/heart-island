@@ -16,6 +16,10 @@ public class AdminReplyDetailVO {
     private String anonymousName;
     private Integer status;
     private String hideReason;
+
+    private String riskStatus;
+    private LocalDateTime riskHitTime;
+    private LocalDateTime riskReviewedTime;
     private Long pendingReportCount;
     private List<String> pendingReasons;
     private LocalDateTime createTime;
@@ -115,5 +119,29 @@ public class AdminReplyDetailVO {
 
     public void setUpdateTime(LocalDateTime updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getRiskStatus() {
+        return riskStatus;
+    }
+
+    public void setRiskStatus(String riskStatus) {
+        this.riskStatus = riskStatus;
+    }
+
+    public LocalDateTime getRiskHitTime() {
+        return riskHitTime;
+    }
+
+    public void setRiskHitTime(LocalDateTime riskHitTime) {
+        this.riskHitTime = riskHitTime;
+    }
+
+    public LocalDateTime getRiskReviewedTime() {
+        return riskReviewedTime;
+    }
+
+    public void setRiskReviewedTime(LocalDateTime riskReviewedTime) {
+        this.riskReviewedTime = riskReviewedTime;
     }
 }

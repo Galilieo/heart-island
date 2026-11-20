@@ -97,7 +97,8 @@ class CommunityAiPersistenceIT {
         new ResourceDatabasePopulator(
                 new FileSystemResource(migration),
                 new FileSystemResource(reportMigration),
-                new FileSystemResource(Path.of("../sql/migrations/20261119_01_community_ai_result_kind.sql"))
+                new FileSystemResource(Path.of("../sql/migrations/20261119_01_community_ai_result_kind.sql")),
+                new FileSystemResource(Path.of("../sql/migrations/20261120_01_community_risk_status.sql"))
         ).execute(source);
         var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id,ai_result_kind FROM community_post");
         assertThat(legacy.get("content")).isEqualTo("迁移前内容");
@@ -418,7 +419,7 @@ class CommunityAiPersistenceIT {
                     var dto = new CommunityReplyAddDTO();
                     dto.setPostId(id);
                     dto.setContent("合成评论");
-                    changed = comments.add(dto, 1L);
+                    changed = comments.add(dto, 1L).saved();
                 }
                 default -> {
                     long replyId = jdbc.queryForObject("SELECT id FROM community_reply WHERE post_id=?", Long.class, id);

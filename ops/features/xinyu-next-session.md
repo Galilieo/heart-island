@@ -21,7 +21,7 @@
 
 ## 下一步（按用户选择，不视为自动授权）
 
-0. **社区主线（本地开发，合并发布）**：社区 AI 回复改经 Python（复用心情的危机文案与 `resultKind`、新增 `ai_result_kind` 列、社区独立 3 名额、删除 Java 直连）已实现并提交为 `e0b1bf0`～`be032be`，未推送、未部署，见[执行记录](../../AI_WORKLOG/2026-11-19-community-ai-via-python.md)。用户 2026-11-20 决定不单独发布，[原发布任务书](../../AI_WORKLOG/plans/2026-11-19-community-ai-deploy-plan.md)已搁置。接着在本地依次做（两者都改发帖／编辑，不能并行）：① 帖子与评论危机内容识别及管理员关注（[任务书](../../AI_WORKLOG/plans/2026-11-19-community-crisis-flag-plan.md)）；② 社区异步化（[任务书](../../AI_WORKLOG/plans/2026-11-19-community-ai-async-plan.md)）。两项完成后另写合并发布任务书，三项一次上线；Python 社区端点尚未在真实供应商上调用成功，真实采样关口放在合并发布中。①②均未开工。
+0. **社区主线（本地开发，合并发布）**：社区 AI 回复改经 Python（复用心情的危机文案与 `resultKind`、新增 `ai_result_kind` 列、社区独立 3 名额、删除 Java 直连）已实现并提交为 `e0b1bf0`～`be032be`，未推送、未部署，见[执行记录](../../AI_WORKLOG/2026-11-19-community-ai-via-python.md)。用户 2026-11-20 决定不单独发布，[原发布任务书](../../AI_WORKLOG/plans/2026-11-19-community-ai-deploy-plan.md)已搁置。接着在本地依次做（两者都改发帖／编辑，不能并行）：① 帖子与评论危机内容识别及管理员关注（[任务书](../../AI_WORKLOG/plans/2026-11-19-community-crisis-flag-plan.md)）；② 社区异步化（[任务书](../../AI_WORKLOG/plans/2026-11-19-community-ai-async-plan.md)）。两项完成后另写合并发布任务书，三项一次上线；Python 社区端点尚未在真实供应商上调用成功，真实采样关口放在合并发布中。①已实现、未部署（见[执行记录](../../AI_WORKLOG/2026-11-20-community-crisis-flag.md)）；②未开工。
 1. 阶段 3 之前：危机回应增强（1b 延后项）与回顾提示词缺口一起做，配套回归测评（会产生模型调用费用，另行授权）。
 2. 阶段 3“围绕记录继续聊”：按[总方案](xinyu-upgrade-master-plan.md)第 9 节出方案。
 3. 展示主线：前端改版第 3～5 步，按[第2步方案的后续章节](../../AI_WORKLOG/plans/2026-11-11-frontend-step2-home-plan.md#9-后续步骤仅供衔接不在本步实施)讨论；月历按月最多取 200 条，超出不完整。

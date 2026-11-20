@@ -15,14 +15,17 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import TopicFilter from '../components/community/TopicFilter.vue'
 import PostCard from '../components/community/PostCard.vue'
+import CommunitySupportDialog from '../components/community/CommunitySupportDialog.vue'
 import PostPublishForm from '../components/community/PostPublishForm.vue'
 import { useCommunityStore } from '../stores/community'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
+import { communitySupportText } from '../utils/communityRisk'
 
 const router = useRouter()
 const communityStore = useCommunityStore()
 const toast = useToast()
+const supportText = ref(null)
 
 const { topics, posts, filters, postsPage, postsTotal, postsPages } = storeToRefs(communityStore)
 
@@ -78,6 +81,7 @@ async function handlePublish(payload) {
     if (res.refreshFailed) toast.warn('帖子已保存，列表刷新失败，请刷新查看')
     // 额度不足时帖子已保存但没生成小芽回复；后端会把提示延长，成功 toast 后补一句。
     if (res.message && res.message !== '发布成功') toast.info(res.message)
+    supportText.value = communitySupportText(res, payload.needAiReply)
   }
 }
 
@@ -228,6 +232,7 @@ onMounted(async () => {
         />
       </BaseDialog>
     </div>
+    <CommunitySupportDialog :text="supportText" @close="supportText = null" />
   </AppShell>
 </template>
 

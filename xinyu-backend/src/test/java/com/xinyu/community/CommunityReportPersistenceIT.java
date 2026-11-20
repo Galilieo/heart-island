@@ -7,6 +7,10 @@ import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.xinyu.dto.AdminReportHandleDTO;
 import com.xinyu.dto.CommunityReportCreateDTO;
+import com.xinyu.dto.CommunityPostAddDTO;
+import com.xinyu.dto.CommunityPostUpdateDTO;
+import com.xinyu.dto.CommunityReplyAddDTO;
+import com.xinyu.dto.CommunityReplyUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.mapper.CommunityPostMapper;
@@ -20,6 +24,8 @@ import com.xinyu.service.AdminStatusResult;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.service.CommunityReplyService;
 import com.xinyu.service.CommunityReportService;
+import com.xinyu.vo.AdminPostVO;
+import com.xinyu.vo.AdminReplyVO;
 import com.xinyu.vo.AdminReportQueueRowVO;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -45,6 +52,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -102,6 +110,8 @@ class CommunityReportPersistenceIT {
         jdbc.execute("ALTER TABLE user ADD COLUMN username VARCHAR(50) NULL, ADD COLUMN nickname VARCHAR(50) NULL, "
                 + "ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'USER', ADD COLUMN status TINYINT NOT NULL DEFAULT 1");
 
+        verifyRiskMigration(source);
+
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         var configuration = new MybatisConfiguration();
@@ -146,6 +156,33 @@ class CommunityReportPersistenceIT {
         ReflectionTestUtils.setField(replyService, "contentReportMapper", reportMapper);
     }
 
+    private static void verifyRiskMigration(DriverManagerDataSource source) {
+        jdbc.update("INSERT INTO topic(id,name,status) VALUES (1,'测试话题',1)");
+        jdbc.update("INSERT INTO community_post(id,user_id,topic_id,mood_type,content) VALUES (10,1,1,'低落','我不想活了')");
+        jdbc.update("INSERT INTO community_reply(id,post_id,user_id,content) VALUES (20,10,1,'我不想活了')");
+
+        new ResourceDatabasePopulator(new FileSystemResource(
+                Path.of("../sql/migrations/20261120_01_community_risk_status.sql"))).execute(source);
+
+        for (String table : List.of("community_post", "community_reply")) {
+            List<String> columns = jdbc.queryForList("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_schema=DATABASE() AND table_name=?
+                      AND ordinal_position BETWEEN
+                        (SELECT ordinal_position FROM information_schema.columns
+                         WHERE table_schema=DATABASE() AND table_name=? AND column_name='hide_reason')
+                        AND
+                        (SELECT ordinal_position FROM information_schema.columns
+                         WHERE table_schema=DATABASE() AND table_name=? AND column_name='create_time')
+                    ORDER BY ordinal_position
+                    """, String.class, table, table, table);
+            assertThat(columns).containsExactly(
+                    "hide_reason", "risk_status", "risk_hit_time", "risk_reviewed_time", "create_time");
+            assertThat(jdbc.queryForList("SELECT risk_status, risk_hit_time, risk_reviewed_time FROM " + table))
+                    .singleElement().satisfies(row -> assertThat(row.values()).containsOnlyNulls());
+        }
+    }
+
     @BeforeEach
     void resetFixtures() {
         jdbc.update("DELETE FROM content_report");
@@ -163,6 +200,150 @@ class CommunityReportPersistenceIT {
                 + "(9,'admin','管理员','ADMIN',1)");
         jdbc.update("INSERT INTO topic(id,name,status) VALUES (1,'情绪树洞',1)");
         ReflectionTestUtils.setField(reportService, "clock", Clock.system(SHANGHAI));
+    }
+
+    @Test
+    void postRiskAndContentAreSavedTogetherAndFailedEditLeavesBothUntouched() {
+        CommunityPostAddDTO add = new CommunityPostAddDTO();
+        add.setTopicId(1L);
+        add.setMoodType("低落");
+        add.setContent("  我不想活了  ");
+        add.setNeedAiReply(false);
+        assertThat(postService.add(add, 1L).saved()).isTrue();
+        long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
+        String table = "community_post";
+        assertPending(table, id);
+        assertThat(riskRow(table, id)).containsEntry("content", "我不想活了");
+
+        CommunityPostUpdateDTO edit = new CommunityPostUpdateDTO();
+        edit.setId(id);
+        edit.setTopicId(1L);
+        edit.setMoodType("低落");
+        edit.setNeedAiReply(false);
+        edit.setContent("比较平静的一天");
+        var beforeEdit = riskRow(table, id);
+        assertThat(postService.update(edit, 2L).saved()).isFalse();
+        assertThat(riskRow(table, id)).isEqualTo(beforeEdit);
+
+        assertThat(postService.update(edit, 1L).saved()).isTrue();
+        assertThat(riskRow(table, id)).containsEntry("content", "比较平静的一天")
+                .containsEntry("risk_status", "PENDING")
+                .containsEntry("risk_hit_time", beforeEdit.get("risk_hit_time"));
+
+        assertThat(postService.reviewRisk(id)).isEqualTo(AdminStatusResult.UPDATED);
+        assertThat(riskRow(table, id)).containsEntry("risk_status", "REVIEWED")
+                .extractingByKey("risk_reviewed_time").isNotNull();
+        assertThat(postService.reviewRisk(id)).isEqualTo(AdminStatusResult.CONFLICT);
+        assertThat(postService.reviewRisk(999L)).isEqualTo(AdminStatusResult.NOT_FOUND);
+
+        var beforeFailedEdit = riskRow(table, id);
+        edit.setContent("我不想活了" + "x".repeat(70_000));
+        assertThatThrownBy(() -> postService.update(edit, 1L))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(riskRow(table, id)).isEqualTo(beforeFailedEdit);
+
+        edit.setContent("我不想活了");
+        assertThat(postService.update(edit, 1L).saved()).isTrue();
+        assertPending(table, id);
+
+        assertThat(postService.delete(id, 1L)).isTrue();
+        assertPending(table, id);
+        assertThat(postService.pageAdminPosts(null, null, null, null, null, null, "PENDING", 1L, 10L).getRecords())
+                .extracting(AdminPostVO::getId).containsExactly(Long.toString(id));
+    }
+
+    @Test
+    void replyRiskSurvivesNonMatchingEditAndAdminHide() {
+        jdbc.update("INSERT INTO community_post(id,user_id,topic_id,mood_type,content) VALUES (100,1,1,'低落','测试正文')");
+        CommunityReplyAddDTO add = new CommunityReplyAddDTO();
+        add.setPostId(100L);
+        add.setContent("  我不想活了  ");
+        txTemplate.executeWithoutResult(status -> replyService.add(add, 2L));
+        long id = jdbc.queryForObject("SELECT id FROM community_reply", Long.class);
+        String table = "community_reply";
+        assertPending(table, id);
+        assertThat(riskRow(table, id)).containsEntry("content", "我不想活了");
+
+        CommunityReplyUpdateDTO edit = new CommunityReplyUpdateDTO();
+        edit.setId(id);
+        edit.setContent("比较平静的一天");
+        var beforeEdit = riskRow(table, id);
+        txTemplate.executeWithoutResult(status -> replyService.update(edit, 1L));
+        assertThat(riskRow(table, id)).isEqualTo(beforeEdit);
+
+        txTemplate.executeWithoutResult(status -> replyService.update(edit, 2L));
+        assertThat(riskRow(table, id)).containsEntry("content", "比较平静的一天")
+                .containsEntry("risk_status", "PENDING")
+                .containsEntry("risk_hit_time", beforeEdit.get("risk_hit_time"));
+
+        assertThat(replyService.reviewRisk(id)).isEqualTo(AdminStatusResult.UPDATED);
+        assertThat(riskRow(table, id)).containsEntry("risk_status", "REVIEWED")
+                .extractingByKey("risk_reviewed_time").isNotNull();
+        assertThat(replyService.reviewRisk(id)).isEqualTo(AdminStatusResult.CONFLICT);
+        assertThat(replyService.reviewRisk(999L)).isEqualTo(AdminStatusResult.NOT_FOUND);
+
+        var beforeFailedEdit = riskRow(table, id);
+        edit.setContent("我不想活了" + "x".repeat(70_000));
+        assertThatThrownBy(() -> txTemplate.executeWithoutResult(status -> replyService.update(edit, 2L)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(riskRow(table, id)).isEqualTo(beforeFailedEdit);
+
+        edit.setContent("我不想活了");
+        txTemplate.executeWithoutResult(status -> replyService.update(edit, 2L));
+        assertPending(table, id);
+
+        txTemplate.executeWithoutResult(status -> assertThat(
+                replyService.updateAdminStatusWithOutcome(id, 2, "AD")).isEqualTo(AdminStatusResult.UPDATED));
+        assertPending(table, id);
+        assertThat(replyService.pageAdminReplies(null, null, null, null, "PENDING", 1L, 10L).getRecords())
+                .extracting(AdminReplyVO::getId).containsExactly(Long.toString(id));
+    }
+
+    private static Map<String, Object> riskRow(String table, long id) {
+        return jdbc.queryForMap(
+                "SELECT content,risk_status,risk_hit_time,risk_reviewed_time FROM " + table + " WHERE id=?", id);
+    }
+
+    private static void assertPending(String table, long id) {
+        assertThat(riskRow(table, id)).containsEntry("risk_status", "PENDING")
+                .containsEntry("risk_reviewed_time", null)
+                .extractingByKey("risk_hit_time").isNotNull();
+    }
+
+    @Test
+    void adminRiskFiltersComposeWithVisibilityAndOrderPendingByHitTime() {
+        jdbc.update("""
+                INSERT INTO community_post(id,user_id,topic_id,mood_type,content,status,risk_status,risk_hit_time,create_time)
+                VALUES (100,1,1,'低落','旧命中',1,'PENDING','2026-11-18','2026-11-17'),
+                       (101,1,1,'低落','新命中并隐藏',2,'PENDING','2026-11-19','2026-11-16'),
+                       (102,1,1,'低落','已关注',0,'REVIEWED','2026-11-20','2026-11-18'),
+                       (103,1,1,'平静','未命中',1,NULL,NULL,'2026-11-19')
+                """);
+        jdbc.update("""
+                INSERT INTO community_reply(id,post_id,user_id,content,status,risk_status,risk_hit_time,create_time)
+                VALUES (200,100,2,'旧命中',1,'PENDING','2026-11-18','2026-11-17'),
+                       (201,100,2,'新命中并删除',0,'PENDING','2026-11-19','2026-11-16'),
+                       (202,100,2,'已关注',2,'REVIEWED','2026-11-20','2026-11-18'),
+                       (203,100,2,'未命中',1,NULL,NULL,'2026-11-19')
+                """);
+
+        assertThat(postService.pageAdminPosts(null, null, null, null, null, null, "PENDING", 1L, 10L).getRecords())
+                .extracting(AdminPostVO::getId).containsExactly("101", "100");
+        assertThat(postService.pageAdminPosts(1, null, null, null, null, null, "PENDING", 1L, 10L).getRecords())
+                .extracting(AdminPostVO::getId).containsExactly("100");
+        assertThat(postService.pageAdminPosts(null, null, null, null, null, null, "REVIEWED", 1L, 10L).getRecords())
+                .extracting(AdminPostVO::getId).containsExactly("102");
+        assertThat(postService.pageAdminPosts(null, null, null, null, null, null, null, 1L, 10L).getRecords())
+                .extracting(AdminPostVO::getId).containsExactly("103", "102", "100", "101");
+
+        assertThat(replyService.pageAdminReplies(null, null, null, null, "PENDING", 1L, 10L).getRecords())
+                .extracting(AdminReplyVO::getId).containsExactly("201", "200");
+        assertThat(replyService.pageAdminReplies(1, null, null, null, "PENDING", 1L, 10L).getRecords())
+                .extracting(AdminReplyVO::getId).containsExactly("200");
+        assertThat(replyService.pageAdminReplies(null, null, null, null, "REVIEWED", 1L, 10L).getRecords())
+                .extracting(AdminReplyVO::getId).containsExactly("202");
+        assertThat(replyService.pageAdminReplies(null, null, null, null, null, 1L, 10L).getRecords())
+                .extracting(AdminReplyVO::getId).containsExactly("203", "202", "200", "201");
     }
 
     @Test

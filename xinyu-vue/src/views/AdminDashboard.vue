@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { RouterLink } from 'vue-router'
+import { PENDING_RISK } from '../utils/communityRisk'
 import AdminPageTitle from '../components/admin/AdminPageTitle.vue'
 import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import { useAdminStore } from '../stores/admin'
@@ -54,7 +56,21 @@ const statGroups = computed(() => [
       { label: '帖子总数', value: overview.value.postTotal, hint: '社区发布内容数量' },
       { label: '隐藏帖子', value: overview.value.postHidden, hint: '后台已隐藏的帖子' },
       { label: '回复总数', value: overview.value.replyTotal, hint: '帖子下的互动回复' },
-      { label: '隐藏回复', value: overview.value.replyHidden, hint: '后台已隐藏的回复' }
+      { label: '隐藏回复', value: overview.value.replyHidden, hint: '后台已隐藏的回复' },
+      {
+        label: '待关注危机内容',
+        value: overview.value.riskPendingPosts + overview.value.riskPendingReplies,
+        links: [
+          {
+            label: `帖子 ${overview.value.riskPendingPosts}`,
+            to: { path: '/admin/posts', query: { riskStatus: PENDING_RISK } }
+          },
+          {
+            label: `评论 ${overview.value.riskPendingReplies}`,
+            to: { path: '/admin/replies', query: { riskStatus: PENDING_RISK } }
+          }
+        ]
+      }
     ]
   },
   {
@@ -111,7 +127,13 @@ onMounted(() => {
             <strong class="admin-dashboard__kpi-value">
               {{ item.value || 0 }}
             </strong>
+            <div v-if="item.links" class="admin-dashboard__kpi-links">
+              <RouterLink v-for="link in item.links" :key="link.to.path" :to="link.to">
+                {{ link.label }}
+              </RouterLink>
+            </div>
             <p
+              v-else
               class="admin-dashboard__kpi-hint"
               :class="{
                 'is-danger': item.tone === 'danger',
@@ -179,6 +201,18 @@ onMounted(() => {
   font-weight: 700;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+}
+
+.admin-dashboard__kpi-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: var(--fs-sm);
+}
+
+.admin-dashboard__kpi-links a {
+  color: var(--brand-deep);
+  text-decoration: underline;
 }
 
 .admin-dashboard__kpi-hint {

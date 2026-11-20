@@ -1,13 +1,21 @@
 <script setup>
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import BaseDialog from '../ui/BaseDialog.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseSelect from '../ui/BaseSelect.vue'
 import BaseTag from '../ui/BaseTag.vue'
 import SkeletonCard from '../ui/SkeletonCard.vue'
-import { HIDE_REASONS, contentStatusMeta, reasonLabel } from '../../utils/communityReport'
+import AdminStatus from './AdminStatus.vue'
+import { PENDING_RISK, riskStatusMeta } from '../../utils/communityRisk'
+import {
+  HIDE_REASONS,
+  contentStatusMeta,
+  formatFullDateTime,
+  reasonLabel
+} from '../../utils/communityReport'
 
-defineProps({
+const props = defineProps({
   modelValue: {
     type: Boolean,
     required: true
@@ -40,6 +48,7 @@ defineProps({
     type: Boolean,
     default: false
   },
+  reviewingRisk: Boolean,
   readonlyTip: {
     type: String,
     required: true
@@ -50,8 +59,12 @@ const emit = defineEmits([
   'update:modelValue',
   'update:selectedHideReason',
   'close',
-  'status-action'
+  'status-action',
+  'risk-review'
 ])
+
+const riskStatus = computed(() => riskStatusMeta(props.detail?.riskStatus))
+const saving = computed(() => props.savingStatus || props.reviewingRisk)
 
 function formatPendingReasons(reasons) {
   if (!reasons?.length) {
@@ -66,8 +79,8 @@ function formatPendingReasons(reasons) {
     :model-value="modelValue"
     :title="title"
     width="lg"
-    :persistent="savingStatus"
-    @update:model-value="emit('update:modelValue', $event)"
+    :persistent="saving"
+    @update:model-value="!saving && emit('update:modelValue', $event)"
     @close="emit('close')"
   >
     <SkeletonCard v-if="loading" rows="4" />
@@ -92,6 +105,15 @@ function formatPendingReasons(reasons) {
         <p>{{ section.content || '-' }}</p>
       </section>
 
+      <section v-if="riskStatus" class="admin-content-dialog__detail-section">
+        <h3>危机关注</h3>
+        <AdminStatus :text="riskStatus.text" :tone="riskStatus.tone" />
+        <p v-if="detail.riskHitTime">最近命中 {{ formatFullDateTime(detail.riskHitTime) }}</p>
+        <p v-if="detail.riskReviewedTime">
+          关注时间 {{ formatFullDateTime(detail.riskReviewedTime) }}
+        </p>
+      </section>
+
       <section class="admin-content-dialog__detail-section">
         <h3>相关举报</h3>
         <p v-if="detail.pendingReportCount > 0">
@@ -107,6 +129,16 @@ function formatPendingReasons(reasons) {
 
     <template #footer>
       <div v-if="detail" class="admin-content-dialog__footer">
+        <div v-if="detail.riskStatus === PENDING_RISK" class="admin-content-dialog__risk-action">
+          <BaseButton
+            variant="primary"
+            :disabled="saving"
+            :loading="reviewingRisk"
+            @click="emit('risk-review')"
+          >
+            标为已关注
+          </BaseButton>
+        </div>
         <div v-if="detail.status === 1" class="admin-content-dialog__footer-row">
           <BaseSelect
             :model-value="selectedHideReason"
@@ -116,12 +148,12 @@ function formatPendingReasons(reasons) {
             @update:model-value="emit('update:selectedHideReason', $event)"
           />
           <div class="admin-content-dialog__footer-btns">
-            <BaseButton variant="plain" :disabled="savingStatus" @click="emit('close')">
+            <BaseButton variant="plain" :disabled="saving" @click="emit('close')">
               关闭
             </BaseButton>
             <BaseButton
               variant="danger"
-              :disabled="savingStatus"
+              :disabled="saving"
               :loading="savingStatus"
               @click="emit('status-action', 2)"
             >
@@ -135,12 +167,12 @@ function formatPendingReasons(reasons) {
             隐藏原因：{{ reasonLabel(detail.hideReason) }}（作者看得到）
           </span>
           <div class="admin-content-dialog__footer-btns">
-            <BaseButton variant="plain" :disabled="savingStatus" @click="emit('close')">
+            <BaseButton variant="plain" :disabled="saving" @click="emit('close')">
               关闭
             </BaseButton>
             <BaseButton
               variant="primary"
-              :disabled="savingStatus"
+              :disabled="saving"
               :loading="savingStatus"
               @click="emit('status-action', 1)"
             >
@@ -151,7 +183,7 @@ function formatPendingReasons(reasons) {
 
         <div v-else class="admin-content-dialog__footer-row">
           <span class="admin-content-dialog__readonly-tip">{{ readonlyTip }}</span>
-          <BaseButton variant="plain" @click="emit('close')">关闭</BaseButton>
+          <BaseButton variant="plain" :disabled="saving" @click="emit('close')">关闭</BaseButton>
         </div>
       </div>
       <BaseButton v-else variant="plain" @click="emit('close')">关闭</BaseButton>
@@ -223,6 +255,12 @@ function formatPendingReasons(reasons) {
 
 .admin-content-dialog__footer {
   width: 100%;
+}
+
+.admin-content-dialog__risk-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
 
 .admin-content-dialog__footer-row {

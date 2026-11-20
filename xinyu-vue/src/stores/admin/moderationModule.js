@@ -1,5 +1,6 @@
 import { reactive, ref } from 'vue'
 import { adminApi } from '../../api'
+import { refreshAfterSave } from '../../utils/saved-result.js'
 import {
   appendNumericFilter,
   appendTrimmedFilter,
@@ -16,6 +17,7 @@ export function createModerationModule() {
   const postsFilters = reactive({
     resultKind: '',
     status: '',
+    riskStatus: '',
     topicId: '',
     postId: '',
     userId: '',
@@ -35,6 +37,7 @@ export function createModerationModule() {
   const repliesLoading = ref(false)
   const replyFilters = reactive({
     status: '',
+    riskStatus: '',
     postId: '',
     userId: '',
     keyword: ''
@@ -57,6 +60,23 @@ export function createModerationModule() {
     return res
   }
 
+  async function reviewRisk(requestPromise, fetchPage, pagination, pageCount) {
+    const result = await requestPromise
+    if (!result.ok && result.status !== 409) {
+      return result
+    }
+
+    const refreshFailed = await refreshAfterSave(async () => {
+      const page = await fetchPage()
+      if (page.ok && Number(pagination.pageNum) > pageCount.value) {
+        pagination.pageNum = pageCount.value
+        return fetchPage()
+      }
+      return page
+    })
+    return { ...result, refreshFailed }
+  }
+
   async function fetchPosts() {
     postsLoading.value = true
     const params = {
@@ -64,6 +84,7 @@ export function createModerationModule() {
       pageSize: postPagination.pageSize
     }
     appendNumericFilter(params, 'status', postsFilters.status)
+    appendTrimmedFilter(params, 'riskStatus', postsFilters.riskStatus)
     appendNumericFilter(params, 'topicId', postsFilters.topicId)
     appendTrimmedFilter(params, 'postId', postsFilters.postId)
     appendTrimmedFilter(params, 'userId', postsFilters.userId)
@@ -79,6 +100,10 @@ export function createModerationModule() {
     } finally {
       postsLoading.value = false
     }
+  }
+
+  function reviewPostRisk(id) {
+    return reviewRisk(adminApi.reviewPostRisk(id), fetchPosts, postPagination, postPages)
   }
 
   function updatePostStatus(id, status, hideReason) {
@@ -98,8 +123,9 @@ export function createModerationModule() {
     return fetchPosts()
   }
 
-  function resetPostFilters() {
+  function resetPostFilters(riskStatus = '') {
     postsFilters.status = ''
+    postsFilters.riskStatus = riskStatus
     postsFilters.topicId = ''
     postsFilters.postId = ''
     postsFilters.userId = ''
@@ -121,6 +147,7 @@ export function createModerationModule() {
       pageSize: replyPagination.pageSize
     }
     appendNumericFilter(params, 'status', replyFilters.status)
+    appendTrimmedFilter(params, 'riskStatus', replyFilters.riskStatus)
     appendTrimmedFilter(params, 'postId', replyFilters.postId)
     appendTrimmedFilter(params, 'userId', replyFilters.userId)
     appendTrimmedFilter(params, 'keyword', replyFilters.keyword)
@@ -134,6 +161,10 @@ export function createModerationModule() {
     } finally {
       repliesLoading.value = false
     }
+  }
+
+  function reviewReplyRisk(id) {
+    return reviewRisk(adminApi.reviewReplyRisk(id), fetchReplies, replyPagination, replyPages)
   }
 
   function updateReplyStatus(id, status, hideReason) {
@@ -156,8 +187,9 @@ export function createModerationModule() {
     return fetchReplies()
   }
 
-  function resetReplyFilters() {
+  function resetReplyFilters(riskStatus = '') {
     replyFilters.status = ''
+    replyFilters.riskStatus = riskStatus
     replyFilters.postId = ''
     replyFilters.userId = ''
     replyFilters.keyword = ''
@@ -179,6 +211,7 @@ export function createModerationModule() {
     fetchPosts,
     fetchPostDetail,
     updatePostStatus,
+    reviewPostRisk,
     removePost,
     searchPosts,
     resetPostFilters,
@@ -191,6 +224,7 @@ export function createModerationModule() {
     fetchReplies,
     fetchReplyDetail,
     updateReplyStatus,
+    reviewReplyRisk,
     removeReply,
     searchReplies,
     resetReplyFilters,

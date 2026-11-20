@@ -391,3 +391,96 @@ test('举报与话题与 AI 记录管理：筛选、切换 Tab、翻页与更新
     request.defaults.adapter = prevAdapter
   }
 })
+
+for (const target of ['post', 'reply']) {
+  test(`危机关注：${target} 列表传风险筛选，成功或 409 后刷新`, async () => {
+    const calls = []
+    const previousAdapter = request.defaults.adapter
+    let reviewCount = 0
+    request.defaults.adapter = async (config) => {
+      calls.push({ url: config.url, method: config.method, params: config.params })
+      if (config.method === 'get') {
+        return ok(config, { records: [], total: '0', current: '1', size: '10' })
+      }
+      if (++reviewCount === 2) {
+        throw httpError(config, 409, '已不在待关注状态')
+      }
+      return ok(config, true)
+    }
+    try {
+      const store = useAdminStore()
+      const posts = target === 'post'
+      const search = posts ? store.searchPosts : store.searchReplies
+      const reset = posts ? store.resetPostFilters : store.resetReplyFilters
+      const review = posts ? store.reviewPostRisk : store.reviewReplyRisk
+      const filters = posts ? store.postsFilters : store.replyFilters
+      const listUrl = `/admin/${target}/page`
+      const reviewUrl = `/admin/${target}/10/risk-review`
+
+      await reset('PENDING')
+      assert.equal(calls[0].params.riskStatus, 'PENDING')
+
+      assert.equal((await review('10')).ok, true)
+      const conflict = await review('10')
+      assert.equal(conflict.status, 409)
+      assert.equal(conflict.message, '已不在待关注状态')
+      assert.deepEqual(
+        calls.slice(1).map(({ url, method }) => [url, method]),
+        [
+          [reviewUrl, 'put'],
+          [listUrl, 'get'],
+          [reviewUrl, 'put'],
+          [listUrl, 'get']
+        ]
+      )
+
+      filters.riskStatus = 'REVIEWED'
+      await search()
+      assert.equal(calls.at(-1).params.riskStatus, 'REVIEWED')
+      await reset()
+      assert.equal(calls.at(-1).params.riskStatus, undefined)
+    } finally {
+      request.defaults.adapter = previousAdapter
+    }
+  })
+}
+
+test('概览保留待关注分项并将 Long 字符串转成数字', async () => {
+  const previousAdapter = request.defaults.adapter
+  request.defaults.adapter = async (config) =>
+    ok(config, { riskPendingPosts: '2', riskPendingReplies: '3' })
+  try {
+    const store = useAdminStore()
+    await store.fetchOverview()
+    assert.equal(store.overview.riskPendingPosts, 2)
+    assert.equal(store.overview.riskPendingReplies, 3)
+  } finally {
+    request.defaults.adapter = previousAdapter
+  }
+})
+
+test('危机关注成功或 409 时，保留结果并单独报告列表刷新失败', async () => {
+  const previousAdapter = request.defaults.adapter
+  request.defaults.adapter = async (config) => {
+    if (config.method === 'get') {
+      throw new Error('刷新失败')
+    }
+    if (config.url.includes('/reply/')) {
+      throw httpError(config, 409, '已不在待关注状态')
+    }
+    return ok(config, true)
+  }
+  try {
+    const store = useAdminStore()
+    const success = await store.reviewPostRisk('10')
+    assert.equal(success.ok, true)
+    assert.equal(success.refreshFailed, true)
+
+    const conflict = await store.reviewReplyRisk('20')
+    assert.equal(conflict.status, 409)
+    assert.equal(conflict.message, '已不在待关注状态')
+    assert.equal(conflict.refreshFailed, true)
+  } finally {
+    request.defaults.adapter = previousAdapter
+  }
+})

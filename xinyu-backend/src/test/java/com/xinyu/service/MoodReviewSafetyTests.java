@@ -2,6 +2,7 @@ package com.xinyu.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -14,6 +15,18 @@ class MoodReviewSafetyTests {
         for (var entry : corpus.get("cases")) {
             assertThat(MoodReviewSafety.matches(entry.get("content").asText()))
                     .as(entry.get("content").asText()).isEqualTo(entry.get("support").asBoolean());
+        }
+    }
+    @Test
+    void frontendDoesNotKeepACopyOfSupportText() throws Exception {
+        try (var files = Files.walk(Path.of("../xinyu-vue/src"))) {
+            for (Path path : files.filter(Files::isRegularFile).toList()) {
+                String name = path.getFileName().toString();
+                if (name.endsWith(".vue") || name.endsWith(".js")) {
+                    assertThat(Files.readString(path)).as(path.toString())
+                            .doesNotContain(MoodReviewSafety.SUPPORT_TEXT);
+                }
+            }
         }
     }
 }

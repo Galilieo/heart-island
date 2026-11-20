@@ -96,6 +96,16 @@
 | PUT | `/admin/post/{id}/status`<br>`/admin/reply/{id}/status` | 隐藏 / 恢复 | Query: `status`(`1`/`2`), `hideReason`(`status=2` 必填)；传 `0` 返回 `400`；状态已变化返回 `409` |
 | DELETE | `/admin/post/{id}`<br>`/admin/reply/{id}` | 兼容隐藏入口 | Query: `hideReason`(必填)；行为与 `status=2` 一致，由后续迭代评估下线 |
 
+## 危机内容识别与关注
+
+- 发布或编辑帖子、评论时，Java 对即将保存的去首尾空白后的正文调用 `MoodReviewSafety.matches`。与 AI 开关、额度及回复生成结果无关。命中时，正文与 `PENDING`、最近命中时间、清空关注时间在同一条 SQL 中写入。编辑未命中时原关注状态及时间保留。已关注的内容再次编辑命中，重新待关注。
+- `POST /community/post/add`、`POST /community/post/update`、`POST /community/reply/add`、`POST /community/reply/update` 成功响应的 `data.supportText` 为后端固定 `SUPPORT_TEXT` 或 `null`。命中的评论及关闭 AI 的帖子只向提交者弹窗，开启 AI 的帖子仍以公开 SUPPORT 回复呈现。保存与正常展示照常进行。公开读取、作者视图、收藏及我的举报均不含关注字段。
+- `GET /admin/post/page` 与 `GET /admin/reply/page` 可叠加 `riskStatus=PENDING|REVIEWED`，非法值返回 400。筛选待关注按最近命中时间倒序，同秒按 ID 倒序，其余保持发布时间倒序。列表及详情返回 `riskStatus`、`riskHitTime`、`riskReviewedTime`。作者删除或管理员隐藏不会清除关注状态，默认待关注筛选仍包含这些内容。
+- `PUT /admin/post/{id}/risk-review` 与 `PUT /admin/reply/{id}/risk-review` 只允许有效管理员访问。原子地将 `PENDING` 更新为 `REVIEWED` 并记录关注时间。不存在为 404，已关注或从未命中为 409。关注仅表示管理员已查看，内容可见状态及面向作者的展示保持原状。
+- `GET /admin/overview` 分别以 `riskPendingPosts`、`riskPendingReplies` 返回两表全部 `PENDING` 数量，涵盖隐藏及作者删除的内容。概览卡片分别入口到预筛选的帖子和评论管理页。
+- 迁移在两表 `hide_reason` 后各加三个可空字段。历史数据保持 NULL，发布时另做一次只读历史命中统计。当前直接筛选和计数，数据量增长后再评估 `(risk_status, risk_hit_time)` 索引。
+- 正则增强、自动隐藏、管理员主动关怀、历史回填及心情关闭 AI 时的识别另议。
+
 ## 验收标准
 
 1. 被隐藏（`status=2`）帖子与回复在列表、收藏、详情（非作者）、抱抱、收藏、新增回复、举报、编辑入口均不可用；作者本人查看时可看隐藏提示与原因并执行删除，无法再编辑或互动。

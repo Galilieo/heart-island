@@ -8,6 +8,7 @@ import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.utils.JwtUtil;
+import com.xinyu.vo.CommunityWriteVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -96,7 +97,7 @@ public class CommunityPostController {
         if (result.saved()) {
             return Result.success(result.aiReplyLimited()
                     ? "发布成功，小芽这会儿回复不过来，稍后可以编辑重新生成"
-                    : "发布成功", null);
+                    : "发布成功", new CommunityWriteVO(result.supportText()));
         }
         return Result.error("发布失败");
     }
@@ -182,7 +183,7 @@ public class CommunityPostController {
         if (result.saved()) {
             return Result.success(result.aiReplyLimited()
                     ? "修改成功，小芽这会儿回复不过来，稍后可以再次编辑重新生成"
-                    : "修改成功", null);
+                    : "修改成功", new CommunityWriteVO(result.supportText()));
         }
 
         return Result.error("修改失败");
