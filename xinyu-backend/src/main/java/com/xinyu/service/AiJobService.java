@@ -122,10 +122,10 @@ public class AiJobService {
     public AiJob claimNext() {
         if (!workerEnabled) return null;
         return admission.transaction(() -> {
-            AiJob candidate = jobs.selectNextQueued();
+            AiJob candidate = jobs.selectNextQueued(TASK_TYPE_MOOD_REPLY);
             if (candidate == null) return reviews == null ? null : reviews.claimNext();
             String requestId = UUID.randomUUID().toString();
-            if (jobs.claim(candidate.getId(), candidate.getAttemptCount(), requestId) != 1) return null;
+            if (jobs.claimByType(TASK_TYPE_MOOD_REPLY, candidate.getId(), candidate.getAttemptCount(), requestId) != 1) return null;
             // 同一事务内重新读取，返回 CAS 之后的真实行并锁到提交。
             return jobs.selectForUpdate(candidate.getId());
         });
@@ -266,7 +266,7 @@ public class AiJobService {
 
     /** 仅供唯一启用 worker 且旧进程已停止后的启动流程调用；此阶段不自动注册调度。 */
     public int recoverInterrupted() {
-        return workerEnabled ? jobs.failInterrupted() + (reviews == null ? 0 : reviews.recoverInterrupted()) : 0;
+        return workerEnabled ? jobs.failInterruptedByType(TASK_TYPE_MOOD_REPLY) + (reviews == null ? 0 : reviews.recoverInterrupted()) : 0;
     }
 
     /** 调用方先按用户过滤来源，并在同一读取事务内组合列表或详情。 */
@@ -338,7 +338,7 @@ public class AiJobService {
     }
 
     private boolean finish(AiJob job, String status, String errorCode, MoodAiResponse result) {
-        return jobs.finishAttempt(job, status, errorCode, result == null ? null : result.resultKind(),
+        return jobs.finishAttemptByType(TASK_TYPE_MOOD_REPLY, job, status, errorCode, result == null ? null : result.resultKind(),
                 result == null ? null : result.modelCalled(), result == null ? null : result.modelName()) == 1;
     }
 

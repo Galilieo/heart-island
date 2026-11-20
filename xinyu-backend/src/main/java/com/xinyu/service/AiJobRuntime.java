@@ -21,9 +21,10 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.IntSupplier;
 
 /**
- * 单进程 worker 生命周期：恢复成功后才扫描，空闲槽位才领取，数据库仍是唯一待办队列。
+ * 一组任务的 Worker 生命周期。心情组与社区组分别创建实例，各自恢复、扫描和管理执行名额。
  *
  * <p>线程约定：扫描线程只补空槽；领取、来源预检、结果提交和失败收尾都在数据库执行器上执行；
  * 网络等待由内部客户端的 HTTP 线程承担。停止时先关领取闸门与真实 I/O，再等待执行退出并关闭执行器。</p>
@@ -38,8 +39,8 @@ public final class AiJobRuntime implements SmartLifecycle, AutoCloseable {
     private enum State { NEW, STARTING, RUNNING, FAILED, STOPPING, STOPPED }
 
     private final Object lifecycle = new Object();
-    private final AiJobService jobs;
-    private final AiServiceClient client;
+    private final IntSupplier recoverRunningJobs;
+    private final Transport transport;
     private final AiJobWorker worker;
     private final TransactionTemplate recoveryTransactions;
     private final ScheduledExecutorService scanner;
@@ -55,20 +56,27 @@ public final class AiJobRuntime implements SmartLifecycle, AutoCloseable {
 
     public AiJobRuntime(AiJobService jobs, AiServiceClient client, PlatformTransactionManager manager,
                         int concurrency, Duration scanInterval, Duration shutdownTimeout) {
+        this(jobs::recoverInterrupted, new MoodJobStrategy(jobs, client), client, manager,
+                concurrency, scanInterval, shutdownTimeout, AiJobWorker.GENERATION_LIMIT);
+    }
+
+    public AiJobRuntime(IntSupplier recoverRunningJobs, AiJobWorker.Strategy strategy, Transport transport,
+                        PlatformTransactionManager manager, int concurrency, Duration scanInterval,
+                        Duration shutdownTimeout, Duration generationLimit) {
         requirePositive(scanInterval);
         requirePositive(shutdownTimeout);
         if (concurrency < 1) {
             throw invalidConfiguration();
         }
 
-        this.jobs = jobs;
-        this.client = client;
+        this.recoverRunningJobs = recoverRunningJobs;
+        this.transport = transport;
         this.concurrency = concurrency;
         this.scanInterval = scanInterval;
         this.shutdownTimeout = shutdownTimeout;
         scanner = Executors.newSingleThreadScheduledExecutor(task -> daemon(task, "ai-job-scan"));
         database = newDatabaseExecutor(concurrency);
-        worker = new AiJobWorker(jobs, client, manager, database, System::nanoTime, this::isRunning);
+        worker = new AiJobWorker(strategy, generationLimit, manager, database, System::nanoTime, this::isRunning);
         recoveryTransactions = new TransactionTemplate(manager);
         recoveryTransactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         recoveryTransactions.setTimeout(RECOVERY_TIMEOUT_SECONDS);
@@ -96,7 +104,7 @@ public final class AiJobRuntime implements SmartLifecycle, AutoCloseable {
     /** 启动恢复只执行一次；失败时保留 FAILED 状态且不扫描，异常不携带 SQL、地址或凭据。 */
     private void recoverInterrupted() {
         try {
-            recoveryTransactions.execute(status -> jobs.recoverInterrupted());
+            recoveryTransactions.execute(status -> recoverRunningJobs.getAsInt());
         } catch (RuntimeException failure) {
             synchronized (lifecycle) {
                 if (state == State.STARTING) {
@@ -227,9 +235,9 @@ public final class AiJobRuntime implements SmartLifecycle, AutoCloseable {
         // 本轮等待即便失败，在途执行稍后结束时也会继续关闭数据库执行器。
         settled.thenRun(database::shutdown);
         // 先取消真实 I/O；此时必须保留数据库执行器，接住取消引起的失败收尾。
-        client.close();
+        transport.close();
         settled.get(remainingNanos(deadlineNanos), TimeUnit.NANOSECONDS);
-        if (!client.awaitTermination(Duration.ofNanos(remainingNanos(deadlineNanos)))) {
+        if (!transport.awaitTermination(Duration.ofNanos(remainingNanos(deadlineNanos)))) {
             throw new TimeoutException();
         }
     }
@@ -291,6 +299,12 @@ public final class AiJobRuntime implements SmartLifecycle, AutoCloseable {
     @Override
     public void close() {
         stop();
+    }
+
+    /** 单个 Runtime 持有的传输生命周期，关闭时先取消 I/O 再等待线程退出。 */
+    public interface Transport {
+        void close();
+        boolean awaitTermination(Duration remaining) throws InterruptedException;
     }
 
     private record StopPlan(CompletableFuture<Void> attempt, List<CompletableFuture<?>> pending,

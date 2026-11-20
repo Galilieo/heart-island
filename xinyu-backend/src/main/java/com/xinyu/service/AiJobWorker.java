@@ -1,9 +1,6 @@
 package com.xinyu.service;
 
-import com.xinyu.dto.MoodAiRequest;
-import com.xinyu.dto.MoodAiResponse;
 import com.xinyu.entity.AiJob;
-import com.xinyu.entity.MoodRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -16,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.LongSupplier;
 
 /**
@@ -29,10 +27,9 @@ import java.util.function.LongSupplier;
 public final class AiJobWorker {
     private static final Logger logger = LoggerFactory.getLogger(AiJobWorker.class);
 
-    // Task3预算约定：生成阶段共50秒，其中传给Python的处理预算最多40秒。
-    private static final Duration GENERATION_LIMIT = Duration.ofSeconds(50);
-    private static final int PROVIDER_BUDGET_MS = 40_000;
-    // Task3短事务的SQL超时配置为5秒，不涵盖连接获取、网络及提交／回滚的全部等待。
+    // 心情组生成阶段最多 50 秒；Python 预算最多 40 秒，余量给连接、传输和本地校验。
+    static final Duration GENERATION_LIMIT = Duration.ofSeconds(50);
+    // SQL 超时不覆盖连接获取、JDBC 网络等待和提交，数据源另设有界等待。
     private static final int DATABASE_TIMEOUT_SECONDS = 5;
     private static final String PROVIDER_TIMEOUT_CODE = "provider_timeout";
     private static final String INTERNAL_ERROR_CODE = "internal_error";
@@ -40,8 +37,8 @@ public final class AiJobWorker {
     /** 一次执行的结果：无任务、跳过、成功、已标记失败、失败收尾也未完成。 */
     public enum Outcome { IDLE, SKIPPED, SUCCEEDED, FAILED, UNRESOLVED }
 
-    private final AiJobService jobs;
-    private final AiServiceClient client;
+    private final Strategy strategy;
+    private final Duration generationLimit;
     private final Executor database;
     private final LongSupplier nanoTime;
     private final BooleanSupplier acceptingClaims;
@@ -57,8 +54,14 @@ public final class AiJobWorker {
     /** 生命周期闸门在领取真正开始前读取；已经开始的领取仍须按在途执行完成收尾。 */
     public AiJobWorker(AiJobService jobs, AiServiceClient client, PlatformTransactionManager manager,
                        Executor database, LongSupplier nanoTime, BooleanSupplier acceptingClaims) {
-        this.jobs = Objects.requireNonNull(jobs);
-        this.client = Objects.requireNonNull(client);
+        this(new MoodJobStrategy(jobs, client), GENERATION_LIMIT, manager, database, nanoTime, acceptingClaims);
+    }
+
+    /** 使用单调纳秒时钟计算期限，领取前通过 acceptingClaims 检查运行时是否还接受新任务。 */
+    public AiJobWorker(Strategy strategy, Duration generationLimit, PlatformTransactionManager manager,
+                       Executor database, LongSupplier nanoTime, BooleanSupplier acceptingClaims) {
+        this.strategy = Objects.requireNonNull(strategy);
+        this.generationLimit = Objects.requireNonNull(generationLimit);
         this.database = Objects.requireNonNull(database);
         this.nanoTime = Objects.requireNonNull(nanoTime);
         this.acceptingClaims = Objects.requireNonNull(acceptingClaims);
@@ -76,12 +79,12 @@ public final class AiJobWorker {
             return null;
         }
 
-        AiJob job = shortTransactions.execute(status -> jobs.claimNext());
+        AiJob job = shortTransactions.execute(status -> strategy.claim());
         if (job == null) {
             return null;
         }
 
-        long deadlineNanos = nanoTime.getAsLong() + GENERATION_LIMIT.toNanos();
+        long deadlineNanos = nanoTime.getAsLong() + generationLimit.toNanos();
         // 保存领取时的身份快照，后续不再依赖可变实体的 attempt 或 requestId。
         Attempt attempt = new Attempt(job.getId(), job.getAttemptCount(),
                 job.getRequestId(), job.getTargetVersion(), job.getTaskType());
@@ -98,78 +101,41 @@ public final class AiJobWorker {
             // 交接排队可能已经耗尽预算，过期时不再发起来源查询。
             requireBudget(claimed);
 
-            if (MoodReviewService.TASK_TYPE.equals(attempt.taskType())) {
-                return generateReview(claimed);
-            }
-
-            // 预检可能将失效来源标为superseded，因而也必须限制更新时的锁等待。
-            MoodRecord source = shortTransactions.execute(status ->
-                    jobs.sourceForAttempt(attempt.jobId(), attempt.attemptNumber(), attempt.requestId()));
-            if (source == null) {
+            Prepared<?> prepared = shortTransactions.execute(status -> strategy.prepare(attempt));
+            if (prepared == null) {
                 return CompletableFuture.completedFuture(Outcome.SKIPPED);
             }
 
-            long remainingNanos = budgetLeftNanos(claimed);
-            if (remainingNanos <= 0) {
-                throw new AiServiceException(PROVIDER_TIMEOUT_CODE);
-            }
-
-            MoodAiRequest request = new MoodAiRequest(attempt.requestId(), Long.toString(attempt.jobId()),
-                    attempt.attemptNumber(), Long.toString(attempt.sourceVersion()), source.getMoodType(),
-                    source.getContent(), PROVIDER_BUDGET_MS);
-
-            AiServiceClient.Generation generation = client.startGeneration(request, Duration.ofNanos(remainingNanos));
-            CompletableFuture<Outcome> settled = generation.response()
-                    .handleAsync((reply, problem) -> settle(attempt, reply, problem), database);
-            // 数据库收尾与 HTTP 清理都结束后，生命周期层才可以归还本次执行槽位。
-            return settled.thenCombine(generation.terminated(), (outcome, ignored) -> outcome);
+            requireBudget(claimed);
+            return execute(attempt, prepared, Duration.ofNanos(budgetLeftNanos(claimed)));
         } catch (RuntimeException problem) {
             return CompletableFuture.completedFuture(finishFailure(attempt, errorCode(problem)));
         }
     }
 
-    private CompletableFuture<Outcome> generateReview(Claimed claimed) {
-        Attempt attempt = claimed.attempt();
-        MoodReviewService.Prepared prepared = shortTransactions.execute(status ->
-                jobs.prepareReview(attempt.jobId(), attempt.attemptNumber(), attempt.requestId()));
-        if (prepared == null) {
-            return CompletableFuture.completedFuture(Outcome.SKIPPED);
+    private <R> CompletableFuture<Outcome> execute(Attempt attempt, Prepared<R> prepared, Duration remaining) {
+        if (prepared.localReply() != null) {
+            return CompletableFuture.completedFuture(settle(attempt, prepared, prepared.localReply(), null));
         }
-        requireBudget(claimed);
-        if (prepared.support() != null) {
-            return CompletableFuture.completedFuture(settleReview(attempt, prepared.support(), null));
-        }
-        AiServiceClient.ReviewGeneration generation = client.startReviewGeneration(prepared.request(),
-                Duration.ofNanos(budgetLeftNanos(claimed)));
-        return generation.response().handleAsync((reply, problem) -> settleReview(attempt, reply, problem), database)
-                .thenCombine(generation.terminated(), (outcome, ignored) -> outcome);
+
+        AiServiceClient.Exchange<R> generation = prepared.start().apply(remaining);
+        CompletableFuture<Outcome> settled = generation.response()
+                .handleAsync((reply, problem) -> settle(attempt, prepared, reply, problem), database);
+        // 归还槽位要等数据库收尾与 HTTP 清理均结束。
+        return settled.thenCombine(generation.terminated(), (outcome, ignored) -> outcome);
     }
 
-    private Outcome settleReview(Attempt attempt, com.xinyu.dto.ReviewAiResponse reply, Throwable problem) {
+    private <R> Outcome settle(Attempt attempt, Prepared<R> prepared, R reply, Throwable problem) {
         if (problem != null) {
             return finishFailure(attempt, errorCode(problem));
         }
+
         try {
-            Boolean completed = shortTransactions.execute(status -> jobs.completeReview(
-                    attempt.jobId(), attempt.attemptNumber(), attempt.requestId(), reply));
-            return Boolean.TRUE.equals(completed) ? Outcome.SUCCEEDED : Outcome.SKIPPED;
+            Settlement completed = shortTransactions.execute(status -> prepared.complete().apply(reply));
+            afterCommit(completed);
+            return completed.changed() ? Outcome.SUCCEEDED : Outcome.SKIPPED;
         } catch (RuntimeException failure) {
-            return finishFailure(attempt, INTERNAL_ERROR_CODE);
-        }
-    }
-
-    private Outcome settle(Attempt attempt, MoodAiResponse reply, Throwable problem) {
-        if (problem != null) {
-            return finishFailure(attempt, errorCode(problem));
-        }
-
-        try {
-            Boolean completed = shortTransactions.execute(status ->
-                    jobs.complete(attempt.jobId(), attempt.attemptNumber(), attempt.requestId(), reply));
-            // false 可能已由服务标记 superseded 或 failed；不得再次覆盖它的条件终态。
-            return Boolean.TRUE.equals(completed) ? Outcome.SUCCEEDED : Outcome.SKIPPED;
-        } catch (RuntimeException completionFailure) {
-            // 捕获点在 execute 之外，原提交事务已结束；这里不能重新调用模型。
+            // 原事务已经结束，失败收尾使用新的短事务。
             return finishFailure(attempt, INTERNAL_ERROR_CODE);
         }
     }
@@ -178,19 +144,26 @@ public final class AiJobWorker {
         // 在独立短事务中按本次身份条件标记 failed；条件未命中不能覆盖旧状态。
         // 收尾事务也失败时，只记录安全追踪字段，不能打印原异常、正文或堆栈。
         try {
-            Boolean marked = shortTransactions.execute(status -> jobs.fail(
-                    attempt.jobId(),
-                    attempt.attemptNumber(),
-                    attempt.requestId(),
-                    code));
-
-            return Boolean.TRUE.equals(marked) ? Outcome.FAILED : Outcome.SKIPPED;
+            Settlement marked = shortTransactions.execute(status -> strategy.fail(attempt, code));
+            afterCommit(marked);
+            return marked.changed() ? Outcome.FAILED : Outcome.SKIPPED;
         } catch (RuntimeException cleanupFailure) {
             logger.warn("任务失败收尾未完成 jobId={} attempt={} code={}",
                     attempt.jobId(),
                     attempt.attemptNumber(),
                     code);
             return Outcome.UNRESOLVED;
+        }
+    }
+
+    private static void afterCommit(Settlement settlement) {
+        if (settlement.afterCommit() == null) {
+            return;
+        }
+        try {
+            settlement.afterCommit().run();
+        } catch (RuntimeException problem) {
+            logger.warn("任务提交后附加写入失败 code=internal_error");
         }
     }
 
@@ -221,7 +194,33 @@ public final class AiJobWorker {
         return cause instanceof AiServiceException safe ? safe.code() : INTERNAL_ERROR_CODE;
     }
 
-    private record Attempt(long jobId, int attemptNumber, String requestId, long sourceVersion, String taskType) { }
+    /** 数据库执行器上的领域策略，方法均在 Worker 管理的短事务中运行。 */
+    public interface Strategy {
+        /** @return 已领取的任务快照；若队列为空或领取条件更新未命中，返回 null。 */
+        AiJob claim();
+
+        /** @return 本次准备结果；尝试或来源已失效时返回 null，Worker 跳过生成。 */
+        Prepared<?> prepare(Attempt attempt);
+
+        /** @return 失败状态是否已写入，以及提交后可选的附加动作。 */
+        Settlement fail(Attempt attempt, String code);
+    }
+
+    /**
+     * 预检产物。有本地回复时直接完成；否则在事务外启动传输。
+     * 两条路径的 complete 都由 Worker 在新的数据库短事务中调用。
+     */
+    public record Prepared<R>(R localReply, Function<Duration, AiServiceClient.Exchange<R>> start,
+                              Function<R, Settlement> complete) { }
+
+    /** 提交后的附加动作不应改变原事务的结果。 */
+    public record Settlement(boolean changed, Runnable afterCommit) {
+        static Settlement of(boolean changed) {
+            return new Settlement(changed, null);
+        }
+    }
+
+    public record Attempt(long jobId, int attemptNumber, String requestId, long sourceVersion, String taskType) { }
 
     private record Claimed(Attempt attempt, long deadlineNanos) { }
 }

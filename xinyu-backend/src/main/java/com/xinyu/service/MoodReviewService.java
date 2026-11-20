@@ -40,6 +40,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import static com.xinyu.common.AiJobValues.FAILED;
+import static com.xinyu.common.AiJobValues.MODEL;
+import static com.xinyu.common.AiJobValues.MOOD_REVIEW;
+import static com.xinyu.common.AiJobValues.QUEUED;
+import static com.xinyu.common.AiJobValues.RUNNING;
+import static com.xinyu.common.AiJobValues.SUCCEEDED;
+import static com.xinyu.common.AiJobValues.SUPERSEDED;
+import static com.xinyu.common.AiJobValues.SUPPORT;
+
 /**
  * 本人回顾的保存与版本入口。创建时用户行锁跨实例去重；来源集合在短事务内读取。
  * 网络等待由 worker 管理，任何数据库锁都不跨越模型调用。
@@ -49,7 +58,7 @@ public class MoodReviewService {
 
     /** 阶段 2 契约第 5 节：报告独立模板，不改变日记回复模板。 */
     public static final String TEMPLATE = "mood-review-v1";
-    public static final String TASK_TYPE = "MOOD_REVIEW";
+    public static final String TASK_TYPE = MOOD_REVIEW;
 
     private static final int MAX_QUEUED = 100;
     private static final int MAX_USER_ACTIVE = 3;
@@ -211,10 +220,10 @@ public class MoodReviewService {
             if (!matches(row, job, records)) {
                 throw http(HttpStatus.CONFLICT, "source_changed");
             }
-            if (List.of("queued", "running", "succeeded").contains(job.getStatus())) {
+            if (List.of(QUEUED, RUNNING, SUCCEEDED).contains(job.getStatus())) {
                 return ownedView(job);
             }
-            if (!"failed".equals(job.getStatus())) {
+            if (!FAILED.equals(job.getStatus())) {
                 throw http(HttpStatus.CONFLICT, "job_not_retryable");
             }
 
@@ -233,7 +242,7 @@ public class MoodReviewService {
             if (reviewJobs.requeueReviewAfterCooldown(job, cooldown) != 1) {
                 throw http(HttpStatus.CONFLICT, "job_changed");
             }
-            reports.markActive(row.id(), "queued");
+            reports.markActive(row.id(), QUEUED);
             return ownedView(job(jobId));
         });
     }
@@ -244,15 +253,15 @@ public class MoodReviewService {
 
     /** 仅在 worker 的领取短事务中调用；领取后同步报告状态。 */
     public AiJob claimNext() {
-        AiJob candidate = reviewJobs.selectNextReviewQueued();
+        AiJob candidate = reviewJobs.selectNextQueued(TASK_TYPE);
         if (candidate == null) {
             return null;
         }
         String requestId = UUID.randomUUID().toString();
-        if (reviewJobs.claimReview(candidate.getId(), candidate.getAttemptCount(), requestId) != 1) {
+        if (reviewJobs.claimByType(TASK_TYPE, candidate.getId(), candidate.getAttemptCount(), requestId) != 1) {
             return null;
         }
-        reports.markActive(candidate.getTargetId(), "running");
+        reports.markActive(candidate.getTargetId(), RUNNING);
         return reviewJobs.selectForUpdate(candidate.getId());
     }
 
@@ -277,7 +286,7 @@ public class MoodReviewService {
 
             ReviewAiResponse support = context.crisis()
                     ? new ReviewAiResponse(requestId, request.jobId(), attempt, request.sourceVersion(),
-                            MoodReviewSafety.SUPPORT_TEXT, null, "SUPPORT", false, TEMPLATE, null)
+                            MoodReviewSafety.SUPPORT_TEXT, null, SUPPORT, false, TEMPLATE, null)
                     : null;
             return new Prepared(request, support);
         });
@@ -303,11 +312,11 @@ public class MoodReviewService {
                     throw new IllegalArgumentException("invalid_model_response");
                 }
             } catch (IllegalArgumentException invalid) {
-                finish(locked, "failed", "invalid_model_response", null);
+                finish(locked, FAILED, "invalid_model_response", null);
                 return false;
             }
 
-            if (!finish(locked, "succeeded", null, response)) {
+            if (!finish(locked, SUCCEEDED, null, response)) {
                 return false;
             }
             reports.saveResult(row.id(), response);
@@ -322,12 +331,12 @@ public class MoodReviewService {
             return false;
         }
         String safe = ALLOWED_ERROR_CODES.contains(code == null ? "" : code) ? code : "internal_error";
-        return finish(job, "failed", safe, null);
+        return finish(job, FAILED, safe, null);
     }
 
     /** 在唯一 worker 启动恢复事务中同步两表，保留历史成功报告。 */
     public int recoverInterrupted() {
-        int changed = reviewJobs.failInterruptedReviews();
+        int changed = reviewJobs.failInterruptedByType(TASK_TYPE);
         reports.recoverInterrupted();
         return changed;
     }
@@ -375,7 +384,7 @@ public class MoodReviewService {
             return null;
         }
         if (!matches(row, locked, records)) {
-            finish(locked, "superseded", null, null);
+            finish(locked, SUPERSEDED, null, null);
             return null;
         }
 
@@ -389,10 +398,10 @@ public class MoodReviewService {
 
     private Report latestFailed(long userId, String type, LocalDate start, List<MoodRecord> records) {
         MoodReview latestAttempt = reports.latestAttempt(userId, type, start);
-        if (latestAttempt == null || !"failed".equals(latestAttempt.status())) {
+        if (latestAttempt == null || !FAILED.equals(latestAttempt.status())) {
             return null;
         }
-        if (!"failed".equals(reports.jobStatus(latestAttempt.id(), latestAttempt.revision()))) {
+        if (!FAILED.equals(reports.jobStatus(latestAttempt.id(), latestAttempt.revision()))) {
             return null;
         }
         Report candidate = view(latestAttempt, records, false);
@@ -410,10 +419,10 @@ public class MoodReviewService {
         String resultKind = response == null ? null : response.resultKind();
         Boolean modelCalled = response == null ? null : response.modelCalled();
         String modelName = response == null ? null : response.modelName();
-        int changed = reviewJobs.finishReviewAttempt(job, state, error, resultKind, modelCalled, modelName);
+        int changed = reviewJobs.finishAttemptByType(TASK_TYPE, job, state, error, resultKind, modelCalled, modelName);
         if (changed == 1) {
-            boolean superseded = "superseded".equals(state);
-            String reportState = superseded ? "failed" : state;
+            boolean superseded = SUPERSEDED.equals(state);
+            String reportState = superseded ? FAILED : state;
             String reportError = error == null && superseded ? "source_changed" : error;
             reports.finish(job.getTargetId(), reportState, reportError);
         }
@@ -431,7 +440,7 @@ public class MoodReviewService {
     private static boolean current(AiJob job, int attempt, String requestId) {
         return job != null
                 && TASK_TYPE.equals(job.getTaskType())
-                && "running".equals(job.getStatus())
+                && RUNNING.equals(job.getStatus())
                 && job.getAttemptCount() == attempt
                 && Objects.equals(job.getRequestId(), requestId);
     }
@@ -450,8 +459,8 @@ public class MoodReviewService {
     private AiJobVO ownedView(AiJob job) {
         MoodReview row = load(job.getTargetId());
         Report report = view(row, sources(row.userId(), row.start(), row.end(), false), false);
-        boolean succeeded = "succeeded".equals(job.getStatus());
-        boolean failed = "failed".equals(job.getStatus());
+        boolean succeeded = SUCCEEDED.equals(job.getStatus());
+        boolean failed = FAILED.equals(job.getStatus());
         int remaining = failed
                 ? reviewJobs.selectRetryAfterSeconds(job, AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount()))
                 : 0;
@@ -535,10 +544,10 @@ public class MoodReviewService {
                 || observed.getUserId() != userId) {
             return;
         }
-        if (List.of("queued", "running", "succeeded").contains(observed.getStatus())) {
+        if (List.of(QUEUED, RUNNING, SUCCEEDED).contains(observed.getStatus())) {
             return;
         }
-        if (!"failed".equals(observed.getStatus())) {
+        if (!FAILED.equals(observed.getStatus())) {
             return;
         }
         MoodReview row = load(observed.getTargetId());
@@ -616,7 +625,7 @@ public class MoodReviewService {
     }
 
     private List<Source> citedSources(MoodReview row) {
-        if (!"succeeded".equals(row.status()) || !"MODEL".equals(row.kind()) || row.body() == null) {
+        if (!SUCCEEDED.equals(row.status()) || !MODEL.equals(row.kind()) || row.body() == null) {
             return List.of();
         }
         Set<String> cited = extractCitedRefs(row.body(), row.ps());

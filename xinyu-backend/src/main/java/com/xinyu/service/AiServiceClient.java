@@ -63,7 +63,7 @@ import java.util.function.LongSupplier;
  * 到期由定时器直接取消底层请求。失败只抛出带安全分类码的 {@link AiServiceException}，
  * 不携带原始响应、密钥或异常链。资源在 {@link #close} 时统一回收，业务事务由调用方管理。</p>
  */
-public final class AiServiceClient implements AutoCloseable {
+public final class AiServiceClient implements AutoCloseable, AiJobRuntime.Transport {
 
     /** response给出业务结果；terminated在本次HTTP执行及资源清理结束后完成，供worker归还槽位。 */
     public record Generation(CompletableFuture<MoodAiResponse> response, CompletableFuture<Void> terminated) { }
@@ -71,7 +71,7 @@ public final class AiServiceClient implements AutoCloseable {
     /** 回顾与日记共用 DNS、HTTP线程、总预算和取消机制。 */
     public record ReviewGeneration(CompletableFuture<ReviewAiResponse> response, CompletableFuture<Void> terminated) { }
 
-    private record Exchange<T>(CompletableFuture<T> response, CompletableFuture<Void> terminated) { }
+    public record Exchange<T>(CompletableFuture<T> response, CompletableFuture<Void> terminated) { }
 
     @FunctionalInterface
     private interface ResponseParser<T> {
