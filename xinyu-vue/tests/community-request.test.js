@@ -30,7 +30,7 @@ beforeEach(() => {
 
 const success = (config, data) => ({ status: 200, data: { code: 200, data }, headers: {}, config })
 
-test('社区发布和编辑单独等待20秒，普通查询仍为5秒', async () => {
+test('社区后台生成后，发布、编辑和查询都使用默认5秒', async () => {
   const sent = []
   request.defaults.adapter = async (config) => {
     sent.push(config)
@@ -41,7 +41,7 @@ test('社区发布和编辑单独等待20秒，普通查询仍为5秒', async ()
   await communityApi.postList()
   assert.deepEqual(
     sent.map((config) => config.timeout),
-    [20_000, 20_000, 5000]
+    [5000, 5000, 5000]
   )
 })
 

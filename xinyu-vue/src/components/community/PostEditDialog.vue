@@ -30,8 +30,8 @@ watch(
       topicId.value = p.topicId ?? ''
       moodType.value = p.moodType ?? ''
       content.value = p.content ?? ''
-      // 开关默认反映现状：有回复则开，没有则关
-      needAiReply.value = !!p.aiReply
+      needAiReply.value =
+        Boolean(p.aiReply) || ['queued', 'running', 'failed'].includes(p.aiReplyState)
     }
   },
   { immediate: true }

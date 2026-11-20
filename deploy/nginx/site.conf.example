@@ -17,7 +17,7 @@ location /api/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_connect_timeout 3s;
-    # 大于社区前端 20 秒等待；超时不代表写入失败，不能自动重发帖子。
+    # 上游超时不代表帖子保存失败，客户端须先刷新核对。
     proxy_read_timeout 30s;
     proxy_send_timeout 30s;
     proxy_next_upstream off;

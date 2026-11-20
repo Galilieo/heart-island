@@ -34,33 +34,44 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        boolean communityTask = path.startsWith("/community/ai-job/");
         String token = request.getHeader("token");
         if (token == null || token.isBlank()) {
-            String path = request.getRequestURI().substring(request.getContextPath().length());
             // 保留原有匿名社区读取；mine=true 仍然需要用户身份。
             boolean ownPosts = "/community/post/list".equals(path)
                     && Boolean.TRUE.equals(DefaultConversionService.getSharedInstance()
                             .convert(request.getParameter("mine"), Boolean.class));
             boolean publicRead = !adminOnly && "GET".equals(request.getMethod())
                     && PUBLIC_READS.contains(path) && !ownPosts;
-            if (publicRead) return true;
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录");
+            if (publicRead) {
+                return true;
+            }
+            throw identityError(communityTask, HttpStatus.UNAUTHORIZED, "请先登录");
         }
 
         Long userId = jwtUtil.getUserId(token);
         if (userId == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录失效，请重新登录");
+            throw identityError(communityTask, HttpStatus.UNAUTHORIZED, "登录失效，请重新登录");
         }
         User user = userService.getById(userId);
         if (user == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录失效，请重新登录");
+            throw identityError(communityTask, HttpStatus.UNAUTHORIZED, "登录失效，请重新登录");
         }
         if (!Integer.valueOf(1).equals(user.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已被禁用");
+            throw identityError(communityTask, HttpStatus.FORBIDDEN, "账号已被禁用");
         }
         if (adminOnly && !"ADMIN".equals(user.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "权限不足");
         }
         return true;
+    }
+
+    private static ResponseStatusException identityError(boolean communityTask, HttpStatus status, String message) {
+        if (communityTask) {
+            // 任务路由对所有未经授权的观察者使用同一响应。
+            return new ResponseStatusException(HttpStatus.NOT_FOUND, "回应任务不存在");
+        }
+        return new ResponseStatusException(status, message);
     }
 }

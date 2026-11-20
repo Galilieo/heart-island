@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
@@ -25,10 +26,11 @@ public class AiJobRuntimeConfig {
     private static final int SOCKET_WAIT_MS = 6000;
     private static final String CONNECT_TIMEOUT_PARAM = "connectTimeout";
     private static final String SOCKET_TIMEOUT_PARAM = "socketTimeout";
-    private static final Duration SCAN_INTERVAL = Duration.ofSeconds(1);
-    private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(25);
+    static final Duration SCAN_INTERVAL = Duration.ofSeconds(1);
+    static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(25);
 
     @Bean
+    @Primary
     public AiJobRuntime aiJobRuntime(AiJobService jobs, AiServiceClient client,
                                      PlatformTransactionManager manager, DataSource dataSource,
                                      @Value("${AI_WORKER_CONCURRENCY:3}") int concurrency) {
@@ -37,7 +39,7 @@ public class AiJobRuntimeConfig {
     }
 
     /** 数据源必须能限制连接获取、验证和 JDBC 网络读取，否则停止路径无法在预算内退出。 */
-    private static void requireBoundedDatabase(DataSource dataSource) {
+    static void requireBoundedDatabase(DataSource dataSource) {
         if (!(dataSource instanceof HikariDataSource source)) {
             throw invalidTimeouts();
         }

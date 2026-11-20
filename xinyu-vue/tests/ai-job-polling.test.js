@@ -193,3 +193,22 @@ test('120秒停止观察并取消未返回GET，不改变后端任务状态', as
   pending.resolve(job('succeeded'))
   await flush()
 })
+
+test('帖子只提供任务和帖子 ID 时仍能观察，异帖结果被丢弃', async () => {
+  const applied = []
+  let reply = job('succeeded')
+  const poller = createAiJobPoller({
+    scheduler: clock(),
+    onUpdate: (value) => applied.push(value),
+    fetchJob: async () => reply
+  })
+
+  poller.start({ jobId: '8', recordId: '11' })
+  await flush()
+  assert.deepEqual(applied, [reply])
+
+  reply = job('succeeded', { targetId: '12' })
+  poller.start({ jobId: '8', recordId: '11' })
+  await flush()
+  assert.equal(applied.length, 1)
+})

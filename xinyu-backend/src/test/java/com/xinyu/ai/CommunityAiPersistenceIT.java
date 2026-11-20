@@ -12,14 +12,23 @@ import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.dto.CommunityReplyAddDTO;
 import com.xinyu.entity.CommunityPost;
+import com.xinyu.entity.MoodRecord;
 import com.xinyu.mapper.AiReplyMapper;
+import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.CommunityReplyMapper;
 import com.xinyu.mapper.FavoriteMapper;
 import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
+import com.xinyu.ratelimit.RateLimiter;
+import com.xinyu.ratelimit.RateLimitScope;
 import com.xinyu.service.AiReplyLogService;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.AiJobService;
+import com.xinyu.service.AiJobWorker;
+import com.xinyu.service.CommunityReplyJobHandler;
+import com.xinyu.service.CommunityReplySource;
 import com.xinyu.service.AiServiceClient;
 import com.xinyu.service.CommunityAiClient;
 import com.xinyu.service.MoodReviewSafety;
@@ -38,6 +47,9 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import java.time.Duration;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -61,6 +73,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CommunityAiPersistenceIT {
     private JdbcTemplate jdbc;
+    private DataSourceTransactionManager manager;
+    private SqlSessionTemplate sessions;
+    private TransactionTemplate transactions;
+    private ExecutorService database;
+    private AiJobService jobs;
+    private AiJobAdmission admission;
     private CommunityPostService posts;
     private AiReplyLogService logs;
     private final Queue<AiServiceClientTests.Reply> expectedReplies = new ConcurrentLinkedQueue<>();
@@ -83,6 +101,9 @@ class CommunityAiPersistenceIT {
                 System.getenv().getOrDefault("AI_TEST_DB_USER", "root"),
                 System.getenv().getOrDefault("AI_TEST_DB_PASSWORD", ""));
         jdbc = new JdbcTemplate(source);
+        manager = new DataSourceTransactionManager(source);
+        transactions = new TransactionTemplate(manager);
+        admission = new AiJobAdmission(manager);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema=DATABASE()", Integer.class)).isZero();
         new ResourceDatabasePopulator(new ClassPathResource("ai/schema.sql"),
@@ -98,19 +119,23 @@ class CommunityAiPersistenceIT {
                 new FileSystemResource(migration),
                 new FileSystemResource(reportMigration),
                 new FileSystemResource(Path.of("../sql/migrations/20261119_01_community_ai_result_kind.sql")),
-                new FileSystemResource(Path.of("../sql/migrations/20261120_01_community_risk_status.sql"))
+                new FileSystemResource(Path.of("../sql/migrations/20261120_01_community_risk_status.sql")),
+                new FileSystemResource(Path.of("../sql/migrations/20261120_02_community_content_version.sql")),
+                new FileSystemResource(Path.of("../sql/migrations/20261107_01_ai_reply_job.sql"))
         ).execute(source);
-        var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id,ai_result_kind FROM community_post");
+        var legacy = jdbc.queryForMap("SELECT content,ai_reply,ai_generation_id,ai_result_kind,content_version FROM community_post");
         assertThat(legacy.get("content")).isEqualTo("迁移前内容");
         assertThat(legacy.get("ai_reply")).isEqualTo("迁移前回复");
         assertThat(legacy.get("ai_generation_id")).isNull();
         assertThat(legacy.get("ai_result_kind")).isNull();
+        assertThat(legacy.get("content_version")).isEqualTo(1L);
 
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         var configuration = new MybatisConfiguration();
         configuration.setMapUnderscoreToCamelCase(true);
         configuration.addMapper(AiReplyMapper.class);
+        configuration.addMapper(AiJobMapper.class);
         configuration.addMapper(CommunityPostMapper.class);
         configuration.addMapper(TopicMapper.class);
         configuration.addMapper(PostLikeMapper.class);
@@ -120,13 +145,19 @@ class CommunityAiPersistenceIT {
         var pagination = new MybatisPlusInterceptor();
         pagination.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         factory.setPlugins(pagination, counterInterleaving);
-        var sessions = new SqlSessionTemplate(factory.getObject());
+        sessions = new SqlSessionTemplate(factory.getObject());
         logs = new AiReplyLogService();
         ReflectionTestUtils.setField(logs, "aiReplyMapper", sessions.getMapper(AiReplyMapper.class));
         posts = new CommunityPostService();
         ReflectionTestUtils.setField(posts, "communityPostMapper", sessions.getMapper(CommunityPostMapper.class));
         ReflectionTestUtils.setField(posts, "topicMapper", sessions.getMapper(TopicMapper.class));
-        ReflectionTestUtils.setField(posts, "aiReplyLogService", logs);
+        jobs = new AiJobService(sessions.getMapper(AiJobMapper.class), null,
+                sessions.getMapper(AiReplyMapper.class), admission, new AlwaysAllowRateLimiter(), true);
+        var replySource = new CommunityReplySource(sessions.getMapper(CommunityPostMapper.class),
+                sessions.getMapper(AiJobMapper.class), jobs);
+        ReflectionTestUtils.setField(posts, "admission", admission);
+        ReflectionTestUtils.setField(posts, "jobs", jobs);
+        ReflectionTestUtils.setField(posts, "replySource", replySource);
         ReflectionTestUtils.setField(posts, "postLikeMapper", sessions.getMapper(PostLikeMapper.class));
         ReflectionTestUtils.setField(posts, "favoriteMapper", sessions.getMapper(FavoriteMapper.class));
         // 隔离库用例不关心额度：注入总是放行的替身，保持限流接入前的行为语义。
@@ -138,6 +169,7 @@ class CommunityAiPersistenceIT {
 
     @BeforeEach
     void resetSyntheticRowsAndProvider() throws Exception {
+        jdbc.update("DELETE FROM ai_job");
         jdbc.update("DELETE FROM community_post");
         jdbc.update("DELETE FROM ai_reply");
         jdbc.update("INSERT IGNORE INTO topic(id,name,status) VALUES (1,'合成话题',1)");
@@ -149,7 +181,7 @@ class CommunityAiPersistenceIT {
         });
         client = new CommunityAiClient(pythonPeer.url(), CommunityAiServiceTests.TEST_TOKEN,
                 3, AiServiceClient.Limits.COMMUNITY);
-        ReflectionTestUtils.setField(posts, "communityAiClient", client);
+        database = Executors.newFixedThreadPool(3);
     }
 
     @AfterEach
@@ -165,7 +197,24 @@ class CommunityAiPersistenceIT {
             assertThat(expectedReplies).isEmpty();
         } finally {
             expectedReplies.clear();
+            database.shutdownNow();
+            assertThat(database.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
         }
+    }
+
+    private CommunityReplyJobHandler handler(CommunityAiClient transport) {
+        return new CommunityReplyJobHandler(sessions.getMapper(AiJobMapper.class),
+                sessions.getMapper(CommunityPostMapper.class), sessions.getMapper(TopicMapper.class),
+                transport, logs);
+    }
+
+    private AiJobWorker worker(CommunityAiClient transport) {
+        return new AiJobWorker(handler(transport), Duration.ofSeconds(18),
+                manager, database, System::nanoTime, () -> true);
+    }
+
+    private void runOne() {
+        worker(client).runOne().orTimeout(12, TimeUnit.SECONDS).join();
     }
 
     @Test
@@ -214,6 +263,7 @@ class CommunityAiPersistenceIT {
             respond(socket, 200, "{}");
         });
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+        runOne();
         var saved = jdbc.queryForMap("SELECT * FROM community_post WHERE id=?", id);
         assertThat(saved.get("content")).isEqualTo("合成新内容");
         assertThat(saved.get("ai_reply")).isNull();
@@ -232,6 +282,7 @@ class CommunityAiPersistenceIT {
         });
 
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+        runOne();
 
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
                 .as("关闭AI后，进行中的旧响应也不能恢复回复").isNull();
@@ -263,6 +314,8 @@ class CommunityAiPersistenceIT {
         expectedReplies.add(generatedReply("当前回复"));
 
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+        runOne();
+        runOne();
 
         var saved = jdbc.queryForMap("SELECT content,mood_type,topic_id,ai_reply,ai_result_kind FROM community_post WHERE id=?", id);
         assertThat(saved.get("content")).isEqualTo(newer.getContent());
@@ -278,21 +331,22 @@ class CommunityAiPersistenceIT {
         long id = existingPost();
         expectedReplies.add((socket, input, wire) -> {
             if (action.startsWith("删除")) {
-                assertThat(posts.delete(id, 1L)).isTrue();
+                assertThat(transactions.<Boolean>execute(tx -> posts.delete(id, 1L))).isTrue();
                 if (action.endsWith("恢复")) {
                     // 作者删除（status=0）不可由管理员恢复
-                    assertThat(posts.updateAdminStatus(id, 1, null)).isNull();
+                    assertThat(transactions.<CommunityPost>execute(tx -> posts.updateAdminStatus(id, 1, null))).isNull();
                 }
             } else {
-                assertThat(posts.updateAdminStatus(id, 2, "AD")).isNotNull();
+                assertThat(transactions.<CommunityPost>execute(tx -> posts.updateAdminStatus(id, 2, "AD"))).isNotNull();
                 if (action.endsWith("恢复")) {
-                    assertThat(posts.updateAdminStatus(id, 1, null)).isNotNull();
+                    assertThat(transactions.<CommunityPost>execute(tx -> posts.updateAdminStatus(id, 1, null))).isNotNull();
                 }
             }
             generatedReply("过期回复").send(socket, input, wire);
         });
 
         assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+        runOne();
 
         var saved = jdbc.queryForMap("SELECT status,ai_reply,ai_generation_id,ai_result_kind FROM community_post WHERE id=?", id);
         int expectedStatus = "隐藏后恢复".equals(action) ? 1 : ("隐藏".equals(action) ? 2 : 0);
@@ -300,6 +354,7 @@ class CommunityAiPersistenceIT {
         assertThat(saved.get("ai_reply")).isNull();
         assertThat(saved.get("ai_result_kind")).isNull();
         assertThat(saved.get("ai_generation_id")).isNull();
+        assertThat(jdbc.queryForObject("SELECT status FROM ai_job", String.class)).isEqualTo("superseded");
     }
 
     @Test
@@ -307,7 +362,6 @@ class CommunityAiPersistenceIT {
         long id = existingPost();
         CountDownLatch oldWaiting = new CountDownLatch(1);
         CountDownLatch releaseOld = new CountDownLatch(1);
-        ExecutorService editor = Executors.newSingleThreadExecutor();
         expectedReplies.add((socket, input, wire) -> {
             oldWaiting.countDown();
             try {
@@ -321,15 +375,17 @@ class CommunityAiPersistenceIT {
         expectedReplies.add(generatedReply("当前回复"));
 
         try {
-            var oldSave = editor.submit(() -> posts.update(edit(id, true), 1L));
+            assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+            var oldJob = worker(client).runOne();
             assertThat(oldWaiting.await(3, TimeUnit.SECONDS)).isTrue();
-            assertThat(oldSave).as("旧HTTP响应仍在另一个线程等待").isNotDone();
+            assertThat(oldJob).as("旧HTTP响应仍在另一个线程等待").isNotDone();
 
             assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+            runOne();
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
                     .isEqualTo("当前回复");
             releaseOld.countDown();
-            assertThat(oldSave.get(3, TimeUnit.SECONDS).saved()).isTrue();
+            assertThat(oldJob.get(3, TimeUnit.SECONDS)).isEqualTo(AiJobWorker.Outcome.SKIPPED);
 
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post WHERE id=?", String.class, id))
                     .as("真实双线程交错下，迟到旧响应不能覆盖已保存的新回复").isEqualTo("当前回复");
@@ -337,8 +393,6 @@ class CommunityAiPersistenceIT {
                     .isEqualTo("MODEL");
         } finally {
             releaseOld.countDown();
-            editor.shutdownNow();
-            assertThat(editor.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
         }
     }
 
@@ -380,13 +434,16 @@ class CommunityAiPersistenceIT {
     void generationIdIsNotExposedInPublicPostJson() {
         expectedReplies.add(generatedReply("合成回复"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
+        runOne();
         long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
 
         var saved = posts.pagePosts(new Page<>(1, 10), null, null, false, "latest").getRecords().get(0);
         assertThat(saved.getId()).isEqualTo(id);
-        assertThat(saved.getAiGenerationId()).isNotBlank();
+        assertThat(saved.getContentVersion()).isEqualTo(1L);
         var json = new ObjectMapper().findAndRegisterModules().valueToTree(saved);
         assertThat(json.has("aiGenerationId")).isFalse();
+        assertThat(json.has("contentVersion")).isFalse();
+        assertThat(json.has("jobId")).isFalse();
         assertThat(json.path("aiReply").asText()).isEqualTo("合成回复");
         assertThat(json.path("resultKind").asText()).isEqualTo("MODEL");
         assertThat(json.has("aiResultKind")).isFalse();
@@ -433,7 +490,8 @@ class CommunityAiPersistenceIT {
             assertThat(saved.get("content")).isEqualTo("合成新内容");
             assertThat(saved.get("ai_reply")).isNull();
             assertThat(saved.get("ai_result_kind")).isNull();
-            assertThat(saved.get("ai_generation_id")).isNull();
+            assertThat(saved.get("ai_generation_id")).isEqualTo("00000000-0000-0000-0000-000000000001");
+            assertThat(saved.get("content_version")).isEqualTo(2L);
             int expectedLikes = switch (action) {
                 case "点赞" -> 8;
                 case "取消点赞" -> 6;
@@ -461,6 +519,7 @@ class CommunityAiPersistenceIT {
     void validProviderReplyStillAppearsOnSavedPost() {
         expectedReplies.add(generatedReply("合成回复"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
+        runOne();
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isEqualTo("合成回复");
         assertThat(jdbc.queryForObject("SELECT ai_result_kind FROM community_post", String.class)).isEqualTo("MODEL");
         assertThat(jdbc.queryForObject("SELECT prompt FROM ai_reply", String.class)).isNull();
@@ -472,6 +531,7 @@ class CommunityAiPersistenceIT {
         expectedReplies.add((socket, input, wire) ->
                 respond(socket, 502, "{\"request_id\":null,\"code\":\"provider_error\"}"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
+        runOne();
 
         var row = jdbc.queryForMap("SELECT * FROM ai_reply");
         assertThat(row.get("status")).isEqualTo(0);
@@ -488,6 +548,7 @@ class CommunityAiPersistenceIT {
         var dto = add();
         dto.setContent("我不想活了");
         assertThat(posts.add(dto, 1L).saved()).isTrue();
+        runOne();
 
         var saved = jdbc.queryForMap("SELECT ai_reply,ai_result_kind FROM community_post");
         assertThat(saved.get("ai_reply")).isEqualTo(MoodReviewSafety.SUPPORT_TEXT);
@@ -499,6 +560,7 @@ class CommunityAiPersistenceIT {
     void wrongSupportTextNeverAppearsOnThePost() {
         expectedReplies.add(response("SUPPORT", "合成错误文案"));
         assertThat(posts.add(add(), 1L).saved()).isTrue();
+        runOne();
 
         var saved = jdbc.queryForMap("SELECT ai_reply,ai_result_kind FROM community_post");
         assertThat(saved.get("ai_reply")).isNull();
@@ -513,13 +575,14 @@ class CommunityAiPersistenceIT {
         AtomicInteger requests = new AtomicInteger();
         try (var peer = CommunityAiTimeoutTests.stalledPeer(new CompletableFuture<>(), requests, false);
              var generator = CommunityAiTimeoutTests.shortTimeoutClient(peer.url())) {
-            ReflectionTestUtils.setField(posts, "communityAiClient", generator);
 
             assertThat(posts.add(add(), 1L).saved()).isTrue();
+            worker(generator).runOne().join();
             long id = jdbc.queryForObject("SELECT id FROM community_post", Long.class);
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
             jdbc.update("UPDATE community_post SET ai_reply='合成历史回复' WHERE id=?", id);
             assertThat(posts.update(edit(id, true), 1L).saved()).isTrue();
+            worker(generator).runOne().join();
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply WHERE status=0 "
                     + "AND error_message LIKE 'provider_timeout%' AND prompt IS NULL AND reply_content IS NULL", Integer.class))
@@ -535,6 +598,7 @@ class CommunityAiPersistenceIT {
         try {
             expectedReplies.add((socket, input, wire) -> respond(socket, 200, "{}"));
             assertThat(posts.add(add(), 1L).saved()).isTrue();
+            runOne();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM community_post", Integer.class)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
         } finally {
@@ -550,6 +614,120 @@ class CommunityAiPersistenceIT {
         assertThat(jdbc.queryForObject("SELECT ai_reply FROM community_post", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT ai_generation_id FROM community_post", String.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply", Integer.class)).isZero();
+    }
+
+    @Test
+    void saveAndQueueCommitTogetherBeforeCallingPython() {
+        var result = posts.add(add(), 1L).response();
+
+        assertThat(result.aiReplyState()).isEqualTo("queued");
+        assertThat(result.jobId()).isNotNull();
+        var row = jdbc.queryForMap("""
+                SELECT p.content_version, p.ai_reply, j.target_id, j.target_version, j.status, j.attempt_count
+                FROM community_post p JOIN ai_job j ON j.target_id=p.id WHERE p.id=? AND j.id=?
+                """, result.postId(), result.jobId());
+        assertThat(row).containsEntry("content_version", 1L).containsEntry("target_version", 1L)
+                .containsEntry("ai_reply", null).containsEntry("status", "queued")
+                .containsEntry("attempt_count", 0);
+    }
+
+    @Test
+    void capacityAndRecoveryAreScopedToTaskType() {
+        for (int entry = 0; entry < 3; entry++) {
+            assertThat(posts.add(add(), 1L).response().aiReplyState()).isEqualTo("queued");
+        }
+
+        var capacity = posts.add(add(), 1L).response();
+        assertThat(jdbc.queryForMap("SELECT status,last_error_code,attempt_count FROM ai_job WHERE id=?",
+                capacity.jobId())).containsEntry("status", "failed")
+                .containsEntry("last_error_code", "capacity_exceeded").containsEntry("attempt_count", 0);
+
+        MoodRecord mood = new MoodRecord();
+        mood.setId(101L);
+        mood.setUserId(1L);
+        mood.setContentVersion(1L);
+        mood.setAiReplyEnabled(true);
+        var ownMood = admission.save(() -> jobs.createForVersion(mood, RateLimiter.Decision.allow()));
+        assertThat(ownMood.getStatus()).isEqualTo("queued");
+
+        var community = transactions.execute(tx -> handler(client).claim());
+        var claimedMood = jobs.claimNext();
+        assertThat(community.getTaskType()).isEqualTo("COMMUNITY_REPLY");
+        assertThat(claimedMood.getId()).isEqualTo(ownMood.getId());
+        assertThat(handler(client).recoverInterrupted()).isEqualTo(1);
+        assertThat(jdbc.queryForMap("SELECT status,last_error_code FROM ai_job WHERE id=?", community.getId()))
+                .containsEntry("status", "failed").containsEntry("last_error_code", "execution_interrupted");
+        assertThat(jdbc.queryForObject("SELECT status FROM ai_job WHERE id=?", String.class, claimedMood.getId()))
+                .isEqualTo("running");
+
+        expectedReplies.add(generatedReply("恢复后继续扫描"));
+        runOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job WHERE task_type='COMMUNITY_REPLY' AND status='succeeded'",
+                Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void fullCommunityQueueDoesNotConsumeMoodQueueCapacity() {
+        jdbc.update("""
+                INSERT INTO ai_job(user_id,target_id,target_version,task_type,status)
+                WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 100)
+                SELECT 1, 10000 + n, 1, 'COMMUNITY_REPLY', 'queued' FROM seq
+                """);
+
+        MoodRecord mood = new MoodRecord();
+        mood.setId(101L);
+        mood.setUserId(1L);
+        mood.setContentVersion(1L);
+        mood.setAiReplyEnabled(true);
+        var result = admission.save(() -> jobs.createForVersion(mood, RateLimiter.Decision.allow()));
+        assertThat(result.getStatus()).isEqualTo("queued");
+        var post = posts.add(add(), 1L).response();
+        assertThat(jdbc.queryForObject("SELECT last_error_code FROM ai_job WHERE id=?", String.class, post.jobId()))
+                .isEqualTo("capacity_exceeded");
+
+        jdbc.update("UPDATE ai_job SET task_type='MOOD_REVIEW' WHERE task_type='COMMUNITY_REPLY' AND status='queued'");
+        assertThat(posts.add(add(), 1L).response().aiReplyState()).isEqualTo("queued");
+    }
+
+    @Test
+    void jobInsertFailureRollsBackPostAndRiskState() {
+        var failingJobs = org.mockito.Mockito.mock(AiJobService.class);
+        org.mockito.Mockito.when(failingJobs.createCommunityJob(org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.eq(1L),
+                        org.mockito.ArgumentMatchers.any(RateLimiter.Decision.class)))
+                .thenThrow(new IllegalStateException("synthetic job insert failure"));
+        ReflectionTestUtils.setField(posts, "jobs", failingJobs);
+        try {
+            var crisis = add();
+            crisis.setContent("我不想活了");
+            assertThatThrownBy(() -> posts.add(crisis, 1L)).hasMessage("synthetic job insert failure");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM community_post", Integer.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ai_job", Integer.class)).isZero();
+        } finally {
+            ReflectionTestUtils.setField(posts, "jobs", jobs);
+        }
+    }
+
+    @Test
+    void deniedSaveCreatesFailedJobAndCrisisDoesNotCheckQuota() {
+        ReflectionTestUtils.setField(posts, "rateLimiter", (RateLimiter) (type, id) ->
+                RateLimiter.Decision.deny(RateLimitScope.COMMUNITY_HOUR, 40));
+        try {
+            var denied = posts.add(add(), 1L).response();
+            assertThat(jdbc.queryForMap("SELECT status,last_error_code,attempt_count FROM ai_job WHERE id=?",
+                    denied.jobId())).containsEntry("status", "failed")
+                    .containsEntry("last_error_code", "rate_limited_hour").containsEntry("attempt_count", 0);
+
+            var crisis = add();
+            crisis.setContent("我不想活了");
+            var saved = posts.add(crisis, 1L).response();
+            assertThat(saved.aiReplyState()).isEqualTo("queued");
+            assertThat(saved.supportText()).isEqualTo(MoodReviewSafety.SUPPORT_TEXT);
+            assertThat(jdbc.queryForObject("SELECT risk_status FROM community_post WHERE id=?", String.class,
+                    saved.postId())).isEqualTo("PENDING");
+        } finally {
+            ReflectionTestUtils.setField(posts, "rateLimiter", new AlwaysAllowRateLimiter());
+        }
     }
 
     private long existingPost() {

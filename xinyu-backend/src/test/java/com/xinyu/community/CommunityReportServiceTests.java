@@ -14,6 +14,7 @@ import com.xinyu.mapper.ContentReportMapper;
 import com.xinyu.mapper.ReportTargetGroup;
 import com.xinyu.mapper.UserMapper;
 import com.xinyu.service.CommunityReportService;
+import com.xinyu.service.CommunityReplySource;
 import com.xinyu.vo.AdminReportDetailVO;
 import com.xinyu.vo.AdminReportQueueRowVO;
 import com.xinyu.vo.MyReportVO;
@@ -72,6 +73,9 @@ class CommunityReportServiceTests {
 
     @Mock
     private UserMapper userMapper;
+
+    @Mock
+    private CommunityReplySource replySource;
 
     @InjectMocks
     private CommunityReportService service;
@@ -313,7 +317,7 @@ class CommunityReportServiceTests {
         when(contentReportMapper.handlePendingByTarget(
                 eq("POST"), eq(POST_ID), eq("HIDDEN"), eq("AD"), eq(ADMIN_ID), any(), any()))
                 .thenReturn(1);
-        when(communityPostMapper.update(eq(null), any())).thenReturn(0);
+        when(replySource.hideVisible(POST_ID, "AD")).thenReturn(false);
         when(communityPostMapper.selectById(POST_ID)).thenReturn(post(0, "正文"));
 
         String message = service.handleReport(ADMIN_ID, handleDto("POST", POST_ID, "HIDE", "AD"));

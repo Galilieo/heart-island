@@ -18,7 +18,7 @@ Java 后端（Spring Boot，JDK 17）──► MySQL 8：用户、记录、任�
    │
    ├─ 心情回应、近期回顾：单 worker 领取 ai_job ──HTTP（内部令牌）──► Python AI 服务（FastAPI）──► 模型供应商
    │                                                               提示词、危机规则、输出校验
-   └─ 社区帖子回应：发帖请求内同步调用模型（未经 Python 服务）
+   └─ 社区帖子回应：保存后由独立 worker 槽经 Python 生成
 ```
 
 - Java 持有用户身份、来源版本、任务状态与结果持久化；Python 只做内部认证、输入校验、危机规则分支和一次模型生成。
@@ -124,9 +124,9 @@ uv run --locked uvicorn app.main:app_from_env --factory --host 127.0.0.1 --port 
 | --- | --- |
 | `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` | 数据库连接 |
 | `JWT_SECRET` | 必填，至少 32 字节的随机值；缺失或过短时拒绝启动 |
-| `AI_WORKER_ENABLED` | `true` 才会领取并执行心情／回顾任务；`false` 时记录照常保存，任务停在排队 |
-| `AI_SERVICE_BASE_URL`、`AI_INTERNAL_TOKEN` | 所有 Java 实例必填；令牌与 Python 服务一致 |
-| `AI_COMMUNITY_CONCURRENCY` | 社区同步生成独立名额，Java 与 Python 默认各 3 |
+| `AI_WORKER_ENABLED` | `true` 才会领取并执行心情／回顾／社区任务；`false` 时记录照常保存，任务停在排队 |
+| `AI_SERVICE_BASE_URL`、`AI_INTERNAL_TOKEN` | 启用 worker 的 Java 实例必填，令牌与 Python 服务一致 |
+| `AI_COMMUNITY_CONCURRENCY` | 社区独立执行名额，Java 与 Python 默认各 3 |
 | `REDIS_URL` | 可选；为空时限流使用本机内存计数 |
 
 ```bash

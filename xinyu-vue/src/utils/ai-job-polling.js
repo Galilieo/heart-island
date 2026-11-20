@@ -1,4 +1,11 @@
-const ACTIVE_STATES = new Set(['queued', 'running'])
+// 字符串与任务 API 一致。failed 只需一次读取，供页面取得失败原因及冷却时间。
+export const AI_JOB_STATE = Object.freeze({
+  QUEUED: 'queued',
+  RUNNING: 'running',
+  FAILED: 'failed',
+  SUCCEEDED: 'succeeded'
+})
+const ACTIVE_STATES = new Set([AI_JOB_STATE.QUEUED, AI_JOB_STATE.RUNNING])
 const defaultScheduler = {
   now: () => Date.now(),
   setTimeout: (callback, delay) => setTimeout(callback, delay),
@@ -17,14 +24,14 @@ export function createAiJobPoller({
   maxObserveMs = 120_000,
   scheduler = defaultScheduler
 }) {
-  let current = null
-  let requesting = false
+  let currentObservation = null
+  let requestInFlight = false
   let nextTimer = null
   let limitTimer = null
 
   function stop(reason = 'stopped', error) {
-    const previous = current
-    current = null
+    const previous = currentObservation
+    currentObservation = null
     scheduler.clearTimeout(nextTimer)
     scheduler.clearTimeout(limitTimer)
     previous?.controller.abort()
@@ -33,11 +40,13 @@ export function createAiJobPoller({
     }
   }
 
-  function matches(job, source) {
+  // 心情和回顾还提供来源版本；帖子用当前版本的唯一 jobId 区分编辑代次。
+  function matchesObservation(job, source) {
     return (
       String(job.id) === String(source.jobId) &&
       String(job.targetId) === String(source.recordId) &&
-      String(job.targetVersion) === String(source.contentVersion)
+      (source.contentVersion === undefined ||
+        String(job.targetVersion) === String(source.contentVersion))
     )
   }
 
@@ -47,24 +56,24 @@ export function createAiJobPoller({
   }
 
   async function tick() {
-    if (!current || requesting) {
+    if (!currentObservation || requestInFlight) {
       return
     }
-    const observation = current
-    requesting = true
+    const observation = currentObservation
+    requestInFlight = true
 
     try {
       const job = await fetchJob(observation.jobId, { signal: observation.controller.signal })
-      if (current !== observation) {
+      if (currentObservation !== observation) {
         return
       }
-      if (!matches(job, observation)) {
+      if (!matchesObservation(job, observation)) {
         stop('changed')
         return
       }
 
       onUpdate(job)
-      if (current !== observation) {
+      if (currentObservation !== observation) {
         return
       }
       if (!ACTIVE_STATES.has(job.status)) {
@@ -73,13 +82,13 @@ export function createAiJobPoller({
       }
       schedule(intervalMs)
     } catch (error) {
-      if (current === observation) {
+      if (currentObservation === observation) {
         stop('network', error)
       }
     } finally {
-      requesting = false
+      requestInFlight = false
       // 旧代次退出后才允许启动等待中的新代次，不能因start/stop交错让GET重叠。
-      if (current && current !== observation) {
+      if (currentObservation && currentObservation !== observation) {
         schedule(0)
       }
     }
@@ -87,7 +96,11 @@ export function createAiJobPoller({
 
   function start(source) {
     stop()
-    current = { ...source, controller: new AbortController(), startedAt: scheduler.now() }
+    currentObservation = {
+      ...source,
+      controller: new AbortController(),
+      startedAt: scheduler.now()
+    }
     limitTimer = scheduler.setTimeout(() => stop('limit'), maxObserveMs)
     void tick()
   }

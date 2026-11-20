@@ -1,53 +1,122 @@
 package com.xinyu.community;
 
-import com.xinyu.common.CommunityReportConstants;
-import com.xinyu.dto.CommunityAiResponse;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
+import com.xinyu.entity.AiJob;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.Topic;
 import com.xinyu.mapper.CommunityPostMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.ratelimit.RateLimiter;
 import com.xinyu.ratelimit.RateLimitScope;
-import com.xinyu.service.AiReplyLogService;
-import com.xinyu.service.AiServiceException;
-import com.xinyu.service.MoodReviewSafety;
-import com.xinyu.service.CommunityAiClient;
+import com.xinyu.ratelimit.RateLimitType;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.AiJobService;
 import com.xinyu.service.CommunityPostService;
+import com.xinyu.service.MoodReviewSafety;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.function.Supplier;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-/** 社区发帖与编辑的限流行为：帖子照常保存、不发起生成、不写兜底与失败记录。 */
 @ExtendWith(MockitoExtension.class)
 class CommunityRateLimitTests {
+    @Mock private CommunityPostMapper posts;
+    @Mock private TopicMapper topics;
+    @Mock private AiJobAdmission admission;
+    @Mock private AiJobService jobs;
+    @Mock private RateLimiter limiter;
+    @InjectMocks private CommunityPostService service;
 
-    @Mock
-    private CommunityPostMapper communityPostMapper;
+    @BeforeEach
+    void topicAndAdmission() {
+        Topic topic = new Topic();
+        topic.setStatus(1);
+        when(topics.selectById(1L)).thenReturn(topic);
+        when(admission.save(any())).thenAnswer(call -> call.<Supplier<?>>getArgument(0).get());
+    }
 
-    @Mock
-    private TopicMapper topicMapper;
+    @Test
+    void deniedPostStillSavesAndReturnsFailedJob() {
+        generatedPostId();
+        var denied = RateLimiter.Decision.deny(RateLimitScope.COMMUNITY_HOUR, 900);
+        when(limiter.check(RateLimitType.COMMUNITY_POST, 1L)).thenReturn(denied);
+        when(jobs.createCommunityJob(1L, 1L, 1L, denied)).thenReturn(job("failed"));
 
-    @Mock
-    private CommunityAiClient communityAiClient;
+        var response = service.add(add(), 1L).response();
 
-    @Mock
-    private AiReplyLogService aiReplyLogService;
+        assertThat(response.jobId()).isEqualTo(10L);
+        assertThat(response.aiReplyState()).isEqualTo("failed");
+    }
 
-    @Mock
-    private RateLimiter rateLimiter;
+    @Test
+    void deniedEditInvalidatesOldVersionAndReturnsFailedJob() {
+        CommunityPost post = new CommunityPost();
+        post.setId(1L);
+        post.setUserId(1L);
+        post.setStatus(1);
+        post.setContentVersion(1L);
+        when(posts.selectById(1L)).thenReturn(post);
+        when(posts.selectByIdForUpdate(1L)).thenReturn(post);
+        when(posts.update(any(), any())).thenReturn(1);
 
-    @InjectMocks
-    private CommunityPostService postService;
+        var denied = RateLimiter.Decision.deny(RateLimitScope.GLOBAL_HOUR, 900);
+        when(limiter.check(RateLimitType.COMMUNITY_POST, 1L)).thenReturn(denied);
+        when(jobs.createCommunityJob(1L, 1L, 2L, denied)).thenReturn(job("failed"));
+        CommunityPostUpdateDTO edit = new CommunityPostUpdateDTO();
+        edit.setId(1L);
+        edit.setTopicId(1L);
+        edit.setMoodType("平静");
+        edit.setContent("合成编辑");
+
+        assertThat(service.update(edit, 1L).response().aiReplyState()).isEqualTo("failed");
+        verify(jobs).supersedeCommunityJobs(1L, 1L);
+    }
+
+    @Test
+    void disabledPostChecksNeitherQuotaNorJobs() {
+        generatedPostId();
+        var dto = add();
+        dto.setNeedAiReply(false);
+
+        assertThat(service.add(dto, 1L).response().aiReplyState()).isEqualTo("disabled");
+        verifyNoInteractions(limiter, jobs);
+    }
+
+    @Test
+    void crisisPostQueuesWithoutQuotaAndKeepsPrivateSupportText() {
+        generatedPostId();
+        var dto = add();
+        dto.setContent("我不想活了");
+        when(jobs.createCommunityJob(1L, 1L, 1L, RateLimiter.Decision.allow())).thenReturn(job("queued"));
+
+        var response = service.add(dto, 1L).response();
+
+        assertThat(response.aiReplyState()).isEqualTo("queued");
+        assertThat(response.supportText()).isEqualTo(MoodReviewSafety.SUPPORT_TEXT);
+        verifyNoInteractions(limiter);
+    }
+
+    private void generatedPostId() {
+        when(posts.insert(any(CommunityPost.class))).thenAnswer(invocation -> {
+            invocation.<CommunityPost>getArgument(0).setId(1L);
+            return 1;
+        });
+    }
+
+    private static AiJob job(String status) {
+        AiJob job = new AiJob();
+        job.setId(10L);
+        job.setStatus(status);
+        return job;
+    }
 
     private static CommunityPostAddDTO add() {
         CommunityPostAddDTO dto = new CommunityPostAddDTO();
@@ -55,107 +124,5 @@ class CommunityRateLimitTests {
         dto.setMoodType("平静");
         dto.setContent("今天的风很舒服");
         return dto;
-    }
-
-    @Test
-    void 超额时帖子照常保存但不发起生成() {
-        when(topicMapper.selectById(1L)).thenReturn(activeTopic());
-        when(communityPostMapper.insert(any(CommunityPost.class))).thenReturn(1);
-        when(rateLimiter.check(any(), anyLong()))
-                .thenReturn(RateLimiter.Decision.deny(RateLimitScope.COMMUNITY_HOUR, 900));
-
-        CommunityPostService.PostSaveResult result = postService.add(add(), 1L);
-
-        assertThat(result.saved()).isTrue();
-        assertThat(result.aiReplyLimited()).isTrue();
-        // 不发起同步生成，也不把限流当成生成失败写日志。
-        verifyNoInteractions(communityAiClient);
-        verifyNoInteractions(aiReplyLogService);
-        verify(communityPostMapper, never()).update(any(), any());
-    }
-
-    @Test
-    void 编辑超额时帖子保存且不再生成() {
-        CommunityPost existing = new CommunityPost();
-        existing.setId(5L);
-        existing.setUserId(1L);
-        existing.setStatus(CommunityReportConstants.STATUS_VISIBLE);
-        existing.setTopicId(1L);
-        existing.setAiReply("旧回复");
-        CommunityPostUpdateDTO edit = new CommunityPostUpdateDTO();
-        edit.setId(5L);
-        edit.setTopicId(1L);
-        edit.setMoodType("平静");
-        edit.setContent("改成新内容");
-        when(topicMapper.selectById(1L)).thenReturn(activeTopic());
-        when(communityPostMapper.selectById(5L)).thenReturn(existing);
-        when(communityPostMapper.update(any(), any())).thenReturn(1);
-        when(rateLimiter.check(any(), anyLong()))
-                .thenReturn(RateLimiter.Decision.deny(RateLimitScope.GLOBAL_HOUR, 300));
-
-        CommunityPostService.PostSaveResult result = postService.update(edit, 1L);
-
-        assertThat(result.saved()).isTrue();
-        assertThat(result.aiReplyLimited()).isTrue();
-        verifyNoInteractions(communityAiClient);
-        verifyNoInteractions(aiReplyLogService);
-    }
-
-    @Test
-    void 关闭Ai时不消耗额度() {
-        when(topicMapper.selectById(1L)).thenReturn(activeTopic());
-        when(communityPostMapper.insert(any(CommunityPost.class))).thenReturn(1);
-        CommunityPostAddDTO dto = add();
-        dto.setNeedAiReply(false);
-
-        CommunityPostService.PostSaveResult result = postService.add(dto, 1L);
-
-        assertThat(result.saved()).isTrue();
-        assertThat(result.aiReplyLimited()).isFalse();
-        verifyNoInteractions(rateLimiter);
-        verifyNoInteractions(communityAiClient);
-    }
-
-    @Test
-    void 额度充足时照常生成() {
-        when(topicMapper.selectById(1L)).thenReturn(activeTopic());
-        when(communityPostMapper.insert(any(CommunityPost.class))).thenReturn(1);
-        when(rateLimiter.check(any(), anyLong())).thenReturn(RateLimiter.Decision.allow());
-        when(communityAiClient.generateReplyForPost(anyString(), anyString(), anyString()))
-                .thenThrow(new AiServiceException("provider_error"));
-
-        CommunityPostService.PostSaveResult result = postService.add(add(), 1L);
-
-        assertThat(result.saved()).isTrue();
-        assertThat(result.aiReplyLimited()).isFalse();
-        verify(communityAiClient).generateReplyForPost(anyString(), anyString(), anyString());
-    }
-
-    @Test
-    void 危机帖保存后直接发起生成且不扣额度() {
-        when(topicMapper.selectById(1L)).thenReturn(activeTopic());
-        when(communityPostMapper.insert(any(CommunityPost.class))).thenReturn(1);
-        lenient().when(rateLimiter.check(any(), anyLong()))
-                .thenReturn(RateLimiter.Decision.deny(RateLimitScope.COMMUNITY_HOUR, 900));
-        CommunityPostAddDTO dto = add();
-        dto.setContent("我不想活了");
-        when(communityAiClient.generateReplyForPost(anyString(), anyString(), anyString()))
-                .thenReturn(new CommunityAiResponse("synthetic", MoodReviewSafety.SUPPORT_TEXT,
-                        "SUPPORT", false, "community-reply-v1", null));
-
-        CommunityPostService.PostSaveResult result = postService.add(dto, 1L);
-
-        assertThat(result.saved()).isTrue();
-        assertThat(result.aiReplyLimited()).isFalse();
-        verifyNoInteractions(rateLimiter, aiReplyLogService);
-        verify(communityAiClient).generateReplyForPost(anyString(), anyString(), anyString());
-    }
-
-    private static Topic activeTopic() {
-        Topic topic = new Topic();
-        topic.setId(1L);
-        topic.setName("日常");
-        topic.setStatus(1);
-        return topic;
     }
 }

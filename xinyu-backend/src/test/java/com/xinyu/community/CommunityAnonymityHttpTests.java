@@ -10,7 +10,7 @@ import com.xinyu.controller.AdminPostController;
 import com.xinyu.controller.AdminReplyController;
 import com.xinyu.controller.CommunityPostController;
 import com.xinyu.controller.CommunityReplyController;
-import com.xinyu.dto.CommunityAiResponse;
+import com.xinyu.entity.AiJob;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.entity.Favorite;
@@ -27,8 +27,11 @@ import com.xinyu.mapper.UserMapper;
 import com.xinyu.ratelimit.FallbackRateLimiter;
 import com.xinyu.ratelimit.RateLimitMetrics;
 import com.xinyu.service.AiReplyLogService;
-import com.xinyu.service.CommunityAiClient;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.AiJobService;
 import com.xinyu.service.CommunityPostService;
+import com.xinyu.service.CommunityReplySource;
+import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.service.CommunityReplyService;
 import com.xinyu.service.MoodReviewSafety;
 import com.xinyu.service.UserService;
@@ -53,7 +56,8 @@ import java.util.stream.LongStream;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
+import java.util.function.Supplier;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
@@ -79,6 +83,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         CorsConfig.class,
         JacksonConfig.class,
         CommunityPostService.class,
+        CommunityReplySource.class,
         CommunityReplyService.class
 })
 class CommunityAnonymityHttpTests {
@@ -112,7 +117,13 @@ class CommunityAnonymityHttpTests {
     private TopicMapper topicMapper;
 
     @MockitoBean
-    private CommunityAiClient communityAiClient;
+    private AiJobService aiJobService;
+
+    @MockitoBean
+    private AiJobAdmission admission;
+
+    @MockitoBean
+    private AiJobMapper aiJobMapper;
 
     @MockitoBean
     private AiReplyLogService aiReplyLogService;
@@ -398,9 +409,12 @@ class CommunityAnonymityHttpTests {
             return 1;
         });
         when(communityPostMapper.update(any(), any())).thenReturn(1);
-        when(communityAiClient.generateReplyForPost(anyString(), anyString(), anyString())).thenReturn(
-                new CommunityAiResponse("synthetic", MoodReviewSafety.SUPPORT_TEXT,
-                        "SUPPORT", false, "community-reply-v1", null));
+        when(admission.save(any())).thenAnswer(invocation -> invocation.<Supplier<?>>getArgument(0).get());
+        when(communityPostMapper.selectByIdForUpdate(POST_ID)).thenReturn(samplePost());
+        AiJob queued = new AiJob();
+        queued.setId(44L);
+        queued.setStatus("queued");
+        when(aiJobService.createCommunityJob(anyLong(), anyLong(), anyLong(), any())).thenReturn(queued);
 
         String body = """
                 {"id":11,"topicId":1,"moodType":"低落","content":"  %s  ","needAiReply":%s}
@@ -409,6 +423,9 @@ class CommunityAnonymityHttpTests {
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.postId").value(String.valueOf(POST_ID)))
+                .andExpect(jsonPath("$.data.aiReplyState").value(needAiReply ? "queued" : "disabled"))
+                .andExpect(needAiReply ? jsonPath("$.data.jobId").value("44") : jsonPath("$.data.jobId").value(nullValue()))
                 .andExpect(jsonPath("$.data.riskStatus").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.data.riskHitTime").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.data.riskReviewedTime").doesNotHaveJsonPath())
@@ -527,6 +544,29 @@ class CommunityAnonymityHttpTests {
                 .andExpect(jsonPath(path + ".riskReviewedTime").doesNotHaveJsonPath());
     }
 
+    @Test
+    void taskFieldsAppearOnlyOnAuthorListAndDetail() throws Exception {
+        AiJob job = new AiJob();
+        job.setId(81L);
+        job.setTargetId(POST_ID);
+        job.setStatus("running");
+        when(aiJobMapper.selectList(any())).thenReturn(List.of(job));
+
+        for (String path : List.of("/community/post/list", "/community/post/detail")) {
+            String data = path.endsWith("list") ? "$.data.records[0]" : "$.data";
+            mvc.perform(get(path).param("id", String.valueOf(POST_ID)).header("token", authorToken))
+                    .andExpect(jsonPath(data + ".jobId").value("81"))
+                    .andExpect(jsonPath(data + ".aiReplyState").value("running"))
+                    .andExpect(jsonPath(data + ".contentVersion").doesNotHaveJsonPath());
+            mvc.perform(get(path).param("id", String.valueOf(POST_ID)).header("token", otherUserToken))
+                    .andExpect(jsonPath(data + ".jobId").doesNotHaveJsonPath())
+                    .andExpect(jsonPath(data + ".aiReplyState").doesNotHaveJsonPath());
+            mvc.perform(get(path).param("id", String.valueOf(POST_ID)))
+                    .andExpect(jsonPath(data + ".jobId").doesNotHaveJsonPath())
+                    .andExpect(jsonPath(data + ".aiReplyState").doesNotHaveJsonPath());
+        }
+    }
+
     private static User user(Long id, String role) {
         User u = new User();
         u.setId(id);
@@ -538,6 +578,7 @@ class CommunityAnonymityHttpTests {
     private static CommunityPost samplePost() {
         CommunityPost post = new CommunityPost();
         post.setId(POST_ID);
+        post.setContentVersion(1L);
         post.setUserId(AUTHOR_ID);
         post.setTopicId(1L);
         post.setMoodType("焦虑");

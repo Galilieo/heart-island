@@ -3,9 +3,9 @@ package com.xinyu.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.xinyu.common.CommunityReportConstants;
-import com.xinyu.dto.CommunityAiResponse;
 import com.xinyu.dto.CommunityPostAddDTO;
 import com.xinyu.dto.CommunityPostUpdateDTO;
+import com.xinyu.entity.AiJob;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.Favorite;
 import com.xinyu.entity.PostLike;
@@ -22,34 +22,33 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.vo.AdminPostDetailVO;
 import com.xinyu.vo.AdminPostVO;
+import com.xinyu.vo.CommunityWriteVO;
 import com.xinyu.entity.Topic;
 import com.xinyu.mapper.TopicMapper;
-import com.xinyu.dto.AiReplyResult;
 import com.xinyu.ratelimit.RateLimiter;
 import com.xinyu.ratelimit.RateLimitType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
 
+import static com.xinyu.common.AiJobValues.DISABLED;
+
+/** 帖子的公开与作者视图、互动，以及正文和当前回复任务的持久化入口。 */
 @Service
 public class CommunityPostService {
-    private static final Logger logger = LoggerFactory.getLogger(CommunityPostService.class);
+    /** 正文和任务完成同一次保存后的提交者响应。 */
+    public record PostSaveResult(boolean saved, CommunityWriteVO response) {
 
-    /** 发布 / 编辑结果：帖子一律照常保存；aiReplyLimited 表示本次因额度不足未发起生成。 */
-    public record PostSaveResult(boolean saved, boolean aiReplyLimited, String supportText) {
-
-        public static PostSaveResult saved(boolean aiReplyLimited, boolean riskHit) {
+        private static PostSaveResult saved(CommunityPost post, AiJob job, boolean riskHit) {
             String supportText = riskHit ? MoodReviewSafety.SUPPORT_TEXT : null;
-            return new PostSaveResult(true, aiReplyLimited, supportText);
+            Long jobId = job == null ? null : job.getId();
+            String replyState = job == null ? DISABLED : job.getStatus();
+            return new PostSaveResult(true, new CommunityWriteVO(supportText, post.getId(), jobId, replyState));
         }
 
-        public static PostSaveResult failed() {
-            return new PostSaveResult(false, false, null);
+        private static PostSaveResult failed() {
+            return new PostSaveResult(false, null);
         }
     }
 
@@ -66,10 +65,13 @@ public class CommunityPostService {
     private TopicMapper topicMapper;
 
     @Autowired
-    private CommunityAiClient communityAiClient;
+    private AiJobService jobs;
 
     @Autowired
-    private AiReplyLogService aiReplyLogService;
+    private AiJobAdmission admission;
+
+    @Autowired
+    private CommunityReplySource replySource;
 
     @Autowired(required = false)
     private ContentReportMapper contentReportMapper;
@@ -78,6 +80,7 @@ public class CommunityPostService {
     private RateLimiter rateLimiter;
 
     /** 分页查询公开可见的帖子，再批量填充本页的观看者状态。 */
+    @Transactional(readOnly = true)
     public Page<CommunityPost> pagePosts(
             Page<CommunityPost> page, Long topicId, Long userId, Boolean mine, String sort) {
         QueryWrapper<CommunityPost> queryWrapper = new QueryWrapper<>();
@@ -100,6 +103,7 @@ public class CommunityPostService {
 
         Page<CommunityPost> posts = communityPostMapper.selectPage(page, queryWrapper);
         populateViewerStates(posts.getRecords(), userId, false);
+        replySource.attachAuthorStates(posts.getRecords(), userId);
         return posts;
     }
 
@@ -143,31 +147,30 @@ public class CommunityPostService {
                 postPage.getTotal()
         );
 
-        voPage.setRecords(postPage.getRecords().stream()
-                .map(post -> {
-                    AdminPostVO row = new AdminPostVO(
-                            String.valueOf(post.getId()),
-                            String.valueOf(post.getUserId()),
-                            post.getTopicId(),
-                            post.getMoodType(),
-                            post.getContent(),
-                            post.getAnonymousName(),
-                            post.getReplyCount(),
-                            post.getLikeCount(),
-                            post.getStatus(),
-                            post.getHideReason(),
-                            post.getAiResultKind(),
-                            post.getCreateTime(),
-                            post.getUpdateTime()
-                    );
-                    row.setRiskStatus(post.getRiskStatus());
-                    row.setRiskHitTime(post.getRiskHitTime());
-                    row.setRiskReviewedTime(post.getRiskReviewedTime());
-                    return row;
-                })
-                .toList());
-
+        voPage.setRecords(postPage.getRecords().stream().map(CommunityPostService::toAdminPostRow).toList());
         return voPage;
+    }
+
+    private static AdminPostVO toAdminPostRow(CommunityPost post) {
+        AdminPostVO row = new AdminPostVO(
+                String.valueOf(post.getId()),
+                String.valueOf(post.getUserId()),
+                post.getTopicId(),
+                post.getMoodType(),
+                post.getContent(),
+                post.getAnonymousName(),
+                post.getReplyCount(),
+                post.getLikeCount(),
+                post.getStatus(),
+                post.getHideReason(),
+                post.getAiResultKind(),
+                post.getCreateTime(),
+                post.getUpdateTime()
+        );
+        row.setRiskStatus(post.getRiskStatus());
+        row.setRiskHitTime(post.getRiskHitTime());
+        row.setRiskReviewedTime(post.getRiskReviewedTime());
+        return row;
     }
 
     /** 仅将待关注的帖子标为已关注。 */
@@ -211,10 +214,12 @@ public class CommunityPostService {
     }
 
     /** 保留给旧集成测试调用；后台控制器统一走 {@link #updateAdminStatusWithOutcome}。 */
+    @Transactional
     public CommunityPost updateAdminStatus(Long id, Integer status) {
         return updateAdminStatus(id, status, null);
     }
 
+    @Transactional
     public CommunityPost updateAdminStatus(Long id, Integer status, String hideReason) {
         if (updateAdminStatusWithOutcome(id, status, hideReason) != AdminStatusResult.UPDATED) {
             return null;
@@ -222,39 +227,32 @@ public class CommunityPostService {
         return communityPostMapper.selectById(id);
     }
 
-    /** 带前置状态条件更新帖子（1->2 隐藏并清生成标识；2->1 恢复并清隐藏原因）。 */
+    /** 隐藏时失效当前版本，恢复只更新可见状态。 */
+    @Transactional
     public AdminStatusResult updateAdminStatusWithOutcome(Long id, Integer status, String hideReason) {
         if (status == null || (status != CommunityReportConstants.STATUS_ADMIN_HIDDEN
                 && status != CommunityReportConstants.STATUS_VISIBLE)) {
             return AdminStatusResult.CONFLICT;
         }
 
-        int expectedStatus = status == CommunityReportConstants.STATUS_ADMIN_HIDDEN
-                ? CommunityReportConstants.STATUS_VISIBLE
-                : CommunityReportConstants.STATUS_ADMIN_HIDDEN;
-
-        UpdateWrapper<CommunityPost> change = new UpdateWrapper<>();
-        change.eq("id", id).eq("status", expectedStatus).set("status", status);
+        boolean updated;
         if (status == CommunityReportConstants.STATUS_ADMIN_HIDDEN) {
-            // 隐藏即使随后恢复，也不允许此前进行中的生成重新回写。
-            change.set("hide_reason", hideReason).set("ai_generation_id", null);
+            updated = replySource.hideVisible(id, hideReason);
         } else {
-            change.set("hide_reason", null);
+            UpdateWrapper<CommunityPost> restore = new UpdateWrapper<>();
+            restore.eq("id", id).eq("status", CommunityReportConstants.STATUS_ADMIN_HIDDEN)
+                    .set("status", CommunityReportConstants.STATUS_VISIBLE).set("hide_reason", null);
+            updated = communityPostMapper.update(null, restore) == 1;
         }
 
-        if (communityPostMapper.update(null, change) > 0) {
+        if (updated) {
             return AdminStatusResult.UPDATED;
         }
-
         return communityPostMapper.selectById(id) == null
                 ? AdminStatusResult.NOT_FOUND
                 : AdminStatusResult.CONFLICT;
     }
 
-    /**
-     * 查询当前用户收藏的帖子，按收藏时间倒序。
-     * 已被删除/隐藏的帖子会自动跳过。
-     */
     public List<CommunityPost> listFavorites(Long userId) {
         QueryWrapper<Favorite> favQuery = new QueryWrapper<>();
         favQuery.eq("user_id", userId);
@@ -301,12 +299,13 @@ public class CommunityPostService {
         return topic.getStatus() != null && topic.getStatus() == 1;
     }
 
+    /** 入队额度在事务外判断，正文、风险状态和新任务在准入事务内提交。 */
     public PostSaveResult add(CommunityPostAddDTO dto, Long userId) {
         if (!isTopicAvailable(dto.getTopicId())) {
             return PostSaveResult.failed();
         }
-        CommunityPost post = new CommunityPost();
 
+        CommunityPost post = new CommunityPost();
         post.setUserId(userId);
         post.setTopicId(dto.getTopicId());
         post.setMoodType(dto.getMoodType().trim());
@@ -315,120 +314,106 @@ public class CommunityPostService {
         post.setReplyCount(0);
         post.setLikeCount(0);
         post.setStatus(CommunityReportConstants.STATUS_VISIBLE);
+        post.setContentVersion(1L);
 
         boolean riskHit = MoodReviewSafety.matches(post.getContent());
         if (riskHit) {
             post.setRiskStatus(CommunityRisk.PENDING);
             post.setRiskHitTime(LocalDateTime.now());
         }
-
         boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
-        post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
-        int rows = communityPostMapper.insert(post);
-        if (rows <= 0) {
-            return PostSaveResult.failed();
-        }
+        RateLimiter.Decision quota = replyQuota(needAiReply, riskHit, userId);
 
-        // 先 insert 拿到 post.id，再调 AI 回写。AI 失败不阻断发帖。
-        // 用户选择不要 AI 回复时跳过生成（也不写调用日志）。
-        boolean quotaAllowed = needAiReply && reserveAiReplyQuota(riskHit, userId);
-
-        // 额度不足时帖子照常保存、不发起生成（契约 2.4）：ai_reply 保持 NULL，
-        // 不写失败兜底文案，也不记成生成失败。
-        if (quotaAllowed) {
-            attachAiReply(post);
-        }
-
-        return PostSaveResult.saved(needAiReply && !quotaAllowed, riskHit);
+        return admission.save(() -> {
+            if (communityPostMapper.insert(post) != 1) {
+                return PostSaveResult.failed();
+            }
+            return createSaveResult(post, needAiReply, quota, riskHit);
+        });
     }
 
+    /** 帖子与旧任务按来源行、任务行的顺序更新，并在同一事务内提交。 */
     @Transactional
     public Boolean delete(Long id, Long userId) {
-        CommunityPost post = communityPostMapper.selectById(id);
-
-        if (post == null) {
-            return false;
-        }
-
-        if (post.getStatus() == null || post.getStatus() == CommunityReportConstants.STATUS_AUTHOR_DELETED) {
-            return false;
-        }
-
-        if (!post.getUserId().equals(userId)) {
-            return false;
-        }
-
-        // 仅更新删除状态与生成标识，避免整实体回写覆盖并发编辑或互动计数；允许作者删除正常或已隐藏帖子。
         UpdateWrapper<CommunityPost> removal = new UpdateWrapper<>();
-        removal.eq("id", id)
-                .eq("user_id", userId)
-                .in("status", CommunityReportConstants.STATUS_VISIBLE, CommunityReportConstants.STATUS_ADMIN_HIDDEN);
-        removal.set("status", CommunityReportConstants.STATUS_AUTHOR_DELETED).set("ai_generation_id", null);
-        return communityPostMapper.update(null, removal) > 0;
+        removal.eq("id", id).eq("user_id", userId)
+                .in("status", CommunityReportConstants.STATUS_VISIBLE, CommunityReportConstants.STATUS_ADMIN_HIDDEN)
+                .set("status", CommunityReportConstants.STATUS_AUTHOR_DELETED);
+        CommunityReplySource.invalidateReply(removal);
+        if (communityPostMapper.update(null, removal) != 1) {
+            return false;
+        }
+
+        jobs.supersedeCommunityJobs(id, userId);
+        return true;
     }
 
+    /** 每次成功编辑都递增来源版本，包括正文相同及关闭 AI 的保存。 */
     public PostSaveResult update(CommunityPostUpdateDTO dto, Long userId) {
-        if(!isTopicAvailable(dto.getTopicId())){
+        if (!isTopicAvailable(dto.getTopicId())) {
             return PostSaveResult.failed();
         }
 
-        CommunityPost post = communityPostMapper.selectById(dto.getId());
-
-        if (post == null || !post.isVisible()) {
+        CommunityPost observed = communityPostMapper.selectById(dto.getId());
+        if (!canEdit(observed, userId)) {
             return PostSaveResult.failed();
         }
 
-        if (!post.getUserId().equals(userId)) {
-            return PostSaveResult.failed();
-        }
-
-        post.setTopicId(dto.getTopicId());
-        post.setMoodType(dto.getMoodType().trim());
-        post.setContent(dto.getContent().trim());
-        post.setAiReply(null);
-        post.setAiResultKind(null);
+        String content = dto.getContent().trim();
+        boolean riskHit = MoodReviewSafety.matches(content);
         boolean needAiReply = !Boolean.FALSE.equals(dto.getNeedAiReply());
-        post.setAiGenerationId(needAiReply ? UUID.randomUUID().toString() : null);
+        RateLimiter.Decision quota = replyQuota(needAiReply, riskHit, userId);
 
-        // 编辑与清旧回复是同一条UPDATE，必须在事务外的网络请求之前落库。
-        // 标识也在此处更换；相同正文、关闭AI及改回原文都会使旧生成失效。
-        // 只更新编辑字段，不回写读取时的点赞数、状态等快照；NULL不能交给updateById忽略。
+        return admission.save(() -> {
+            CommunityPost post = communityPostMapper.selectByIdForUpdate(dto.getId());
+            if (!canEdit(post, userId)) {
+                return PostSaveResult.failed();
+            }
+
+            UpdateWrapper<CommunityPost> edit = postEdit(post, userId, dto, content, riskHit);
+            if (communityPostMapper.update(null, edit) != 1) {
+                return PostSaveResult.failed();
+            }
+
+            jobs.supersedeCommunityJobs(post.getId(), userId);
+            post.setContentVersion(Math.addExact(post.getContentVersion(), 1L));
+            return createSaveResult(post, needAiReply, quota, riskHit);
+        });
+    }
+
+    /** 正文、版本、旧回复与命中的风险字段必须同条 UPDATE，失败时一起保留原值。 */
+    private static UpdateWrapper<CommunityPost> postEdit(
+            CommunityPost post, Long userId, CommunityPostUpdateDTO dto, String content, boolean riskHit) {
         UpdateWrapper<CommunityPost> edit = new UpdateWrapper<>();
-        edit.eq("id", post.getId()).eq("user_id", userId).eq("status", CommunityReportConstants.STATUS_VISIBLE);
-        edit.set("topic_id", post.getTopicId());
-        edit.set("mood_type", post.getMoodType());
-        edit.set("content", post.getContent());
-        edit.set("ai_reply", null);
-        edit.set("ai_result_kind", null);
-        edit.set("ai_generation_id", post.getAiGenerationId());
-
-        boolean riskHit = MoodReviewSafety.matches(post.getContent());
+        edit.eq("id", post.getId()).eq("user_id", userId)
+                .eq("status", CommunityReportConstants.STATUS_VISIBLE)
+                .eq("content_version", post.getContentVersion())
+                .set("topic_id", dto.getTopicId()).set("mood_type", dto.getMoodType().trim())
+                .set("content", content);
+        CommunityReplySource.invalidateReply(edit);
         if (riskHit) {
             CommunityRisk.markHit(edit);
         }
-
-        int rows = communityPostMapper.update(null, edit);
-        if (rows <= 0) {
-            return PostSaveResult.failed();
-        }
-
-        if (!needAiReply) {
-            // 旧回复已经清除；不生成，也不写调用日志。
-            return PostSaveResult.saved(false, riskHit);
-        }
-
-        // 内容已落库，AI 回复同步重新生成；额度不足时不发起、旧回复已被编辑清掉。
-        boolean quotaAllowed = reserveAiReplyQuota(riskHit, userId);
-        if (quotaAllowed) {
-            attachAiReply(post);
-        }
-
-        return PostSaveResult.saved(!quotaAllowed, riskHit);
+        return edit;
     }
 
-    /** Java 只预检危机额度豁免，最终生成分流由 Python 判定。 */
-    private boolean reserveAiReplyQuota(boolean riskHit, Long userId) {
-        return riskHit || rateLimiter.check(RateLimitType.COMMUNITY_POST, userId).allowed();
+    private static boolean canEdit(CommunityPost post, Long userId) {
+        return post != null && post.isVisible() && userId.equals(post.getUserId());
+    }
+
+    private RateLimiter.Decision replyQuota(boolean enabled, boolean riskHit, Long userId) {
+        if (!enabled || riskHit) {
+            return RateLimiter.Decision.allow();
+        }
+        return rateLimiter.check(RateLimitType.COMMUNITY_POST, userId);
+    }
+
+    private PostSaveResult createSaveResult(
+            CommunityPost post, boolean enabled, RateLimiter.Decision quota, boolean riskHit) {
+        AiJob job = enabled
+                ? jobs.createCommunityJob(post.getId(), post.getUserId(), post.getContentVersion(), quota)
+                : null;
+        return PostSaveResult.saved(post, job, riskHit);
     }
 
     @Transactional
@@ -531,6 +516,7 @@ public class CommunityPostService {
         return favoriteMapper.selectCount(queryWrapper) > 0;
     }
 
+    @Transactional(readOnly = true)
     public CommunityPost detail(Long id, Long userId) {
         CommunityPost post = communityPostMapper.selectById(id);
         if (post == null || post.getStatus() == null
@@ -550,6 +536,7 @@ public class CommunityPostService {
         }
 
         populateViewerState(post, userId);
+        replySource.attachAuthorStates(List.of(post), userId);
 
         return post;
     }
@@ -591,59 +578,6 @@ public class CommunityPostService {
         post.setMine(userId != null && userId.equals(post.getUserId()));
         if (post.getHidden() == null) {
             post.setHidden(Integer.valueOf(CommunityReportConstants.STATUS_ADMIN_HIDDEN).equals(post.getStatus()));
-        }
-    }
-
-    /**
-     * 已保存帖子在请求线程中同步生成，网络期间不持有数据库事务。
-     * 只发布仍匹配本次生成标识的成功正文；失败或失效不改当前回复。
-     * 网络期间的编辑／关闭／删除／隐藏会使旧标识失效，回写检查与更新在同一条SQL内完成。
-     * 回复回写／日志失败不改变已保存帖子的结果；调用日志记录生成结果，不代表回复已发布。
-     */
-    private void attachAiReply(CommunityPost post) {
-        Topic topic = topicMapper.selectById(post.getTopicId());
-        String topicName = topic == null ? "" : topic.getName();
-
-        CommunityAiResponse result;
-        try {
-            result = communityAiClient.generateReplyForPost(topicName, post.getMoodType(), post.getContent());
-        } catch (AiServiceException failure) {
-            saveAiReplyLog(post, AiReplyResult.failure(null, null, null, failure.code()));
-            return;
-        }
-
-        publishAiReply(post, result);
-        if (Boolean.FALSE.equals(result.modelCalled())) {
-            logger.info("社区AI回复 postId={} kind=SUPPORT", post.getId());
-            return;
-        }
-        saveAiReplyLog(post, AiReplyResult.success(result.replyContent(), null, result.modelName()));
-    }
-
-    private void publishAiReply(CommunityPost post, CommunityAiResponse result) {
-        UpdateWrapper<CommunityPost> reply = new UpdateWrapper<>();
-        reply.eq("id", post.getId())
-                .eq("user_id", post.getUserId())
-                .eq("status", CommunityReportConstants.STATUS_VISIBLE)
-                .eq("ai_generation_id", post.getAiGenerationId());
-        reply.set("ai_reply", result.replyContent());
-        reply.set("ai_result_kind", result.resultKind());
-
-        try {
-            if (communityPostMapper.update(null, reply) > 0) {
-                post.setAiReply(result.replyContent());
-                post.setAiResultKind(result.resultKind());
-            }
-        } catch (DataAccessException problem) {
-            logger.warn("社区AI回复回写失败 postId={} code=internal_error", post.getId());
-        }
-    }
-
-    private void saveAiReplyLog(CommunityPost post, AiReplyResult result) {
-        try {
-            aiReplyLogService.savePostReply(post.getUserId(), post.getId(), result);
-        } catch (DataAccessException problem) {
-            logger.warn("社区AI调用日志写入失败 postId={} code=internal_error", post.getId());
         }
     }
 }

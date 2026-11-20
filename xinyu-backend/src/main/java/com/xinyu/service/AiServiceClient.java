@@ -56,6 +56,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntFunction;
 import java.util.function.LongSupplier;
 
+import static com.xinyu.common.AiJobValues.SUPPORT;
+
 /**
  * Java 调用 Python 内部生成服务的 HTTP 客户端。
  *
@@ -71,6 +73,7 @@ public final class AiServiceClient implements AutoCloseable, AiJobRuntime.Transp
     /** 回顾与日记共用 DNS、HTTP线程、总预算和取消机制。 */
     public record ReviewGeneration(CompletableFuture<ReviewAiResponse> response, CompletableFuture<Void> terminated) { }
 
+    /** 分开报告业务结果和传输回收，取消或超时可能先于 HTTP 线程退出。 */
     public record Exchange<T>(CompletableFuture<T> response, CompletableFuture<Void> terminated) { }
 
     @FunctionalInterface
@@ -94,7 +97,7 @@ public final class AiServiceClient implements AutoCloseable, AiJobRuntime.Transp
         private static final Duration MAX_TOTAL = Duration.ofSeconds(50);
         public static final Limits PRODUCTION = new Limits(MAX_CONNECT, MAX_READ, MAX_TOTAL);
 
-        /** 社区客户端阶段时限，给浏览器的 20 秒保存请求留出本地收尾时间。 */
+        /** 社区内部传输时限，涵盖 DNS、连接、读取与响应校验。 */
         public static final Limits COMMUNITY = new Limits(MAX_CONNECT, Duration.ofSeconds(17), Duration.ofSeconds(18));
 
         public Limits {
@@ -245,15 +248,20 @@ public final class AiServiceClient implements AutoCloseable, AiJobRuntime.Transp
         return awaitResponse(generateAsync(request, remaining));
     }
 
-    /** 社区同步调用与 worker 共用传输；该入口阻塞直到成功或第一项失败。 */
+    /** 社区同步兼容入口，供协议与超时用例使用。应用 worker 使用异步入口。 */
     public CommunityAiResponse generateCommunity(CommunityAiRequest request, Duration remaining) {
+        return awaitResponse(startCommunityGeneration(request, remaining).response());
+    }
+
+    /** 与心情一样暴露响应和真实传输清理信号，供共享 Worker 等待。 */
+    public Exchange<CommunityAiResponse> startCommunityGeneration(CommunityAiRequest request, Duration remaining) {
         require(request != null);
         RequestSpec<CommunityAiResponse> spec = new RequestSpec<>(
                 request.requestId(), communityEndpoint, request.budgetMs(),
                 () -> validateCommunityInput(request), request::withBudget,
                 root -> parseCommunityResponse(root, request.requestId()));
 
-        return awaitResponse(startCall(spec, remaining).response());
+        return startCall(spec, remaining);
     }
 
     private <T> T awaitResponse(CompletableFuture<T> result) {
@@ -591,7 +599,7 @@ public final class AiServiceClient implements AutoCloseable, AiJobRuntime.Transp
         } catch (IllegalArgumentException invalid) {
             throw failure(INVALID_MODEL_RESPONSE);
         }
-        boolean support = "SUPPORT".equals(response.resultKind());
+        boolean support = SUPPORT.equals(response.resultKind());
         if (support && !MoodReviewSafety.isSupportReply(response.resultKind(), response.replyContent())) {
             throw failure(INVALID_MODEL_RESPONSE);
         }

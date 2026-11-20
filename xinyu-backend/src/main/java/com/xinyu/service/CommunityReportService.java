@@ -56,6 +56,9 @@ public class CommunityReportService {
     private CommunityPostMapper communityPostMapper;
 
     @Autowired
+    private CommunityReplySource communityReplySource;
+
+    @Autowired
     private CommunityReplyMapper communityReplyMapper;
 
     @Autowired
@@ -463,13 +466,8 @@ public class CommunityReportService {
 
     private boolean hideContentFromVisible(String targetType, Long targetId, Long postId, String hideReason) {
         if (CommunityReportConstants.TARGET_POST.equals(targetType)) {
-            UpdateWrapper<CommunityPost> update = new UpdateWrapper<>();
-            update.eq("id", targetId)
-                    .eq("status", CommunityReportConstants.STATUS_VISIBLE)
-                    .set("status", CommunityReportConstants.STATUS_ADMIN_HIDDEN)
-                    .set("hide_reason", hideReason)
-                    .set("ai_generation_id", null);
-            return communityPostMapper.update(null, update) > 0;
+            // 沿用帖子隐藏入口：当前裁决事务同时使旧 AI 回复和任务失效。
+            return communityReplySource.hideVisible(targetId, hideReason);
         }
 
         UpdateWrapper<CommunityReply> update = new UpdateWrapper<>();

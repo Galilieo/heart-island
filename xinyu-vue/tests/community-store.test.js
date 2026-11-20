@@ -200,3 +200,55 @@ test('评论发布或编辑已保存时，列表刷新失败仍保留支持文�
     assert.equal(result.data.supportText, supportText)
   }
 })
+
+test('编辑确认后使用返回的新任务，详情刷新失败时保留已保存正文', async () => {
+  const store = useCommunityStore()
+  store.currentPost = { id: '7', mine: true, jobId: '81', aiReply: '旧回复', resultKind: 'MODEL' }
+  request.defaults.adapter = async (config) => {
+    if (config.url === '/community/post/update') {
+      return ok(config, { postId: '7', jobId: '82', aiReplyState: 'queued' })
+    }
+    if (config.url === '/community/post/detail') throw new Error('断开刷新')
+    return ok(config, { records: [], total: '0' })
+  }
+
+  const result = await store.updatePost({
+    id: '7',
+    content: '新正文',
+    moodType: '平静',
+    topicId: '1'
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.refreshFailed, true)
+  assert.equal(store.currentPost.content, '新正文')
+  assert.equal(store.currentPost.jobId, '82')
+  assert.equal(store.currentPost.aiReplyState, 'queued')
+  assert.equal(store.currentPost.aiReply, null)
+})
+
+test('列表请求开始后观察到的成功状态可以抵抗迟到的 queued 快照', async () => {
+  const store = useCommunityStore()
+  const queued = { id: '7', mine: true, jobId: '82', aiReplyState: 'queued' }
+  // 切换筛选后卡片暂时不在页面，仍需要把结果合并到在途列表。
+  store.posts = []
+  let reply
+  request.defaults.adapter = (config) =>
+    new Promise((resolve) => {
+      reply = () => resolve(ok(config, { records: [{ ...queued }], total: '1' }))
+    })
+
+  const refreshing = store.fetchPosts()
+  await new Promise(setImmediate)
+  store.applyAiJob({
+    id: '82',
+    targetId: '7',
+    status: 'succeeded',
+    resultKind: 'MODEL',
+    replyContent: '新回复'
+  })
+  reply()
+  await refreshing
+
+  assert.equal(store.posts[0].aiReplyState, 'succeeded')
+  assert.equal(store.posts[0].aiReply, '新回复')
+})

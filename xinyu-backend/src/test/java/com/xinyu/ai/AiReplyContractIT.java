@@ -267,6 +267,8 @@ class AiReplyContractIT {
         var slow = publishPost("超时合成社区帖子");
         assertThat(slow.path("aiReply").isNull()).isTrue();
         assertThat(slow.path("resultKind").isNull()).isTrue();
+        await(() -> jdbc.queryForObject("SELECT COUNT(*) FROM ai_reply WHERE target_type='POST' AND target_id=?",
+                Integer.class, slow.path("id").asLong()) == 1);
         String code = jdbc.queryForObject(
                 "SELECT error_message FROM ai_reply WHERE target_type='POST' AND target_id=?",
                 String.class, slow.path("id").asLong());
@@ -288,9 +290,19 @@ class AiReplyContractIT {
         var result = javaRequest("POST", "/community/post/add",
                 Map.of("topicId", 1, "moodType", "平静", "content", content, "needAiReply", true));
         assertThat(result.body().path("code").asInt()).isEqualTo(200);
-        Long id = jdbc.queryForObject("SELECT id FROM community_post WHERE user_id=? AND content=?",
-                Long.class, userId, content);
-        return data("GET", "/community/post/detail?id=" + id, null);
+        JsonNode saved = result.body().path("data");
+        assertThat(saved.path("aiReplyState").asText()).isEqualTo("queued");
+        String jobPath = "/community/ai-job/" + saved.path("jobId").asText();
+        await(() -> List.of("succeeded", "failed").contains(communityJobStatus(jobPath)));
+        return data("GET", "/community/post/detail?id=" + saved.path("postId").asText(), null);
+    }
+
+    private String communityJobStatus(String path) {
+        try {
+            return data("GET", path, null).path("status").asText();
+        } catch (Exception problem) {
+            throw new IllegalStateException(problem);
+        }
     }
 
     private JsonNode save(String content, boolean enabled) throws Exception {

@@ -3,12 +3,9 @@
 // （不是请求体），所以这里都走 params 形式。
 import { request, unwrap, unwrapHttp } from './_helpers'
 
-// 已用有限真实调用校准：同步社区生成使用独立20秒等待，不改变全局5秒。
-const SAVE_TIMEOUT_MS = 20_000
-
 async function savePost(url, payload) {
   try {
-    return await unwrap(request.post(url, payload, { timeout: SAVE_TIMEOUT_MS }))
+    return await unwrap(request.post(url, payload))
   } catch (error) {
     // 未收到响应无法判断是否已落库；保留输入，由用户刷新核对，不自动重发。
     if (!error.response) {
@@ -30,8 +27,8 @@ export const communityApi = {
     return unwrap(request.get('/community/post/favorites'))
   },
 
-  postDetail(id) {
-    return unwrap(request.get('/community/post/detail', { params: { id } }))
+  postDetail(id, options) {
+    return unwrap(request.get('/community/post/detail', { ...options, params: { id } }))
   },
 
   createPost(payload) {
@@ -40,6 +37,14 @@ export const communityApi = {
 
   updatePost(payload) {
     return savePost('/community/post/update', payload)
+  },
+
+  aiJob(id, options) {
+    return unwrap(request.get(`/community/ai-job/${id}`, options))
+  },
+
+  retryAiJob(id) {
+    return unwrapHttp(request.post(`/community/ai-job/${id}/retry`))
   },
 
   removePost(id) {

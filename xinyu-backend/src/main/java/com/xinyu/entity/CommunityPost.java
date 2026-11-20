@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.xinyu.common.CommunityReportConstants;
 
@@ -30,9 +31,18 @@ public class CommunityPost {
 
     private String aiResultKind;
 
-    /** 当前保存发起的AI生成标识；NULL表示无有效生成，仅服务端用于条件回写。 */
+    /** 后端用于匹配当前版本任务。 */
     @JsonIgnore
-    private String aiGenerationId;
+    private Long contentVersion;
+
+    /** 作者视图临时字段，通过 mine 决定是否序列化。 */
+    @TableField(exist = false)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String aiReplyState;
+
+    @TableField(exist = false)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long jobId;
 
     private String anonymousName;
 
@@ -108,10 +118,6 @@ public class CommunityPost {
         this.aiResultKind = aiResultKind;
     }
 
-    public String getAiGenerationId() {
-        return aiGenerationId;
-    }
-
     public String getAnonymousName() {
         return anonymousName;
     }
@@ -180,10 +186,6 @@ public class CommunityPost {
         this.aiReply = aiReply;
     }
 
-    public void setAiGenerationId(String aiGenerationId) {
-        this.aiGenerationId = aiGenerationId;
-    }
-
     public void setAnonymousName(String anonymousName) {
         this.anonymousName = anonymousName;
     }
@@ -250,5 +252,29 @@ public class CommunityPost {
 
     public void setRiskReviewedTime(LocalDateTime riskReviewedTime) {
         this.riskReviewedTime = riskReviewedTime;
+    }
+
+    public Long getContentVersion() {
+        return contentVersion;
+    }
+
+    public void setContentVersion(Long contentVersion) {
+        this.contentVersion = contentVersion;
+    }
+
+    public String getAiReplyState() {
+        return Boolean.TRUE.equals(mine) ? aiReplyState : null;
+    }
+
+    public void setAiReplyState(String aiReplyState) {
+        this.aiReplyState = aiReplyState;
+    }
+
+    public Long getJobId() {
+        return Boolean.TRUE.equals(mine) ? jobId : null;
+    }
+
+    public void setJobId(Long jobId) {
+        this.jobId = jobId;
     }
 }

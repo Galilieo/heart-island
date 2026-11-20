@@ -210,7 +210,11 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
         wait_ready('http://127.0.0.1:28000/health', processes)
 
         java_binary = str(Path(os.environ['JAVA_HOME']) / 'bin/java')
-        java = start([java_binary, '-jar', str(artifacts / 'xinyu-backend.jar')], build, test_environment, 'java-worker-off')
+        worker_off_environment = test_environment.copy()
+        worker_off_environment.pop('AI_SERVICE_BASE_URL')
+        worker_off_environment.pop('AI_INTERNAL_TOKEN')
+        java = start([java_binary, '-jar', str(artifacts / 'xinyu-backend.jar')], build,
+                     worker_off_environment, 'java-worker-off')
         base = 'http://127.0.0.1:28080'
         wait_ready(base + '/hello', processes)
         report['checks'].append('redis_then_python_then_java_worker_disabled_started')
@@ -254,14 +258,22 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
         time.sleep(1.2)
         assert expect_api(base,'/mood/ai-job/'+str(pending['jobId']),member)['status'] == 'queued'
         assert not supplier_calls
-        api(base,'/community/post/add',{'topicId':1,'moodType':'平静','content':'关闭AI的部署合成帖子','needAiReply':False},member)
-        api(base,'/community/post/add',{'topicId':1,'moodType':'平静','content':'需回复的部署合成帖子','needAiReply':True},member)
-        api(base,'/community/post/add',{'topicId':1,'moodType':'平静','content':'我不想活了','needAiReply':True},member)
-        kinds = database.execute(
-            "SELECT ai_result_kind FROM community_post WHERE ai_result_kind IS NOT NULL ORDER BY id;", name)
-        assert kinds.splitlines() == ['MODEL', 'SUPPORT']
-        assert len(supplier_calls) == 1
-        report['checks'].append('worker_off_community_model_and_support')
+        closed = api(base, '/community/post/add', {
+            'topicId': 1, 'moodType': '平静', 'content': '关闭AI的部署合成帖子', 'needAiReply': False
+        }, member)
+        assert closed['jobId'] is None and closed['aiReplyState'] == 'disabled'
+        community_cases = [('需回复的部署合成帖子', 'MODEL'), ('我不想活了', 'SUPPORT')]
+        community_jobs = []
+        for content, kind in community_cases:
+            saved = api(base, '/community/post/add', {
+                'topicId': 1, 'moodType': '平静', 'content': content, 'needAiReply': True
+            }, member)
+            assert saved['aiReplyState'] == 'queued'
+            path = '/community/ai-job/' + str(saved['jobId'])
+            assert expect_api(base, path, member)['status'] == 'queued'
+            community_jobs.append((path, kind))
+        assert not supplier_calls
+        report['checks'].append('worker_off_keeps_community_queued_without_internal_credentials')
         smoke_env = dict(test_environment, SMOKE_BACKEND_URL=base, SMOKE_PYTHON_URL='http://127.0.0.1:28000',
                          SMOKE_FRONTEND_URL='http://127.0.0.1:28081',SMOKE_USER_TOKEN=member,SMOKE_ADMIN_TOKEN=admin)
         smoke = subprocess.run([sys.executable,str(ROOT/'deploy/check/smoke.py')],env=smoke_env,capture_output=True,text=True)
@@ -283,9 +295,26 @@ INSERT INTO community_reply(id,post_id,user_id,content,status) VALUES(900001,900
         assert job['status']=='succeeded', '合成worker任务未成功'
         assert job['replyContent']==REPLY
         assert job['resultKind']=='MODEL'
+        for path, kind in community_jobs:
+            community_job = expect_api(base, path, member)
+            while time.monotonic() < deadline:
+                community_job = expect_api(base, path, member)
+                if community_job['status'] in {'succeeded', 'failed'}:
+                    break
+                time.sleep(0.2)
+            assert community_job['status'] == 'succeeded' and community_job['resultKind'] == kind
+        kinds = database.execute(
+            "SELECT ai_result_kind FROM community_post WHERE ai_result_kind IS NOT NULL ORDER BY id;", name)
+        assert kinds.splitlines() == ['MODEL', 'SUPPORT']
+        report['checks'].append('worker_on_publishes_community_model_and_support')
         assert len(supplier_calls)==2
         assert expect_api(base,'/mood/detail/'+str(pending['id']),member)['aiReply']==REPLY
-        assert database.execute('SELECT COUNT(*) FROM ai_reply;',name).strip()=='2'
+        # 社区兼容日志独立提交，终态可先于该日志被读取。
+        while time.monotonic() < deadline:
+            if database.execute('SELECT COUNT(*) FROM ai_reply;', name).strip() == '2':
+                break
+            time.sleep(0.2)
+        assert database.execute('SELECT COUNT(*) FROM ai_reply;', name).strip() == '2'
         redis_env['REDISCLI_AUTH']=redis_password
         keys = subprocess.run(['redis-cli','-p','28379','--scan','--pattern','xinyu:test:deploy:*'],
                               env=redis_env,capture_output=True,text=True)

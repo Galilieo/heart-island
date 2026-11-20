@@ -1,6 +1,5 @@
 package com.xinyu.controller;
 
-
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xinyu.common.Result;
 import com.xinyu.dto.CommunityPostAddDTO;
@@ -8,12 +7,12 @@ import com.xinyu.dto.CommunityPostUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.service.CommunityPostService;
 import com.xinyu.utils.JwtUtil;
-import com.xinyu.vo.CommunityWriteVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/** 帖子 HTTP 入口，读取观看者身份，保存时把任务状态随写响应返回。 */
 @RestController
 @RequestMapping("/community/post")
 public class CommunityPostController {
@@ -92,12 +91,8 @@ public class CommunityPostController {
 
         CommunityPostService.PostSaveResult result = communityPostService.add(dto, userId);
 
-        // 额度不足时帖子已保存、只是没生成小芽回复，提示里带一句说明（契约 2.4）。
-        // 用两参 success 把文案放进 message：单参重载会把它当 data，前端拿到的 message 恒为默认值。
         if (result.saved()) {
-            return Result.success(result.aiReplyLimited()
-                    ? "发布成功，小芽这会儿回复不过来，稍后可以编辑重新生成"
-                    : "发布成功", new CommunityWriteVO(result.supportText()));
+            return Result.success("发布成功", result.response());
         }
         return Result.error("发布失败");
     }
@@ -181,9 +176,7 @@ public class CommunityPostController {
         CommunityPostService.PostSaveResult result = communityPostService.update(dto, userId);
 
         if (result.saved()) {
-            return Result.success(result.aiReplyLimited()
-                    ? "修改成功，小芽这会儿回复不过来，稍后可以再次编辑重新生成"
-                    : "修改成功", new CommunityWriteVO(result.supportText()));
+            return Result.success("修改成功", result.response());
         }
 
         return Result.error("修改失败");

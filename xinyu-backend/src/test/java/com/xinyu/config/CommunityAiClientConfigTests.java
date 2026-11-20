@@ -15,12 +15,21 @@ class CommunityAiClientConfigTests {
             .withPropertyValues("AI_WORKER_ENABLED=false");
 
     @Test
-    void createsCommunityClientWithWorkerDisabled() {
-        context.withPropertyValues("AI_SERVICE_BASE_URL=http://127.0.0.1:1",
+    void workerDisabledRequiresNoInternalConfiguration() {
+        context.run(app -> {
+            assertThat(app).hasNotFailed();
+            assertThat(app).doesNotHaveBean(CommunityAiClient.class);
+            assertThat(app).doesNotHaveBean(AiServiceClient.class);
+        });
+    }
+
+    @Test
+    void workerEnabledCreatesIndependentClients() {
+        context.withPropertyValues("AI_WORKER_ENABLED=true", "AI_SERVICE_BASE_URL=http://127.0.0.1:1",
                         "AI_INTERNAL_TOKEN=fixture-only-token")
                 .run(app -> {
                     assertThat(app).hasSingleBean(CommunityAiClient.class);
-                    assertThat(app).doesNotHaveBean(AiServiceClient.class);
+                    assertThat(app).hasSingleBean(AiServiceClient.class);
                 });
     }
 
@@ -31,7 +40,7 @@ class CommunityAiClientConfigTests {
             "http://127.0.0.1:0,fixture-only-token"
     })
     void invalidOrMissingInternalConfigurationFailsAtStartup(String url, String token) {
-        context.withPropertyValues("AI_SERVICE_BASE_URL=" + url, "AI_INTERNAL_TOKEN=" + token)
+        context.withPropertyValues("AI_WORKER_ENABLED=true", "AI_SERVICE_BASE_URL=" + url, "AI_INTERNAL_TOKEN=" + token)
                 .run(app -> assertThat(app).getFailure().hasRootCauseMessage("invalid_ai_service_configuration"));
     }
 }

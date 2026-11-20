@@ -14,6 +14,11 @@ import com.xinyu.dto.CommunityReplyUpdateDTO;
 import com.xinyu.entity.CommunityPost;
 import com.xinyu.entity.CommunityReply;
 import com.xinyu.mapper.CommunityPostMapper;
+import com.xinyu.mapper.AiJobMapper;
+import com.xinyu.service.AiJobService;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.CommunityReplySource;
+import com.xinyu.ratelimit.AlwaysAllowRateLimiter;
 import com.xinyu.mapper.CommunityReplyMapper;
 import com.xinyu.mapper.ContentReportMapper;
 import com.xinyu.mapper.FavoriteMapper;
@@ -102,6 +107,7 @@ class CommunityReportPersistenceIT {
         new ResourceDatabasePopulator(
                 new ClassPathResource("ai/schema.sql"),
                 new ClassPathResource("ai/community-schema.sql"),
+                new FileSystemResource(Path.of("../sql/migrations/20261107_01_ai_reply_job.sql")),
                 new FileSystemResource(Path.of("../sql/migrations/20261111_01_community_ai_generation.sql").toAbsolutePath()),
                 new FileSystemResource(Path.of("../sql/migrations/20261114_01_community_report.sql").toAbsolutePath()),
                 new FileSystemResource(Path.of("../sql/migrations/20261119_01_community_ai_result_kind.sql").toAbsolutePath())
@@ -117,6 +123,7 @@ class CommunityReportPersistenceIT {
         var configuration = new MybatisConfiguration();
         configuration.setMapUnderscoreToCamelCase(true);
         configuration.addMapper(ContentReportMapper.class);
+        configuration.addMapper(AiJobMapper.class);
         configuration.addMapper(CommunityPostMapper.class);
         configuration.addMapper(CommunityReplyMapper.class);
         configuration.addMapper(TopicMapper.class);
@@ -137,13 +144,23 @@ class CommunityReportPersistenceIT {
         FavoriteMapper favoriteMapper = sessions.getMapper(FavoriteMapper.class);
         UserMapper userMapper = sessions.getMapper(UserMapper.class);
 
+        AiJobMapper jobs = sessions.getMapper(AiJobMapper.class);
+        AiJobAdmission admission = new AiJobAdmission(new DataSourceTransactionManager(source));
+        AiJobService jobService = new AiJobService(jobs, null, null,
+                admission, new AlwaysAllowRateLimiter(), true);
+        CommunityReplySource replySource = new CommunityReplySource(postMapper, jobs, jobService);
+
         reportService = new CommunityReportService();
+        ReflectionTestUtils.setField(reportService, "communityReplySource", replySource);
         ReflectionTestUtils.setField(reportService, "contentReportMapper", reportMapper);
         ReflectionTestUtils.setField(reportService, "communityPostMapper", postMapper);
         ReflectionTestUtils.setField(reportService, "communityReplyMapper", replyMapper);
         ReflectionTestUtils.setField(reportService, "userMapper", userMapper);
 
         postService = new CommunityPostService();
+        ReflectionTestUtils.setField(postService, "admission", admission);
+        ReflectionTestUtils.setField(postService, "jobs", jobService);
+        ReflectionTestUtils.setField(postService, "replySource", replySource);
         ReflectionTestUtils.setField(postService, "communityPostMapper", postMapper);
         ReflectionTestUtils.setField(postService, "topicMapper", topicMapper);
         ReflectionTestUtils.setField(postService, "postLikeMapper", postLikeMapper);
@@ -162,7 +179,9 @@ class CommunityReportPersistenceIT {
         jdbc.update("INSERT INTO community_reply(id,post_id,user_id,content) VALUES (20,10,1,'我不想活了')");
 
         new ResourceDatabasePopulator(new FileSystemResource(
-                Path.of("../sql/migrations/20261120_01_community_risk_status.sql"))).execute(source);
+                Path.of("../sql/migrations/20261120_01_community_risk_status.sql")),
+                new FileSystemResource(Path.of("../sql/migrations/20261120_02_community_content_version.sql"))
+        ).execute(source);
 
         for (String table : List.of("community_post", "community_reply")) {
             List<String> columns = jdbc.queryForList("""
@@ -226,6 +245,8 @@ class CommunityReportPersistenceIT {
         assertThat(riskRow(table, id)).isEqualTo(beforeEdit);
 
         assertThat(postService.update(edit, 1L).saved()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT content_version FROM community_post WHERE id=?", Long.class, id))
+                .isEqualTo(2L);
         assertThat(riskRow(table, id)).containsEntry("content", "比较平静的一天")
                 .containsEntry("risk_status", "PENDING")
                 .containsEntry("risk_hit_time", beforeEdit.get("risk_hit_time"));
@@ -308,6 +329,26 @@ class CommunityReportPersistenceIT {
         assertThat(riskRow(table, id)).containsEntry("risk_status", "PENDING")
                 .containsEntry("risk_reviewed_time", null)
                 .extractingByKey("risk_hit_time").isNotNull();
+    }
+
+    @Test
+    void hidingPostThroughReportInvalidatesItsCommunityJobAndKeepsRiskFlag() {
+        CommunityPostAddDTO add = new CommunityPostAddDTO();
+        add.setTopicId(1L);
+        add.setMoodType("低落");
+        add.setContent("我不想活了");
+        add.setNeedAiReply(true);
+        var saved = postService.add(add, 1L).response();
+        reportService.submitReport(2L, createDto("POST", saved.postId(), "AD", null));
+        txTemplate.execute(tx -> reportService.handleReport(9L, handleHide("POST", saved.postId(), "AD")));
+
+        assertThat(jdbc.queryForMap("""
+                SELECT status, content_version, risk_status, ai_reply, ai_result_kind FROM community_post WHERE id=?
+                """, saved.postId()))
+                .containsEntry("content_version", 2L).containsEntry("risk_status", "PENDING")
+                .containsEntry("ai_reply", null).containsEntry("ai_result_kind", null);
+        assertThat(jdbc.queryForObject("SELECT status FROM ai_job WHERE id=?", String.class, saved.jobId()))
+                .isEqualTo("superseded");
     }
 
     @Test

@@ -3,7 +3,12 @@ import { computed } from 'vue'
 import BaseButton from '../ui/BaseButton.vue'
 import Xiaoya from '../ui/Xiaoya.vue'
 
-const props = defineProps({ mood: { type: Object, required: true }, now: Number, busy: Boolean })
+const props = defineProps({
+  mood: { type: Object, required: true },
+  now: Number,
+  busy: Boolean,
+  community: Boolean
+})
 defineEmits(['retry', 'refresh'])
 
 const messages = {
@@ -41,7 +46,9 @@ const canRetry = computed(() => {
   )
 })
 const observationMessage = computed(() => {
-  if (props.mood.observationIssue === 'removed') return '记录已不可用，请刷新列表核对。'
+  if (props.mood.observationIssue === 'removed') {
+    return props.community ? '帖子已不可用，请刷新核对。' : '记录已不可用，请刷新列表核对。'
+  }
   if (props.mood.observationIssue === 'limit')
     return '已暂停自动查询，生成可能仍在继续，可稍后刷新查看。'
   if (props.mood.observationIssue) return '暂时未能查询回复状态，请刷新后查看。'
@@ -54,11 +61,16 @@ const isThinking = computed(() => ['queued', 'running'].includes(props.mood.aiRe
 
 // 失败且错误码是限流时，用对应文案替换通用失败提示。
 const statusMessage = computed(() => {
-  if (props.mood.aiReplyState === 'failed') {
-    const limited = rateLimitMessages[props.mood.aiJob?.errorCode]
-    if (limited) return limited
+  const state = props.mood.aiReplyState
+  if (props.community && isThinking.value) {
+    return '小芽正在写，帖子已保存。'
   }
-  return messages[props.mood.aiReplyState] || '暂无 AI 回复。'
+  if (state === 'failed') {
+    const limited = rateLimitMessages[props.mood.aiJob?.errorCode]
+    if (limited) return props.community ? limited.replace('记录已保存', '帖子已保存') : limited
+    if (props.community) return '小芽这次没写出来，帖子已保存。'
+  }
+  return messages[state] || '暂无 AI 回复。'
 })
 </script>
 

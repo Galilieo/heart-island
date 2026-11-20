@@ -6,7 +6,7 @@
 //   - PostReplyList（已有回复列表 + 楼主自己回复的 inline 编辑/删除）
 //   - PostEditDialog（楼主编辑帖子时打开）
 // 路由参数 :id 变化时会自动重新拉详情和回复。
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import AppShell from '../components/layout/AppShell.vue'
@@ -16,11 +16,13 @@ import SkeletonCard from '../components/ui/SkeletonCard.vue'
 import PostCard from '../components/community/PostCard.vue'
 import CommunitySupportDialog from '../components/community/CommunitySupportDialog.vue'
 import XiaoyaNote from '../components/ui/XiaoyaNote.vue'
+import MoodAiStatus from '../components/mood/MoodAiStatus.vue'
 import PostReplyForm from '../components/community/PostReplyForm.vue'
 import PostReplyList from '../components/community/PostReplyList.vue'
 import PostEditDialog from '../components/community/PostEditDialog.vue'
 import ReportDialog from '../components/community/ReportDialog.vue'
 import { useCommunityStore } from '../stores/community'
+import { useCommunityAiReply } from '../composables/useCommunityAiReply'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
 import { communitySupportText } from '../utils/communityRisk'
@@ -36,6 +38,18 @@ const { confirm } = useConfirm()
 
 const { currentPost, replies, topics, reportedTargets } = storeToRefs(communityStore)
 
+const taskPost = computed(() =>
+  String(currentPost.value?.id) === String(route.params.id) ? currentPost.value : null
+)
+const { now, retrying, retry, observe } = useCommunityAiReply(taskPost, communityStore)
+const { run: retryAiReply } = useAsyncAction(retry)
+const showAiStatus = computed(
+  () =>
+    taskPost.value?.mine &&
+    !taskPost.value.hidden &&
+    ['queued', 'running', 'failed'].includes(taskPost.value.aiReplyState)
+)
+
 const editOpen = ref(false)
 const reportOpen = ref(false)
 const reportTarget = ref(null)
@@ -48,7 +62,7 @@ const replyFormRef = ref(null)
 
 const { run: doFetch, loading: postLoading } = useAsyncAction(
   () => communityStore.fetchPostDetail(route.params.id),
-  { errorMsg: '帖子加载失败' }
+  { concurrent: true, errorMsg: '帖子加载失败' }
 )
 
 const { run: doFetchReplies, loading: repliesLoading } = useAsyncAction(
@@ -139,8 +153,6 @@ async function handleSavePost(payload) {
   if (res.ok) {
     editOpen.value = false
     if (res.refreshFailed) toast.warn('帖子已保存，页面刷新失败，请刷新查看')
-    // 额度不足时帖子已保存但没重新生成小芽回复；后端会把提示延长，成功 toast 后补一句。
-    if (res.message && res.message !== '修改成功') toast.info(res.message)
     supportText.value = communitySupportText(res, payload.needAiReply)
   }
 }
@@ -244,6 +256,16 @@ onMounted(async () => {
             这条回复由 AI 自动生成，不代表平台立场
           </p>
         </div>
+
+        <MoodAiStatus
+          v-if="showAiStatus"
+          :mood="taskPost"
+          :now="now"
+          :busy="retrying"
+          community
+          @retry="retryAiReply"
+          @refresh="observe"
+        />
 
         <p v-if="currentPost.hidden" class="detail__hidden-reply-tip">
           这条帖子已被隐藏，暂时不能继续回复。

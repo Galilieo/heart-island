@@ -18,8 +18,11 @@ import com.xinyu.mapper.FavoriteMapper;
 import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.service.AiReplyLogService;
-import com.xinyu.service.CommunityAiClient;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.AiJobService;
 import com.xinyu.service.CommunityPostService;
+import com.xinyu.service.CommunityReplySource;
+import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.service.CommunityReplyService;
 import com.xinyu.service.CommunityReportService;
 import com.xinyu.service.UserService;
@@ -61,6 +64,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         CorsConfig.class,
         JacksonConfig.class,
         CommunityPostService.class,
+        CommunityReplySource.class,
         CommunityReplyService.class
 })
 class CommunityReportHttpTests {
@@ -100,7 +104,13 @@ class CommunityReportHttpTests {
     private TopicMapper topicMapper;
 
     @MockitoBean
-    private CommunityAiClient communityAiClient;
+    private AiJobService aiJobService;
+
+    @MockitoBean
+    private AiJobAdmission admission;
+
+    @MockitoBean
+    private AiJobMapper aiJobMapper;
 
     @MockitoBean
     private AiReplyLogService aiReplyLogService;

@@ -1,11 +1,9 @@
-// 社区 store：话题 / 帖子列表 / 当前帖子详情 / 回复列表。
-// 设计思路：
-//  - PostList 关心 posts + filters；PostDetail 关心 currentPost + replies
-//  - toggleLike/toggleFavorite 走"乐观更新"：先把本地状态翻转，
-//    后端返回失败时再 toast 错误（这一步由 view 接住）
+// 管理社区列表、详情、互动及任务观察结果。页面负责轮询的启停，
+// store 只接受仍匹配帖子和任务的回复，并把在途列表期间确认的更新合并回去。
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { communityApi, topicApi } from '../api'
+import { AI_JOB_STATE } from '../utils/ai-job-polling.js'
 import { refreshAfterSave } from '../utils/saved-result.js'
 
 export const useCommunityStore = defineStore('community', () => {
@@ -19,8 +17,11 @@ export const useCommunityStore = defineStore('community', () => {
   const postsPages = computed(() => Math.max(1, Math.ceil(postsTotal.value / postsPageSize)))
   let postsRequest = 0
   let pendingViewerChanges = null
+  let pendingJobChanges = null
   const favorites = ref([])
   const currentPost = ref(null)
+  let detailRequest = 0
+  let observationRevision = 0
   const replies = ref([])
   const reportedTargets = ref({})
 
@@ -55,8 +56,11 @@ export const useCommunityStore = defineStore('community', () => {
 
   async function fetchPosts(pageNum = postsPage.value) {
     const request = ++postsRequest
+    const revision = observationRevision
     const viewerChanges = new Map()
+    const jobChanges = new Map()
     pendingViewerChanges = viewerChanges
+    pendingJobChanges = jobChanges
     let res
     try {
       res = await communityApi.postList({
@@ -70,7 +74,10 @@ export const useCommunityStore = defineStore('community', () => {
       if (request !== postsRequest) return { ok: true, skipped: true }
       throw error
     } finally {
-      if (request === postsRequest) pendingViewerChanges = null
+      if (request === postsRequest) {
+        pendingViewerChanges = null
+        pendingJobChanges = null
+      }
     }
     if (request !== postsRequest) return { ok: true, skipped: true }
     if (!res.ok) return res
@@ -87,14 +94,25 @@ export const useCommunityStore = defineStore('community', () => {
       return fetchPosts(lastPage)
     }
 
-    for (const post of records) {
-      const changes = viewerChanges.get(post.id)
-      if (changes) applyViewerChanges(post, changes)
-    }
+    mergePostListUpdates(records, viewerChanges, jobChanges, revision)
     posts.value = records
     postsTotal.value = total
     postsPage.value = pageNum
     return res
+  }
+
+  function mergePostListUpdates(records, viewerChanges, jobChanges, revision) {
+    const previous = new Map(posts.value.map((post) => [String(post.id), post]))
+    for (const post of records) {
+      const observed = post.mine && jobChanges.get(jobKey(post.id, post.jobId))
+      if (observed) {
+        Object.assign(post, observed)
+      } else {
+        keepObservedJob(post, previous.get(String(post.id)), revision)
+      }
+      const changes = viewerChanges.get(post.id)
+      if (changes) applyViewerChanges(post, changes)
+    }
   }
 
   async function fetchFavorites() {
@@ -125,6 +143,7 @@ export const useCommunityStore = defineStore('community', () => {
     // 筛选或会话变更后，丢弃此前发出的列表请求。
     postsRequest++
     pendingViewerChanges = null
+    pendingJobChanges = null
     postsPage.value = 1
     postsTotal.value = 0
     posts.value = []
@@ -141,9 +160,10 @@ export const useCommunityStore = defineStore('community', () => {
   async function updatePost(payload) {
     const res = await communityApi.updatePost(payload)
     if (!res.ok) return res
+    applySavedPost(payload, res.data)
     const refreshers = [fetchPosts]
-    if (currentPost.value && currentPost.value.id === payload.id) {
-      refreshers.push(() => fetchPostDetail(payload.id))
+    if (String(currentPost.value?.id) === String(payload.id)) {
+      refreshers.push(() => fetchPostDetail(payload.id, { keepOnFailure: true }))
     }
     const refreshFailed = await refreshAfterSave(...refreshers)
     return { ...res, refreshFailed }
@@ -155,20 +175,125 @@ export const useCommunityStore = defineStore('community', () => {
 
     posts.value = posts.value.filter((post) => post.id !== id)
     if (currentPost.value?.id === id) {
+      detailRequest++
       currentPost.value = null
     }
     const refreshFailed = await refreshAfterSave(fetchPosts)
     return { ...res, refreshFailed }
   }
 
-  async function fetchPostDetail(id) {
-    // 切换帖子或目标被隐藏/删除时立刻清空旧详情，避免残留上一篇内容
-    currentPost.value = null
+  function applySavedPost(payload, saved) {
+    if (String(saved?.postId) !== String(payload.id)) return
+    for (const post of [currentPost.value, ...posts.value]) {
+      if (!post?.mine || String(post.id) !== String(saved.postId)) continue
+
+      Object.assign(post, {
+        content: payload.content,
+        moodType: payload.moodType,
+        topicId: payload.topicId,
+        jobId: saved.jobId,
+        aiReplyState: saved.aiReplyState,
+        aiReply: null,
+        resultKind: null,
+        aiJob: null,
+        observationIssue: null,
+        retryAvailableAt: 0
+      })
+    }
+  }
+
+  async function fetchPostDetail(id, { keepOnFailure = false } = {}) {
+    const request = ++detailRequest
+    const revision = observationRevision
+    // 导航先清空上一篇，编辑确认后的同帖刷新保留已保存的本地视图。
+    if (String(currentPost.value?.id) !== String(id)) {
+      currentPost.value = null
+    }
     const res = await communityApi.postDetail(id)
+    if (request !== detailRequest) return { ok: true, skipped: true }
+
     if (res.ok) {
+      keepObservedJob(res.data, currentPost.value, revision)
       currentPost.value = res.data
+    } else if (!keepOnFailure) {
+      currentPost.value = null
     }
     return res
+  }
+
+  function keepObservedJob(post, previous, requestRevision) {
+    if (!post?.mine || !previous?.mine || !previous.aiJob || !samePostJob(post, previous.aiJob)) {
+      return
+    }
+    if (previous.jobRevision <= requestRevision && post.aiReplyState !== previous.aiReplyState) {
+      return
+    }
+
+    // 同一任务的详情和轮询可并行；较早开始的读不能丢掉已观察到的结果。
+    Object.assign(post, {
+      aiReplyState: previous.aiReplyState,
+      aiReply: previous.aiReply,
+      resultKind: previous.resultKind,
+      aiJob: previous.aiJob,
+      jobRevision: previous.jobRevision,
+      observationIssue: previous.observationIssue,
+      retryAvailableAt: previous.retryAvailableAt
+    })
+  }
+
+  async function fetchAiJob(jobId, options) {
+    const result = await communityApi.aiJob(jobId, options)
+    if (!result.ok) {
+      throw new Error(result.message)
+    }
+    return result.data
+  }
+
+  function retryAiJob(jobId) {
+    return communityApi.retryAiJob(jobId)
+  }
+
+  function matchingPosts(job) {
+    return [currentPost.value, ...posts.value].filter(
+      (post) => post?.mine && !post.hidden && samePostJob(post, job)
+    )
+  }
+
+  function samePostJob(post, job) {
+    return String(post.id) === String(job.targetId) && String(post.jobId) === String(job.id)
+  }
+
+  function jobKey(postId, jobId) {
+    return `${postId}:${jobId}`
+  }
+
+  function applyAiJob(job) {
+    const observation = {
+      aiReplyState: job.status,
+      aiReply: job.status === AI_JOB_STATE.SUCCEEDED ? job.replyContent : null,
+      resultKind: job.resultKind,
+      aiJob: job,
+      jobRevision: ++observationRevision,
+      observationIssue: null,
+      retryAvailableAt: Date.now() + (job.retryAfterSeconds || 0) * 1000
+    }
+    pendingJobChanges?.set(jobKey(job.targetId, job.id), observation)
+    for (const post of matchingPosts(job)) {
+      Object.assign(post, observation)
+    }
+  }
+
+  async function refreshAiReply(job, signal) {
+    if (!matchingPosts(job).length) return
+
+    const result = await communityApi.postDetail(job.targetId, { signal })
+    const current = result.data
+    if (signal.aborted || !result.ok || !current?.mine || !samePostJob(current, job)) return
+
+    for (const post of matchingPosts(job)) {
+      post.aiReply = current.aiReply
+      post.resultKind = current.resultKind
+    }
   }
 
   async function toggleLike(post) {
@@ -309,6 +434,7 @@ export const useCommunityStore = defineStore('community', () => {
   }
 
   function reset() {
+    detailRequest++
     resetPostPage()
     currentPost.value = null
     replies.value = []
@@ -350,6 +476,10 @@ export const useCommunityStore = defineStore('community', () => {
     updatePost,
     removePost,
     fetchPostDetail,
+    fetchAiJob,
+    retryAiJob,
+    applyAiJob,
+    refreshAiReply,
     toggleLike,
     toggleFavorite,
     fetchReplies,

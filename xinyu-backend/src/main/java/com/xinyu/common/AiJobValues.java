@@ -4,6 +4,7 @@ package com.xinyu.common;
 public final class AiJobValues {
     public static final String MOOD_REPLY = "MOOD_REPLY";
     public static final String MOOD_REVIEW = "MOOD_REVIEW";
+    public static final String COMMUNITY_REPLY = "COMMUNITY_REPLY";
 
     public static final String QUEUED = "queued";
     public static final String RUNNING = "running";
@@ -17,6 +18,7 @@ public final class AiJobValues {
     // 来源没有关联任务时使用的展示状态，不写入 ai_job。
     public static final String LEGACY = "legacy";
     public static final String UNAVAILABLE = "unavailable";
+    public static final String DISABLED = "disabled";
 
     private AiJobValues() {
     }

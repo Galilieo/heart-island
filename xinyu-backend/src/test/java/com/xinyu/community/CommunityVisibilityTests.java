@@ -16,6 +16,8 @@ import com.xinyu.mapper.TopicMapper;
 import com.xinyu.service.AiReplyLogService;
 import com.xinyu.service.CommunityAiClient;
 import com.xinyu.service.CommunityPostService;
+import com.xinyu.service.CommunityReplySource;
+import com.xinyu.service.AiJobService;
 import com.xinyu.service.CommunityReplyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +69,12 @@ class CommunityVisibilityTests {
 
     @Mock
     private AiReplyLogService aiReplyLogService;
+
+    @Mock
+    private CommunityReplySource replySource;
+
+    @Mock
+    private AiJobService jobs;
 
     @InjectMocks
     private CommunityPostService postService;

@@ -18,6 +18,7 @@ import PostCard from '../components/community/PostCard.vue'
 import CommunitySupportDialog from '../components/community/CommunitySupportDialog.vue'
 import PostPublishForm from '../components/community/PostPublishForm.vue'
 import { useCommunityStore } from '../stores/community'
+import { useCommunityAiReply } from '../composables/useCommunityAiReply'
 import { useAsyncAction } from '../composables/useAsyncAction'
 import { useToast } from '../composables/useToast'
 import { communitySupportText } from '../utils/communityRisk'
@@ -32,6 +33,8 @@ const { topics, posts, filters, postsPage, postsTotal, postsPages } = storeToRef
 const publishRef = ref(null)
 const showPublish = ref(false)
 const listTop = ref(null)
+const publishedTask = ref(null)
+useCommunityAiReply(publishedTask, communityStore)
 
 const { run: doFetchPosts, loading: postsLoading } = useAsyncAction(
   (pageNum) => communityStore.fetchPosts(pageNum),
@@ -79,8 +82,10 @@ async function handlePublish(payload) {
     publishRef.value?.resetAfterSuccess()
     showPublish.value = false
     if (res.refreshFailed) toast.warn('帖子已保存，列表刷新失败，请刷新查看')
-    // 额度不足时帖子已保存但没生成小芽回复；后端会把提示延长，成功 toast 后补一句。
-    if (res.message && res.message !== '发布成功') toast.info(res.message)
+    const saved = res.data
+    publishedTask.value = saved?.jobId
+      ? { id: saved.postId, jobId: saved.jobId, aiReplyState: saved.aiReplyState, mine: true }
+      : null
     supportText.value = communitySupportText(res, payload.needAiReply)
   }
 }

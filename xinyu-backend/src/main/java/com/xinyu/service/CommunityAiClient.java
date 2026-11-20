@@ -6,8 +6,8 @@ import com.xinyu.dto.CommunityAiResponse;
 import java.time.Duration;
 import java.util.UUID;
 
-/** 社区同步客户端，独占一套传输容量和生命周期。 */
-public final class CommunityAiClient implements AutoCloseable {
+/** 社区任务客户端，独占一套传输容量和生命周期。 */
+public final class CommunityAiClient implements AutoCloseable, AiJobRuntime.Transport {
     private final AiServiceClient transport;
     private final Duration total;
 
@@ -17,11 +17,22 @@ public final class CommunityAiClient implements AutoCloseable {
         total = limits.total();
     }
 
-    /** 同步请求 Python；失败以内部安全分类抛出 AiServiceException。 */
+    /** 协议和超时测试用的同步入口；应用 Worker 使用 startGeneration。 */
     public CommunityAiResponse generateReplyForPost(String topicName, String moodType, String content) {
         var request = new CommunityAiRequest(UUID.randomUUID().toString(),
                 topicName, moodType, content, CommunityAiRequest.MAX_BUDGET_MS);
         return transport.generateCommunity(request, total);
+    }
+
+    /** 发送本次尝试的请求，生成期间不占数据库执行器。 */
+    public AiServiceClient.Exchange<CommunityAiResponse> startGeneration(
+            CommunityAiRequest request, Duration remaining) {
+        return transport.startCommunityGeneration(request, remaining);
+    }
+
+    @Override
+    public boolean awaitTermination(Duration remaining) throws InterruptedException {
+        return transport.awaitTermination(remaining);
     }
 
     @Override

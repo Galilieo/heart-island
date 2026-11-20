@@ -2,6 +2,7 @@ package com.xinyu.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.xinyu.dto.MoodAiResponse;
+import com.xinyu.dto.ReviewAiResponse;
 import com.xinyu.entity.AiJob;
 import com.xinyu.entity.AiReply;
 import com.xinyu.entity.MoodRecord;
@@ -14,6 +15,7 @@ import com.xinyu.vo.AiJobVO;
 import com.xinyu.vo.MoodRecordVO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
@@ -24,24 +26,30 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
-/** 管理持久任务；本阶段保存路径仅做数据库操作，不调用模型。 */
+import static com.xinyu.common.AiJobValues.COMMUNITY_REPLY;
+import static com.xinyu.common.AiJobValues.DISABLED;
+import static com.xinyu.common.AiJobValues.FAILED;
+import static com.xinyu.common.AiJobValues.LEGACY;
+import static com.xinyu.common.AiJobValues.MODEL;
+import static com.xinyu.common.AiJobValues.MOOD_REPLY;
+import static com.xinyu.common.AiJobValues.MOOD_REVIEW;
+import static com.xinyu.common.AiJobValues.QUEUED;
+import static com.xinyu.common.AiJobValues.RUNNING;
+import static com.xinyu.common.AiJobValues.SUCCEEDED;
+import static com.xinyu.common.AiJobValues.SUPERSEDED;
+import static com.xinyu.common.AiJobValues.UNAVAILABLE;
+
+/** 管理回复任务的准入、查询、重排与日记执行结果；具体生成请求由 Worker 的策略发出。 */
 @Service
 public class AiJobService {
     private static final Logger logger = LoggerFactory.getLogger(AiJobService.class);
 
-    /** 任务类型，来源：ai_job.task_type 列注释；当前 worker 只处理日记回应。 */
-    private static final String TASK_TYPE_MOOD_REPLY = "MOOD_REPLY";
+    public static final String TASK_TYPE_COMMUNITY_REPLY = COMMUNITY_REPLY;
 
-    /** 任务状态，来源：ai_job.status 列注释。 */
-    private static final String STATUS_QUEUED = "queued";
-    private static final String STATUS_RUNNING = "running";
-    private static final String STATUS_SUCCEEDED = "succeeded";
-    private static final String STATUS_FAILED = "failed";
-    private static final String STATUS_SUPERSEDED = "superseded";
-
-    /** 结果类型，来源：ai_job.result_kind 列注释；SUPPORT 不写 ai_reply 日志。 */
-    private static final String RESULT_KIND_MODEL = "MODEL";
+    private static final Set<String> MOOD_TASK_TYPES = Set.of(MOOD_REPLY, MOOD_REVIEW);
+    private static final Set<String> COMMUNITY_TASK_TYPES = Set.of(COMMUNITY_REPLY);
 
     /** 模板版本，须与 Python contracts.TEMPLATE_VERSION 保持一致。 */
     private static final String TEMPLATE_VERSION = "mood-reply-v2";
@@ -60,11 +68,6 @@ public class AiJobService {
     private static final String ERROR_RATE_LIMITED_DAY = "rate_limited_day";
     private static final String ERROR_RATE_LIMITED_GLOBAL = "rate_limited_global";
 
-    /** 无任务时的来源状态：历史回复 legacy、待生成 unavailable、已关闭 disabled。 */
-    private static final String STATE_LEGACY = "legacy";
-    private static final String STATE_UNAVAILABLE = "unavailable";
-    private static final String STATE_DISABLED = "disabled";
-
     /** mood_record.status=1 表示有效，软删除写 0。 */
     private static final int MOOD_RECORD_ACTIVE_STATUS = 1;
 
@@ -73,7 +76,7 @@ public class AiJobService {
 
     /** 幂等返回与重试 CAS 可以直接接受的任务状态。 */
     private static final Set<String> ACTIVE_OR_SUCCEEDED =
-            Set.of(STATUS_QUEUED, STATUS_RUNNING, STATUS_SUCCEEDED);
+            Set.of(QUEUED, RUNNING, SUCCEEDED);
 
     private static final Set<String> ERROR_CODES = Set.of(
             "invalid_request", "unauthorized", "provider_timeout", "provider_error",
@@ -101,7 +104,7 @@ public class AiJobService {
 
     private MoodReviewService reviews;
 
-    @org.springframework.beans.factory.annotation.Autowired
+    @Autowired
     public void setReviews(MoodReviewService reviews) {
         this.reviews = reviews;
     }
@@ -110,7 +113,7 @@ public class AiJobService {
         return reviews.prepare(id, attempt, requestId);
     }
 
-    public boolean completeReview(long id, int attempt, String requestId, com.xinyu.dto.ReviewAiResponse response) {
+    public boolean completeReview(long id, int attempt, String requestId, ReviewAiResponse response) {
         return reviews.complete(id, attempt, requestId, response);
     }
 
@@ -120,12 +123,18 @@ public class AiJobService {
      * @return 本次领取并加锁的任务；无待办或 worker 未启用时返回 null
      */
     public AiJob claimNext() {
-        if (!workerEnabled) return null;
+        if (!workerEnabled) {
+            return null;
+        }
         return admission.transaction(() -> {
-            AiJob candidate = jobs.selectNextQueued(TASK_TYPE_MOOD_REPLY);
-            if (candidate == null) return reviews == null ? null : reviews.claimNext();
+            AiJob candidate = jobs.selectNextQueued(MOOD_REPLY);
+            if (candidate == null) {
+                return reviews == null ? null : reviews.claimNext();
+            }
             String requestId = UUID.randomUUID().toString();
-            if (jobs.claimByType(TASK_TYPE_MOOD_REPLY, candidate.getId(), candidate.getAttemptCount(), requestId) != 1) return null;
+            if (jobs.claimByType(MOOD_REPLY, candidate.getId(), candidate.getAttemptCount(), requestId) != 1) {
+                return null;
+            }
             // 同一事务内重新读取，返回 CAS 之后的真实行并锁到提交。
             return jobs.selectForUpdate(candidate.getId());
         });
@@ -138,10 +147,14 @@ public class AiJobService {
      */
     public MoodRecord sourceForAttempt(long jobId, int attempt, String requestId) {
         AiJob job = jobs.selectById(jobId);
-        if (!isCurrentAttempt(job, attempt, requestId)) return null;
+        if (!isCurrentAttempt(job, attempt, requestId)) {
+            return null;
+        }
         MoodRecord source = moods.selectById(job.getTargetId());
-        if (validSource(source, job)) return source;
-        finish(job, STATUS_SUPERSEDED, null, null);
+        if (validSource(source, job)) {
+            return source;
+        }
+        finishWithoutReply(job, SUPERSEDED, null);
         return null;
     }
 
@@ -153,45 +166,61 @@ public class AiJobService {
      * @throws IllegalStateException 条件更新意外失败，事务整体回滚
      */
     public boolean complete(long jobId, int attempt, String requestId, MoodAiResponse result) {
-        // 加锁前先读一次任务，快速拒绝已过期的尝试，避免无谓锁定来源与任务。
         AiJob observed = jobs.selectById(jobId);
-        if (!isCurrentAttempt(observed, attempt, requestId)) return false;
-        return admission.transaction(() -> {
-            // 锁顺序固定为来源行→任务行；拿锁后重新核验尝试身份和目标，防止等待期间被其他执行取代。
-            MoodRecord source = moods.selectOwnedForUpdate(observed.getTargetId(), observed.getUserId());
-            AiJob current = jobs.selectForUpdate(jobId);
-            if (!isCurrentAttempt(current, attempt, requestId) || !sameTarget(observed, current)) return false;
-            if (!validSource(source, current)) {
-                finish(current, STATUS_SUPERSEDED, null, null);
-                return false;
+        if (!isCurrentAttempt(observed, attempt, requestId)) {
+            return false;
+        }
+
+        return admission.transaction(() -> completeMoodReplyUnderLock(jobId, observed, attempt, requestId, result));
+    }
+
+    private boolean completeMoodReplyUnderLock(
+            long jobId, AiJob observed, int attempt, String requestId, MoodAiResponse result) {
+        // 与日记编辑、删除使用同一锁顺序；等待行锁后重新核验任务身份。
+        MoodRecord source = moods.selectOwnedForUpdate(observed.getTargetId(), observed.getUserId());
+        AiJob current = jobs.selectForUpdate(jobId);
+        if (!isCurrentAttempt(current, attempt, requestId) || !sameTarget(observed, current)) {
+            return false;
+        }
+        if (!validSource(source, current)) {
+            finishWithoutReply(current, SUPERSEDED, null);
+            return false;
+        }
+
+        String reply;
+        try {
+            if (result == null) {
+                throw new IllegalArgumentException(ERROR_INVALID_MODEL_RESPONSE);
             }
-            String reply;
-            try {
-                if (result == null) throw new IllegalArgumentException(ERROR_INVALID_MODEL_RESPONSE);
-                reply = result.validatedReply(jobId, attempt, requestId, current.getTargetVersion());
-            } catch (IllegalArgumentException invalid) {
-                finish(current, STATUS_FAILED, ERROR_INVALID_MODEL_RESPONSE, null);
-                return false;
-            }
-            // 先做任务终态 CAS 再写回复：终态是本次提交的闸门，条件不满足时不写来源。
-            if (!finish(current, STATUS_SUCCEEDED, null, result)) return false;
-            if (moods.writeReplyAtVersion(current.getTargetId(), current.getUserId(), current.getTargetVersion(), reply) != 1) {
-                throw new IllegalStateException("回应提交条件已变化");
-            }
-            if (RESULT_KIND_MODEL.equals(result.resultKind())) {
-                AiReply log = new AiReply();
-                log.setUserId(current.getUserId());
-                log.setTargetType(AiReplyLogService.TARGET_TYPE_MOOD_RECORD);
-                log.setTargetId(current.getTargetId());
-                log.setReplyContent(reply);
-                log.setModelName(result.modelName());
-                log.setStatus(1);
-                // 不复制日记全文或提示词；SUPPORT 不伪造成模型调用成功记录。
-                if (replies.insert(log) != 1) throw new IllegalStateException("回应日志保存未成功");
-            }
-            // 终态、来源回复与日志同事务提交，任一步失败都整体回滚，不留下“已完成但没有回复”的任务。
-            return true;
-        });
+            reply = result.validatedReply(jobId, attempt, requestId, current.getTargetVersion());
+        } catch (IllegalArgumentException invalid) {
+            finishWithoutReply(current, FAILED, ERROR_INVALID_MODEL_RESPONSE);
+            return false;
+        }
+
+        if (!finishWithReply(current, result)) {
+            return false;
+        }
+        if (moods.writeReplyAtVersion(current.getTargetId(), current.getUserId(), current.getTargetVersion(), reply) != 1) {
+            throw new IllegalStateException("回应提交条件已变化");
+        }
+        if (MODEL.equals(result.resultKind())) {
+            writeMoodReplyLog(current, reply, result.modelName());
+        }
+        return true;
+    }
+
+    private void writeMoodReplyLog(AiJob job, String reply, String modelName) {
+        AiReply log = new AiReply();
+        log.setUserId(job.getUserId());
+        log.setTargetType(AiReplyLogService.TARGET_TYPE_MOOD_RECORD);
+        log.setTargetId(job.getTargetId());
+        log.setReplyContent(reply);
+        log.setModelName(modelName);
+        log.setStatus(1);
+        if (replies.insert(log) != 1) {
+            throw new IllegalStateException("回应日志保存未成功");
+        }
     }
 
     /**
@@ -201,12 +230,14 @@ public class AiJobService {
      */
     public boolean fail(long jobId, int attempt, String requestId, String errorCode) {
         AiJob job = jobs.selectById(jobId);
-        if (job != null && MoodReviewService.TASK_TYPE.equals(job.getTaskType())) {
+        if (job != null && MOOD_REVIEW.equals(job.getTaskType())) {
             return reviews.fail(jobId, attempt, requestId, errorCode);
         }
-        if (!isCurrentAttempt(job, attempt, requestId)) return false;
-        String safeCode = ERROR_CODES.contains(errorCode == null ? "" : errorCode) ? errorCode : ERROR_INTERNAL;
-        return finish(job, STATUS_FAILED, safeCode, null);
+        if (!isCurrentAttempt(job, attempt, requestId)) {
+            return false;
+        }
+        String safeCode = safeErrorCode(errorCode);
+        return finishWithoutReply(job, FAILED, safeCode);
     }
 
     /**
@@ -217,34 +248,53 @@ public class AiJobService {
      */
     public AiJobVO retry(long userId, long jobId) {
         AiJob observed = jobs.selectById(jobId);
-        if (observed != null && MoodReviewService.TASK_TYPE.equals(observed.getTaskType())) {
+        if (observed != null && MOOD_REVIEW.equals(observed.getTaskType())) {
             return reviews.retry(userId, jobId);
         }
-        requireRetryQuota(userId, observed);
+        return retryReply(userId, jobId, observed, MOOD_REPLY,
+                job -> ownedCurrentSource(job).getAiReply(),
+                job -> {
+                    MoodRecord source = moods.selectById(job.getTargetId());
+                    return source == null ? null : source.getContent();
+                });
+    }
+
+    /** 社区任务归属、版本和可见性确认后，复用回复任务的额度、冷却与重排。 */
+    public AiJobVO retryCommunity(long userId, long jobId, CommunityReplySource source) {
+        return retryReply(userId, jobId, jobs.selectById(jobId), COMMUNITY_REPLY,
+                source::currentReply, source::retryContent);
+    }
+
+    private AiJobVO retryReply(long userId, long jobId, AiJob observed, String taskType,
+                               Function<AiJob, String> currentReply, Function<AiJob, String> retryContent) {
+        boolean community = COMMUNITY_REPLY.equals(taskType);
+        requireRetryQuota(userId, observed, taskType, retryContent);
         return admission.save(() -> {
-            AiJob job = ownedJob(userId, jobId);
-            MoodRecord source = ownedCurrentSource(job);
+            AiJob job = community ? ownedCommunityJob(userId, jobId) : ownedJob(userId, jobId);
+            String reply = currentReply.apply(job);
             if (ACTIVE_OR_SUCCEEDED.contains(job.getStatus())) {
-                return view(job, source);
+                return view(job, reply);
             }
-            if (!STATUS_FAILED.equals(job.getStatus())) {
+            if (!FAILED.equals(job.getStatus())) {
                 throw http(HttpStatus.CONFLICT, "当前任务不可重试");
             }
 
             int cooldownSeconds = AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount());
             requireCooldownElapsed(job, cooldownSeconds);
-            if (capacityFull(userId)) {
+            if (capacityFull(userId, taskType)) {
                 throw http(HttpStatus.SERVICE_UNAVAILABLE, "回应任务较多，请稍后重试");
             }
 
-            int changed = jobs.requeueAfterCooldown(job, cooldownSeconds);
+            int changed = community
+                    ? jobs.requeueAfterCooldownByType(taskType, job, cooldownSeconds)
+                    : jobs.requeueAfterCooldown(job, cooldownSeconds);
             // CAS 失败后只回查一次当前行：用来区分“已进入 queued/running/succeeded 的幂等返回”
             // 与真实状态冲突，不循环重置已经完成了另一轮的失败任务。
             AiJob current = jobs.selectForUpdate(jobId);
             if (retryConflict(job, current, changed)) {
                 throw http(HttpStatus.CONFLICT, "任务状态已变化，请刷新");
             }
-            return view(current, source);
+            return view(current, reply);
         });
     }
 
@@ -256,17 +306,34 @@ public class AiJobService {
     public AiJobVO getOwned(long userId, long jobId) {
         return admission.transaction(() -> {
             AiJob observed = jobs.selectById(jobId);
-            if (observed != null && MoodReviewService.TASK_TYPE.equals(observed.getTaskType())) {
+            if (observed != null && MOOD_REVIEW.equals(observed.getTaskType())) {
                 return reviews.getOwned(userId, jobId);
             }
             AiJob job = ownedJob(userId, jobId);
-            return view(job, ownedCurrentSource(job));
+            return view(job, ownedCurrentSource(job).getAiReply());
         });
+    }
+
+    /** 在同一读事务内验证任务归属和帖子版本，只返回任务公开视图。 */
+    public AiJobVO getOwnedCommunity(long userId, long jobId, CommunityReplySource source) {
+        return admission.transaction(() -> {
+            AiJob job = ownedCommunityJob(userId, jobId);
+            return view(job, source.currentReply(job));
+        });
+    }
+
+    private AiJob ownedCommunityJob(long userId, long jobId) {
+        AiJob job = jobs.selectById(jobId);
+        if (job == null || !COMMUNITY_REPLY.equals(job.getTaskType())
+                || !Objects.equals(job.getUserId(), userId)) {
+            throw http(HttpStatus.NOT_FOUND, "回应任务不存在");
+        }
+        return job;
     }
 
     /** 仅供唯一启用 worker 且旧进程已停止后的启动流程调用；此阶段不自动注册调度。 */
     public int recoverInterrupted() {
-        return workerEnabled ? jobs.failInterruptedByType(TASK_TYPE_MOOD_REPLY) + (reviews == null ? 0 : reviews.recoverInterrupted()) : 0;
+        return workerEnabled ? jobs.failInterruptedByType(MOOD_REPLY) + (reviews == null ? 0 : reviews.recoverInterrupted()) : 0;
     }
 
     /** 调用方先按用户过滤来源，并在同一读取事务内组合列表或详情。 */
@@ -275,7 +342,7 @@ public class AiJobService {
             throw http(HttpStatus.NOT_FOUND, "心情记录不存在");
         }
         AiJob job = jobs.selectOne(new QueryWrapper<AiJob>()
-                .eq("task_type", TASK_TYPE_MOOD_REPLY)
+                .eq("task_type", MOOD_REPLY)
                 .eq("target_id", source.getId())
                 .eq("target_version", source.getContentVersion())
                 .eq("user_id", source.getUserId()));
@@ -284,14 +351,20 @@ public class AiJobService {
         return new MoodRecordVO(source.getId(), source.getUserId(), source.getMoodType(), source.getContent(), reply,
                 source.getStatus(), source.getCreateTime(), source.getUpdateTime(), source.getContentVersion(),
                 source.getAiReplyEnabled(), state, job == null ? null : job.getId(),
-                job != null && STATUS_SUCCEEDED.equals(state) ? job.getResultKind() : null);
+                job != null && SUCCEEDED.equals(state) ? job.getResultKind() : null);
     }
 
     private AiJob ownedJob(long userId, long jobId) {
         AiJob job = jobs.selectById(jobId);
-        if (job == null) throw http(HttpStatus.NOT_FOUND, "回应任务不存在");
-        if (!Objects.equals(job.getUserId(), userId)) throw http(HttpStatus.FORBIDDEN, "无权访问该任务");
-        if (!TASK_TYPE_MOOD_REPLY.equals(job.getTaskType())) throw http(HttpStatus.NOT_FOUND, "回应任务不存在");
+        if (job == null || COMMUNITY_REPLY.equals(job.getTaskType())) {
+            throw http(HttpStatus.NOT_FOUND, "回应任务不存在");
+        }
+        if (!Objects.equals(job.getUserId(), userId)) {
+            throw http(HttpStatus.FORBIDDEN, "无权访问该任务");
+        }
+        if (!MOOD_REPLY.equals(job.getTaskType())) {
+            throw http(HttpStatus.NOT_FOUND, "回应任务不存在");
+        }
         return job;
     }
 
@@ -301,7 +374,9 @@ public class AiJobService {
                 || !Objects.equals(source.getUserId(), job.getUserId())) {
             throw http(HttpStatus.NOT_FOUND, "心情记录不存在");
         }
-        if (!validSource(source, job)) throw http(HttpStatus.CONFLICT, "回应任务已失效，请刷新记录");
+        if (!validSource(source, job)) {
+            throw http(HttpStatus.CONFLICT, "回应任务已失效，请刷新记录");
+        }
         return source;
     }
 
@@ -313,7 +388,7 @@ public class AiJobService {
                 && Boolean.TRUE.equals(source.getAiReplyEnabled());
     }
 
-    private static boolean sameTarget(AiJob a, AiJob b) {
+    static boolean sameTarget(AiJob a, AiJob b) {
         return Objects.equals(a.getUserId(), b.getUserId())
                 && Objects.equals(a.getTaskType(), b.getTaskType())
                 && Objects.equals(a.getTargetId(), b.getTargetId())
@@ -322,9 +397,13 @@ public class AiJobService {
 
     /** 尝试身份由任务状态、尝试次数与每次领取的 requestId 共同确定。 */
     private static boolean isCurrentAttempt(AiJob job, int attempt, String requestId) {
+        return isCurrentAttempt(job, MOOD_REPLY, attempt, requestId);
+    }
+
+    static boolean isCurrentAttempt(AiJob job, String taskType, int attempt, String requestId) {
         return job != null
-                && TASK_TYPE_MOOD_REPLY.equals(job.getTaskType())
-                && STATUS_RUNNING.equals(job.getStatus())
+                && taskType.equals(job.getTaskType())
+                && RUNNING.equals(job.getStatus())
                 && attempt >= 1
                 && Integer.valueOf(attempt).equals(job.getAttemptCount())
                 && requestId != null && !requestId.isBlank() && requestId.equals(job.getRequestId());
@@ -337,16 +416,27 @@ public class AiJobService {
                 || (changed == 0 && !ACTIVE_OR_SUCCEEDED.contains(current.getStatus()));
     }
 
-    private boolean finish(AiJob job, String status, String errorCode, MoodAiResponse result) {
-        return jobs.finishAttemptByType(TASK_TYPE_MOOD_REPLY, job, status, errorCode, result == null ? null : result.resultKind(),
-                result == null ? null : result.modelCalled(), result == null ? null : result.modelName()) == 1;
+    static String safeErrorCode(String errorCode) {
+        return errorCode != null && ERROR_CODES.contains(errorCode) ? errorCode : ERROR_INTERNAL;
     }
 
-    private boolean capacityFull(long userId) {
-        return jobs.selectCount(new QueryWrapper<AiJob>().eq("status", STATUS_QUEUED)) >= MAX_QUEUED_JOBS
+    private boolean finishWithoutReply(AiJob job, String status, String errorCode) {
+        return jobs.finishAttemptByType(MOOD_REPLY, job, status, errorCode, null, null, null) == 1;
+    }
+
+    private boolean finishWithReply(AiJob job, MoodAiResponse reply) {
+        return jobs.finishAttemptByType(MOOD_REPLY, job, SUCCEEDED, null,
+                reply.resultKind(), reply.modelCalled(), reply.modelName()) == 1;
+    }
+
+    private boolean capacityFull(long userId, String taskType) {
+        Set<String> types = COMMUNITY_REPLY.equals(taskType) ? COMMUNITY_TASK_TYPES : MOOD_TASK_TYPES;
+        return jobs.selectCount(new QueryWrapper<AiJob>().eq("status", QUEUED)
+                        .in("task_type", types)) >= MAX_QUEUED_JOBS
                 || jobs.selectCount(new QueryWrapper<AiJob>()
                         .eq("user_id", userId)
-                        .in("status", STATUS_QUEUED, STATUS_RUNNING)) >= MAX_ACTIVE_JOBS_PER_USER;
+                        .in("task_type", types)
+                        .in("status", QUEUED, RUNNING)) >= MAX_ACTIVE_JOBS_PER_USER;
     }
 
     /** 无任务的来源按自身状态表达：留存旧回复为 legacy，待生成为 unavailable，关闭为 disabled。 */
@@ -355,14 +445,14 @@ public class AiJobService {
             return job.getStatus();
         }
         if (hasVisibleText(source.getAiReply())) {
-            return STATE_LEGACY;
+            return LEGACY;
         }
-        return Boolean.TRUE.equals(source.getAiReplyEnabled()) ? STATE_UNAVAILABLE : STATE_DISABLED;
+        return Boolean.TRUE.equals(source.getAiReplyEnabled()) ? UNAVAILABLE : DISABLED;
     }
 
     /** 只有成功或历史留存的回复可以返回正文，其他状态不暴露旧回复。 */
     private static boolean replyVisible(String state) {
-        return STATUS_SUCCEEDED.equals(state) || STATE_LEGACY.equals(state);
+        return SUCCEEDED.equals(state) || LEGACY.equals(state);
     }
 
     /** 是否含非空白 Unicode 字符；与 Python str.strip 的口径一致，不用 String.trim 判断。 */
@@ -371,11 +461,11 @@ public class AiJobService {
                 .anyMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c) && c != NEXT_LINE);
     }
 
-    private AiJobVO view(AiJob job, MoodRecord source) {
-        boolean succeeded = STATUS_SUCCEEDED.equals(job.getStatus());
-        boolean failed = STATUS_FAILED.equals(job.getStatus());
+    private AiJobVO view(AiJob job, String sourceReply) {
+        boolean succeeded = SUCCEEDED.equals(job.getStatus());
+        boolean failed = FAILED.equals(job.getStatus());
         String resultKind = succeeded ? job.getResultKind() : null;
-        String replyContent = succeeded ? source.getAiReply() : null;
+        String replyContent = succeeded ? sourceReply : null;
         String errorCode = failed ? job.getLastErrorCode() : null;
         int retryAfterSeconds = failed
                 ? retryAfterSeconds(job, AiJobRetryPolicy.cooldownSeconds(job.getAttemptCount()))
@@ -436,17 +526,31 @@ public class AiJobService {
      * @return 新建任务；来源未开启 AI 回应时返回 null
      */
     public AiJob createForVersion(MoodRecord source, RateLimiter.Decision rateLimit) {
-        if (!Boolean.TRUE.equals(source.getAiReplyEnabled())) return null;
+        if (!Boolean.TRUE.equals(source.getAiReplyEnabled())) {
+            return null;
+        }
+        return createForVersion(MOOD_REPLY, TEMPLATE_VERSION,
+                source.getId(), source.getUserId(), source.getContentVersion(), rateLimit);
+    }
+
+    /** 由帖子准入事务调用，将新版本任务与正文一起提交。 */
+    public AiJob createCommunityJob(long postId, long userId, long version, RateLimiter.Decision rateLimit) {
+        return createForVersion(COMMUNITY_REPLY, CommunityReplyJobHandler.TEMPLATE_VERSION,
+                postId, userId, version, rateLimit);
+    }
+
+    private AiJob createForVersion(String taskType, String templateVersion, long targetId,
+                                   long userId, long targetVersion, RateLimiter.Decision rateLimit) {
         boolean rateLimited = rateLimit != null && !rateLimit.allowed();
-        boolean full = !rateLimited && capacityFull(source.getUserId());
+        boolean full = !rateLimited && capacityFull(userId, taskType);
         AiJob job = new AiJob();
-        job.setUserId(source.getUserId());
-        job.setTargetId(source.getId());
-        job.setTaskType(TASK_TYPE_MOOD_REPLY);
-        job.setTargetVersion(source.getContentVersion());
+        job.setUserId(userId);
+        job.setTargetId(targetId);
+        job.setTaskType(taskType);
+        job.setTargetVersion(targetVersion);
         job.setAttemptCount(0);
-        job.setStatus(rateLimited || full ? STATUS_FAILED : STATUS_QUEUED);
-        job.setTemplateVersion(TEMPLATE_VERSION);
+        job.setStatus(rateLimited || full ? FAILED : QUEUED);
+        job.setTemplateVersion(templateVersion);
         if (rateLimited) {
             // 记录仍照常保存（契约 2.4）；任务 attempt=0 不在冷却中，retryable 为真。
             job.setLastErrorCode(rateLimit.blockedScope().errorCode());
@@ -455,7 +559,9 @@ public class AiJobService {
             job.setLastErrorCode(ERROR_CAPACITY_EXCEEDED);
             job.setFinishedAt(LocalDateTime.now());
         }
-        if (jobs.insert(job) != 1) throw new IllegalStateException("任务保存未成功");
+        if (jobs.insert(job) != 1) {
+            throw new IllegalStateException("任务保存未成功");
+        }
         return job;
     }
 
@@ -466,16 +572,17 @@ public class AiJobService {
      * 归属、类型与来源的正式校验仍在事务内；危机文本豁免——命中安全正则的来源由固定
      * SUPPORT 回应，不应被额度挡住（契约 2.1）。
      */
-    private void requireRetryQuota(long userId, AiJob observed) {
+    private void requireRetryQuota(long userId, AiJob observed, String taskType,
+                                   Function<AiJob, String> retryContent) {
         if (observed == null
-                || !TASK_TYPE_MOOD_REPLY.equals(observed.getTaskType())
+                || !taskType.equals(observed.getTaskType())
                 || !Objects.equals(observed.getUserId(), userId)) {
             return;
         }
         if (ACTIVE_OR_SUCCEEDED.contains(observed.getStatus())) {
             return;
         }
-        if (!STATUS_FAILED.equals(observed.getStatus())) {
+        if (!FAILED.equals(observed.getStatus())) {
             return;
         }
         int cooldownSeconds = AiJobRetryPolicy.cooldownSeconds(observed.getAttemptCount());
@@ -485,14 +592,14 @@ public class AiJobService {
                 return;
             }
         }
-        MoodRecord source = moods.selectById(observed.getTargetId());
-        if (source == null || source.getContent() == null) {
+        String content = retryContent.apply(observed);
+        if (content == null || MoodReviewSafety.matches(content)) {
             return;
         }
-        if (MoodReviewSafety.matches(source.getContent())) {
-            return;
-        }
-        RateLimiter.Decision decision = rateLimiter.check(RateLimitType.MOOD_REPLY, userId);
+
+        RateLimitType limit = COMMUNITY_REPLY.equals(taskType)
+                ? RateLimitType.COMMUNITY_POST : RateLimitType.MOOD_REPLY;
+        RateLimiter.Decision decision = rateLimiter.check(limit, userId);
         if (!decision.allowed()) {
             // 不改任务状态；沿用冷却 429 的返回方式，Retry-After 取限流组件给的再试秒数。
             throw tooManyRequests(decision.retryAfterSeconds(), "回应次数已用完，请稍后重试");
@@ -502,5 +609,10 @@ public class AiJobService {
     /** 失效来源的未完成任务；调用方负责事务边界。 */
     public void supersedeUnfinished(Long targetId, Long userId) {
         jobs.supersedeUnfinished(targetId, userId);
+    }
+
+    /** 与帖子改版、删除或隐藏同事务执行。 */
+    public void supersedeCommunityJobs(long postId, long userId) {
+        jobs.supersedeUnfinishedByType(COMMUNITY_REPLY, postId, userId);
     }
 }

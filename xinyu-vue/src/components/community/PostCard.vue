@@ -36,6 +36,12 @@ const authorName = computed(() => {
 })
 
 const isOwner = computed(() => Boolean(props.post.mine))
+const aiStatus = computed(() => {
+  if (!isOwner.value || props.variant !== 'card') return ''
+  if (['queued', 'running'].includes(props.post.aiReplyState)) return '小芽正在写'
+  if (props.post.aiReplyState === 'failed') return '小芽这次没写出来'
+  return ''
+})
 const supportReply = computed(() => isSupportReply(props.post))
 
 // 有数量时统一写「抱抱 N」，无数量按是否已抱抱区分
@@ -87,6 +93,8 @@ const likeLabel = computed(() => {
       :support="supportReply"
       :clamp="2"
     />
+
+    <p v-if="aiStatus" class="pc__ai-status">{{ aiStatus }}</p>
 
     <footer class="pc__actions" @click.stop>
       <button
@@ -141,6 +149,11 @@ const likeLabel = computed(() => {
 </template>
 
 <style scoped>
+.pc__ai-status {
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+
 .pc {
   transition:
     transform var(--t-base) var(--ease-soft),

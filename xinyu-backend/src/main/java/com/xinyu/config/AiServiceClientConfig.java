@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
-/** 社区客户端始终创建。心情和回顾客户端只在启用 worker 时创建。 */
+/** 仅在启用 worker 时创建相互独立的心情和社区客户端。 */
 @Configuration(proxyBeanMethods = false)
 public class AiServiceClientConfig {
     @Bean(destroyMethod = "close")
@@ -22,6 +22,7 @@ public class AiServiceClientConfig {
     }
 
     @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "AI_WORKER_ENABLED", havingValue = "true")
     public CommunityAiClient communityAiClient(@Value("${AI_SERVICE_BASE_URL:}") String baseUrl,
                                                @Value("${AI_INTERNAL_TOKEN:}") String token,
                                                @Value("${AI_COMMUNITY_CONCURRENCY:3}") int concurrency) {

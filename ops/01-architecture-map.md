@@ -20,7 +20,8 @@ AI 相关的三条路径：
   前端 ai-job-polling.js 轮询 /mood/ai-job/{id}
 
 社区帖子回应：
-  发帖／编辑先保存，再经 Python 同步生成。社区独立 3 个名额，危机命中走固定回应，代次保护防止旧结果回写
+  发帖／编辑与 COMMUNITY_REPLY 任务同事务保存，复用 ai_job、AiJobRuntime、AiJobWorker（社区独立 3 槽）
+  -> Python 社区端点 -> 按尝试身份和帖子 content_version 条件提交，作者轮询 /community/ai-job/{id}
   帖子／评论保存时独立识别危机，命中与正文同条 SQL 写入待关注，管理端可筛选和标记已关注
 
 付费调用额度：

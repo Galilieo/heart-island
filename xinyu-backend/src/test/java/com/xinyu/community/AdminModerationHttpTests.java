@@ -17,8 +17,11 @@ import com.xinyu.mapper.FavoriteMapper;
 import com.xinyu.mapper.PostLikeMapper;
 import com.xinyu.mapper.TopicMapper;
 import com.xinyu.service.AiReplyLogService;
-import com.xinyu.service.CommunityAiClient;
+import com.xinyu.service.AiJobAdmission;
+import com.xinyu.service.AiJobService;
 import com.xinyu.service.CommunityPostService;
+import com.xinyu.service.CommunityReplySource;
+import com.xinyu.mapper.AiJobMapper;
 import com.xinyu.service.CommunityReplyService;
 import com.xinyu.service.UserService;
 import com.xinyu.utils.JwtUtil;
@@ -47,6 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         CorsConfig.class,
         JacksonConfig.class,
         CommunityPostService.class,
+        CommunityReplySource.class,
         CommunityReplyService.class
 })
 class AdminModerationHttpTests {
@@ -82,7 +86,13 @@ class AdminModerationHttpTests {
     private TopicMapper topicMapper;
 
     @MockitoBean
-    private CommunityAiClient communityAiClient;
+    private AiJobService aiJobService;
+
+    @MockitoBean
+    private AiJobAdmission admission;
+
+    @MockitoBean
+    private AiJobMapper aiJobMapper;
 
     @MockitoBean
     private AiReplyLogService aiReplyLogService;
@@ -190,6 +200,9 @@ class AdminModerationHttpTests {
 
     @Test
     void adminPostAndReplyConditionalStatusChangeSucceed() throws Exception {
+        CommunityPost post = new CommunityPost();
+        post.setUserId(101L);
+        when(communityPostMapper.selectById(POST_ID)).thenReturn(post);
         when(communityPostMapper.update(any(), any())).thenReturn(1);
         mvc.perform(put("/admin/post/{id}/status", POST_ID)
                         .param("status", "2")

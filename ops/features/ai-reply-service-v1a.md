@@ -14,15 +14,13 @@
 
 设计前的历史问题基线：日记曾在保存／修改请求中同步调用AI，删除仅置status=0。Task2当前已改为日记与任务同事务保存，以及带版本、删除时间、旧任务失效的软删除；不重做已完成链路。当时的社区问题包括默认文字被当作成功、RestTemplate无显式超时，以及后台直接返回日志实体；Task3已修复生成与等待行为，后台改为独立VO并按用户2026-11-10修订保留全站ADMIN原文查询权限。前端现有统一等待5秒，Task4再适配新状态；未以此核验线上数据。
 
-保留 `/mood/add`、`/mood/update/{id}` 路径与 `Result` 包装。本方案把两者 `data: true` 改为保存结果 VO；这是已声明的响应变化，Vue API / store / 页面必须同批修改。已有列表、详情的日记字段保持，增加状态字段；`Long` 沿用当前 Jackson 转字符串的约定。社区发帖／编辑先保存，再经 Python 同步生成，无自动重试。仅 communityApi.createPost/updatePost 使用 20 秒 Axios 等待，其他请求仍默认 5 秒。内部客户端预算见第 6 节。
+保留 `/mood/add`、`/mood/update/{id}` 路径与 `Result` 包装。本方案把两者 `data: true` 改为保存结果 VO；这是已声明的响应变化，Vue API / store / 页面必须同批修改。已有列表、详情的日记字段保持，增加状态字段；`Long` 沿用当前 Jackson 转字符串的约定。社区发帖／编辑先保存，后台经 Python 生成。写请求使用默认 5 秒 Axios 超时，社区生命周期见第 6.1 节。
 
-2026-11-11 的 5 次合成样例采样使用旧 Java 直连链路，结果保留于执行记录。社区迁经 Python 后，浏览器发布／编辑仍设置 20 秒等待。浏览器超时只提示“发布结果尚未确认，帖子可能已保存，请先刷新核对”，不自动重发。社区继续采用同步生成。
+2026-11-11 的 5 次合成样例采样使用旧 Java 直连链路，结果保留于执行记录。当时同步生成版本的浏览器发布／编辑设置了 20 秒等待。浏览器超时只提示“发布结果尚未确认，帖子可能已保存，请先刷新核对”，不自动重发。
 
 社区失败展示决定：新帖生成失败时community_post.ai_reply保持NULL，attachAiReply不得把getDefaultReply等兜底文字写入；编辑先清除旧内容对应的回复，失败不恢复旧回复。仅成功且非空的生成结果才写入公开回复，失败日志的status=失败且reply_content=NULL。公开列表/详情沿用非空才显示AI卡片的规则；旧数据不在本次批量清洗。回归真实延迟HTTP，保留已插入帖子并记分类失败，不能只mock抛异常。Task3后端返回契约变化与Task4前端必须同批验收发布，Task3完成时不可单独部署。
 
-后续社区异步化（2026-11-09用户要求记录）：社区AI回复后续也采用先保存、后台异步生成，社区执行并发初值3、可配置。该方向已记入总方案第12节，社区已使用 Python 同步端点和独立门禁。后台任务及供应商全局额度仍在异步化方案中评估。
-
-社区同步生成代次保护（2026-11-11用户确认）：community_post增加可空ai_generation_id VARCHAR(36)，新建／编辑需要AI时由服务端生成UUID，关闭AI写NULL。标识与内容、心情、话题及清旧回复同条保存，网络调用在其后；成功回写须同时匹配id／user_id／status=1／本次标识，0行则丢弃，不把过期回复覆盖到当前帖子。删除或管理员隐藏同时清空标识，恢复可见性不恢复旧生成资格。每次保存更换标识，覆盖相同内容、话题变更和A→B→A，不靠正文相等推断生成身份；仅服务端使用，不加入公开JSON。点赞／取消点赞／评论增删仅更新对应计数，不能整实体回写旧内容或标识。生成日志仍记录实际模型结果，不表示已发布；不改成后台异步任务。迁移不清除历史回复；部署先停止旧版本及在途生成，避免旧代码绕过条件。
+社区自 2026-11-20 将同步生成切换为后台任务，保留旧生成标识供回退。详见第 6.1 节。
 
 ## 3. 增量数据设计
 
@@ -57,7 +55,7 @@
 | last_error_code | VARCHAR(64)，只放错误分类，不存上游正文或日记原文 |
 | create_time / update_time / started_at / finished_at | DATETIME；运行 / 结束前相应字段可空 |
 
-唯一键 `(task_type, target_id, target_version)`，扫描索引 `(status, id)`，归属查询含 user_id。不在 job 复制日记正文、提示词或模型完整响应，结果仍在 mood_record.ai_reply。普通模型调用按现有 ai_reply 兼容记录落库，prompt 为空；心情worker的errorMessage沿用内部协议分类，社区同步失败只记录错误分类；SUPPORT 不插入一条“模型调用成功”记录，job 保留结果类型和 model_called=false。model_called=true 仅表示已发起供应商 HTTP 调用，不证明供应商实际执行或计费；失败无法确认时保留 NULL。
+唯一键 `(task_type, target_id, target_version)`，扫描索引 `(status, id)`，归属查询含 user_id。不在 job 复制日记正文、提示词或模型完整响应，结果仍在 mood_record.ai_reply。普通模型调用按现有 ai_reply 兼容记录落库，prompt 为空；心情worker的errorMessage沿用内部协议分类，社区生成失败只记录错误分类；SUPPORT 不插入一条“模型调用成功”记录，job 保留结果类型和 model_called=false。model_called=true 仅表示已发起供应商 HTTP 调用，不证明供应商实际执行或计费；失败无法确认时保留 NULL。
 
 日记沿用软删除。首次删除在同一事务中将来源status置0、content_version加1、deleted_at写数据库当前时间、ai_reply_enabled置0、ai_reply显式置NULL，并将该来源queued/running/failed任务置superseded；只清理私密心情域，不改变社区对象。重复删除沿用现有失败/不存在结果，不再增加版本或重写deleted_at。来源和job行仍在，不能以“job已删除”作为拒绝回写依据。
 
@@ -117,7 +115,7 @@ Task3必做失败收尾：worker必须在complete事务已回滚／结束后捕�
 
 `template_version` 取值（2026-11-12 提示词 v2 上线，对应提示词文件 `xinyu-ai/evals/prompts/mood-reply-v2b.txt`）：Python 当前只回 `mood-reply-v2`；Java `MoodAiResponse` 在滚动升级期间接受具名常量集合 `{mood-reply-v1, mood-reply-v2}`，v1 保留到确认不再有旧 Python 实例后再移除。**部署顺序必须先 Java（先能接受 v2），后 Python（再开始返回 v2）**，反向顺序会让旧 Java 拒绝 v2 回包；本轮仅代码落地，未部署。任务表 `ai_job.template_version` 由创建任务的 Java 进程按自身版本盖章，升级窗口内创建与执行的版本可能短暂不一致，以回包校验为准。
 
-3A客户端实施状态（2026-11-09）：采用Boot管理的Apache HttpClient 5.5.2，不改Boot或Java版本。成功与错误响应正文最多16KiB，状态行及响应头累计最多8KiB，在解析期间拒绝超界；禁止重定向、自动重试及自动内容解压。严格检查重复键、尾随JSON、必需／未知字段和实际JSON类型，再校验关联与语义。worker 关闭时不创建心情／回顾客户端。社区客户端始终启用，所有 Java 实例均需要内部地址和凭据。新增generateAsync返回CompletableFuture，DNS等待仅登记续接；同一客户端逻辑请求及实际HTTP执行线程均受concurrency限制（默认3），交接队列上限同为concurrency，超容量安全overloaded。同步generate保留为明确阻塞的兼容入口，3C worker须使用异步入口；同步回调保持轻量，数据库收尾必须使用显式执行器。关闭取消未完成请求、DNS调度及HTTP资源，worker生命周期已在3D接入，默认关闭，新增主体已带读。
+3A客户端实施状态（2026-11-09）：采用Boot管理的Apache HttpClient 5.5.2，不改Boot或Java版本。成功与错误响应正文最多16KiB，状态行及响应头累计最多8KiB，在解析期间拒绝超界；禁止重定向、自动重试及自动内容解压。严格检查重复键、尾随JSON、必需／未知字段和实际JSON类型，再校验关联与语义。仅启用 worker 时创建两套独立内部客户端，地址和凭据仅 worker 实例必需。新增generateAsync返回CompletableFuture，DNS等待仅登记续接；同一客户端逻辑请求及实际HTTP执行线程均受concurrency限制（默认3），交接队列上限同为concurrency，超容量安全overloaded。同步generate保留为明确阻塞的兼容入口，3C worker须使用异步入口；同步回调保持轻量，数据库收尾必须使用显式执行器。关闭取消未完成请求、DNS调度及HTTP资源，worker生命周期已在3D接入，默认关闭，新增主体已带读。
 
 DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解析，A／B／C共享一项查询并登记各自续接；成功后当前仍有效的请求使用剩余预算发送。失败后当前等待者分别provider_error，缓存失败默认10秒（AI_DNS_FAILURE_CACHE_SECONDS，配置范围1～3600秒）；缓存期内直接失败，到期新请求触发重查。物理查询单线程、最多一项；解析等待上限沿用connect预算（默认2秒），逻辑超时后若原生调用仍卡住就保留进行中标记，不因缓存过期不断创建线程；迟到地址丢弃，实际查询退出后才可发起新查询。DNS等待计入原总deadline，单请求取消／超时不取消共享查询；过期或关闭后的请求不再发送HTTP。成功地址缓存到客户端关闭，本轮不含动态IP／成功TTL刷新，不宣称强制终止不可中断的原生DNS。已完成180项Java普通／合成Python联调验证；独立评审状态和证据见执行稿11.7／11.8及本地progress。
 
@@ -128,7 +126,7 @@ DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解�
 供应商配置使用 OPENAI_BASE_URL、OPENAI_API_KEY、OPENAI_MODEL、DEEPSEEK_THINKING_MODE；健康检查不返回其值。可选 OPENAI_MAX_TOKENS 控制输出预算，默认4096，本服务允许1～8192的整数（不是供应商上限）；thinking样例仍为disabled，同时允许enabled。思考模式也消耗输出预算，调大不保证在40秒总预算或64 KiB上游正文限制内完成；截断仍判失败，不自动重试，不回传思考内容。该初值未经真实模型校准。thinking作为供应商适配参数，供应商不支持时必须显式调整适配配置，不能默默丢掉参数。prompt 在 Python 模板集中管理，日记作为数据隔离；不复制到业务日志。
 
 
-### 6.1 社区同步回复（2026-11-19）
+### 6.1 社区异步任务与 Python 端点
 
 社区帖子和评论在保存时独立识别危机内容，识别不依赖 AI 开关。作者提示与管理员关注见[社区举报与处理契约](community-report.md#危机内容识别与关注)。
 
@@ -136,13 +134,17 @@ DNS恢复实施状态（2026-11-09）：固定服务主机首次请求按需解�
 
 成功回包为 `request_id`、`reply_content`、`result_kind`、`model_called`、`model_name`、`template_version=community-reply-v1`。正文和 MODEL／SUPPORT 语义复用心情规则。Java 额外要求 SUPPORT 正文逐字等于既有固定文案，校验失败按 `invalid_model_response`。危机命中跳过供应商，Java 预检命中免扣社区及全站额度，最终分流以 Python 为准。普通帖子把话题、心情和正文作为 user 消息中的 JSON，system 使用固定规则和心情模板共用的安全节。生成沿用 Python 的模型、思考模式和 `OPENAI_MAX_TOKENS`。
 
-每个 Java 实例为社区创建独立的客户端，`AI_SERVICE_BASE_URL` 与 `AI_INTERNAL_TOKEN` 缺失或非法会导致启动失败。Java 与 Python 分别通过 `AI_COMMUNITY_CONCURRENCY` 配置各自的社区名额，默认各 3，满额立即返回 `overloaded`。Python 的社区与心情／回顾名额独立，默认合计最多 6 条供应商请求在途。Java 社区 connect 2 秒、read 17 秒、total 18 秒，按 DNS 等待后的剩余时限扣本地余量并在 15,000 毫秒封顶。18 秒只约束内部调用，浏览器 20 秒还覆盖保存、回写和 HTTP 响应。
+发帖／编辑开启 AI 时，帖子和 `COMMUNITY_REPLY` 任务在同一准入事务提交，任务模板为 `community-reply-v1`。超额或容量满创建尝试次数为 0 的 failed 任务。关闭 AI 时不建任务、不扣额度。提交者的原 `CommunityWriteVO` 保留 `supportText`，帖子保存增加 `postId`、`jobId`、`aiReplyState`，关闭时为 null 和 disabled。评论仍只返回支持字段。
 
-成功回写以同一条条件 UPDATE 写 `ai_reply` 和 `ai_result_kind`。编辑清空旧回复时一起清空类型，历史行不回填。公开列表和详情以 `resultKind` 返回类型，继续隐藏生成代次。SUPPORT 使用「心屿」署名和系统字体，隐藏小芽卡通。MODEL 和历史 NULL 按原样展示。管理端列表和详情展示危机标记，`GET /admin/post/page` 支持 `resultKind=SUPPORT` 或 `MODEL`，全站 ADMIN 鉴权不变。
+社区共用 Runtime 和 Worker，单独配置 `AI_COMMUNITY_CONCURRENCY`（默认 3），与心情和回顾执行槽隔离。社区容量为 100 条 queued、每用户 queued/running 共 3 条，心情侧统计不包含社区。需要 `AI_WORKER_ENABLED=true` 才建两套客户端、扫描并恢复各自遗留 running，queued 保留。社区生成共用 Worker 预算框架，连接 2 秒、读 17 秒、生成阶段上限 18 秒，Python 预算不超过 15,000 毫秒。
 
-MODEL 成功及生成失败进入 `ai_reply` 调用记录，失败只存分类并保持帖子回复为空。SUPPORT 零模型调用，仅写帖子类型和应用日志中的 `postId`、`kind=SUPPORT`。
+帖子每次编辑、作者删除、直接隐藏及举报裁决隐藏都在写事务内递增 `content_version`，清除旧回复及类型并失效未完成任务。恢复可见性不递增、不建任务。Worker 在调用前检查版本，完成时先锁帖子再锁任务，重新检查可见状态、归属、版本、尝试次数及 request_id，再在同一事务提交任务终态和帖子两列。失效结果被丢弃。MODEL 成功与生成失败保留兼容调用日志，失败只存分类，SUPPORT 不写调用日志。
 
-发布顺序为 **迁移 → Python → Java 与前端同批**。迁移前备份并确认 `community_post.ai_result_kind` 不存在，只新增可空列，回退时可保留。新 Python 兼容旧 Java，先切 Java 会导致旧 Python 无法处理社区端点，帖子仍会保存。
+仅作者列表、详情可见 `aiReplyState` 和当前版本的 `jobId`。无任务的历史回复为 legacy，其余为 disabled。公开仍只在有成功或历史回复时显示正文和类型，危机回复继续用心屿署名和系统字体。管理端的结果类型筛选保留。危机状态和版本列均为服务器内部数据。
+
+`GET /community/ai-job/{id}` 与 `POST /community/ai-job/{id}/retry` 使用 `AiJobVO`。匿名、非作者和任务类型不符为 404，作者访问可见但版本已失效的任务返回 409。重试共用冷却、额度、容量和 CAS，冷却及额度拒绝返回 429 和 `Retry-After`。前端作者详情轮询，列表只轮询刚发布任务，离页取消。任务处理中他人视图不变。
+
+合并发布依次迁移 `ai_result_kind`、风险列和 `content_version`，再切 Python、过服务器真实采样关口、同批切 Java 与前端。回退目标 `d29d6cf`，须保留 `DEEPSEEK_*` 和两代标识列，并核对旧版容量不受社区在途任务残留影响。见[合并发布顺序](../../deploy/README.md#社区三项合并发布顺序)。
 
 ## 7. 最小风险回应
 
@@ -170,7 +172,7 @@ Task3D／3E已接入单进程有界worker，默认Java执行槽与Python生成�
 | 协议与失败 | 内部无 token / 错 token、40 / 50 秒总界限、空正文、错误 JSON、关联字段错、供应商错误均无伪成功 |
 | 风险与隐私 | 无资源配置可启动并生成普通回应；SUPPORT 内置文案 / 零模型调用；管理端及结构化日志不含秘密与原文 |
 | 前端 | 保存提示准确；刷新恢复；轮询销毁 / 失败 / 观察上限；旧请求回包不覆盖编辑；重试双击 |
-| 回归 | 登录、心情CRUD、近7天趋势、后台分页；社区客户端 2 秒连接／17 秒读等待／18 秒总时限，发布／编辑单独 20 秒等待；慢响应超时保留帖子、AI失败无兜底公开回复、日志记失败 |
+| 回归 | 登录、心情CRUD、近7天趋势、后台分页；社区客户端 2 秒连接／17 秒读等待／18 秒总时限，发布／编辑使用默认 5 秒等待；慢响应超时保留帖子、AI失败无兜底公开回复、日志记失败 |
 
 先跑预设供应商的真实 Java→Python 回环 HTTP 与隔离 MySQL 的迁移 / 竞态测试，再经用户授权做有限真实模型体验。单元模拟、回环契约、实际供应商质量、生产部署分别记录。
 
@@ -206,6 +208,6 @@ AiJobVO的3B目标字段只增加retryAfterSeconds，不增加retryAvailableAt�
 
 保存消费MoodSaveVO，排队／生成／成功／失败／关闭／历史／不可用状态在卡片与详情显示；重试仅用户主动触发，POST在途共用pending，冷却到期只恢复入口，失败（含429）后GET回查。单任务GET结束后再延迟2秒，最多观察120秒；页面固定6个复用槽位，隐藏／卸载／登录变化取消请求并隔离迟到结果，不改变后端任务状态。来源／job／版本／本地会话匹配后才应用；查询失败停止观察并提供刷新，不伪造failed。无变化编辑使用aiReplyEnabled还原意愿，不从是否已有正文推断开关。
 
-保存确认与列表／趋势刷新分离；后续刷新失败仍提示已保存，保留保存VO。社区保存独立20秒等待，网络无响应提示结果未确认／先刷新核对，不自动重发、保留输入；其他API仍默认5秒。隐私页由登录／注册／页脚公开访问，使用用户确认的运营者和邮箱，说明管理员排障范围；访问审计仍暂缓。
+保存确认与列表／趋势刷新分离；后续刷新失败仍提示已保存，保留保存VO。当时社区同步保存采用独立 20 秒等待，异步化后已恢复默认 5 秒，超时继续提示结果未确认／先刷新核对，不自动重发并保留输入。隐私页由登录／注册／页脚公开访问，使用用户确认的运营者和邮箱，说明管理员排障范围；访问审计仍暂缓。
 
 前端27项＋build、Python120项、Java301项／社区25项／完整HTTP契约7项分批通过；独立评审与浏览器证据见接续及progress。跨服务测试使用真实Spring／鉴权／事务／worker、真实Python HttpProvider、合成供应商HTTP及新隔离MySQL；Python测试预算2秒、Java仍50秒。启动恢复测试为构造遗留running后实际重启应用，未执行真实kill或验证供应商计费。完整1a发布前的正式模型效果测评、生产迁移／环境验收仍未做，不能将软件验收称为已发布或真实质量达标。
