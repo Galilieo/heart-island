@@ -3,9 +3,9 @@
 [![CI](https://github.com/Galilieo/heart-island/actions/workflows/ci.yml/badge.svg)](https://github.com/Galilieo/heart-island/actions/workflows/ci.yml)
 [![Integration](https://github.com/Galilieo/heart-island/actions/workflows/integration.yml/badge.svg)](https://github.com/Galilieo/heart-island/actions/workflows/integration.yml)
 
-心屿围绕“情绪记录、AI 陪伴回应、近期回顾、匿名互助社区、后台内容治理”构建。记录先保存、AI 回应在后台异步生成；统计由程序计算，AI 只负责文字解释；社区支持匿名发帖、举报与后台裁决。
+心屿围绕“情绪记录、AI 陪伴回应、近期回顾、匿名互助社区、后台内容治理”构建。记录先保存、AI 回应在后台异步生成；统计由程序计算，AI 只负责文字解释；社区支持匿名发帖、举报与后台裁决，并识别帖子与评论中的危机内容。
 
-当前已上线的能力对应升级总方案的阶段 1a、阶段 2 与阶段 1b 的 Redis 限流部分；阶段 3 起（多轮对话、陪伴聊天、记忆与知识库）尚未开始，见[升级总方案](ops/features/xinyu-upgrade-master-plan.md)。
+当前已上线的能力对应升级总方案的阶段 1a、阶段 2 与阶段 1b 的 Redis 限流部分，以及 2026-11-20 上线的社区 AI 异步回应与危机内容识别（生产 `d052e24`）；阶段 3 起（多轮对话、陪伴聊天、记忆与知识库）尚未开始，见[升级总方案](ops/features/xinyu-upgrade-master-plan.md)。
 
 ## 架构
 
@@ -53,13 +53,16 @@ Java 后端（Spring Boot，JDK 17）──► MySQL 8：用户、记录、任�
 ### 匿名社区
 
 - 话题、帖子与回复的发布、修改、删除；最新／最热排序；分页列表（每页默认 10 条）。
-- 点赞、收藏、收藏列表；帖子可选 AI 回应。
+- 点赞、收藏、收藏列表。
+- 帖子可选 AI 回应：保存立即返回，回应在后台经 Python 生成；生成状态仅作者可见，失败可手动重试（有冷却，社区额度与执行槽独立于心情）。修改帖子后旧回应清除，迟到结果按内容版本丢弃。
+- 危机内容识别：发帖、编辑、评论时用与心情相同的危机规则检查正文。开启 AI 的帖子公开显示心屿署名的固定支持回应，不调用模型；评论和关闭 AI 的帖子向提交者弹出支持提示。命中内容进入后台待关注，风险状态不对普通用户返回。
 - 社区接口不返回作者 ID，只返回 `mine` 标记本人内容。
 - 举报帖子或回复，查看“我的举报”；被管理员隐藏的内容仅作者可见并显示原因。
 
 ### 后台管理（全站 ADMIN）
 
-- 概览：用户、帖子与回复（含隐藏数）、AI 调用成功与失败、限流后端与当日拒绝次数；举报页显示待处理数。
+- 概览：用户、帖子与回复（含隐藏数）、危机待关注的帖子与回复数、AI 调用成功与失败、限流后端与当日拒绝次数；举报页显示待处理数。
+- 危机关注：帖子、回复列表可按待关注／已关注筛选，管理员标记已关注；不自动隐藏。
 - 用户、帖子、回复、话题管理；举报按对象聚合处理（隐藏或驳回），并发裁决加锁。
 - AI 日志：可跨用户查看与搜索已保存的 prompt、回复和错误详情，用于排障；隐私页已告知。
 
@@ -171,22 +174,24 @@ GitHub Actions 分两层：每次 push／PR 运行三端快速检查；推送到
 | 心情 | `POST /mood/add`、`PUT /mood/update/{id}`、`DELETE /mood/delete/{id}` | 保存、修改、删除；开启 AI 时返回任务信息 |
 | 心情 | `GET /mood/list`、`GET /mood/detail/{id}`、`GET /mood/trend/recent7` | 分页、详情（含 AI 状态）、近 7 天趋势 |
 | AI 任务 | `GET /mood/ai-job/{id}`、`POST /mood/ai-job/{id}/retry` | 查询任务状态、手动重试 |
+| AI 任务 | `GET /community/ai-job/{id}`、`POST /community/ai-job/{id}/retry` | 帖子回应任务，仅作者可查、可重试 |
 | 回顾 | `GET /mood/analysis?range=30d`、`POST /mood/analysis/generate` | 近 30 天统计与回顾、生成 |
 | 周报 | `GET /mood/report/week`、`POST /mood/report/week/generate`、`POST /mood/report/week/regenerate`、`GET /mood/report/week/history` | 周统计与周报、生成、重新生成、历史 |
 | 社区 | `GET /community/post/list`、`GET /community/post/detail`、`GET /community/reply/list` | 公开读取；`mine=true` 需登录 |
-| 社区 | `POST /community/post/add`、`/update`、`/delete` | 帖子发布、修改、删除 |
+| 社区 | `POST /community/post/add`、`/update`、`/delete` | 帖子发布、修改、删除；开启 AI 时返回任务信息，危机命中时返回支持文案 |
 | 社区 | `POST /community/post/like`、`/unlike`、`/favorite`、`/unfavorite`；`GET /community/post/favorites` | 互动与收藏列表 |
 | 社区 | `POST /community/reply/add`、`/update`、`/delete` | 回复 |
 | 举报 | `POST /community/report`、`GET /community/report/mine`、`GET /community/report/reported-targets` | 举报、我的举报、已举报对象 |
 | 话题 | `GET /topic/list` | 话题列表 |
 | 后台 | `GET /admin/overview` | 概览 |
 | 后台 | `GET /admin/user/page`、`PUT /admin/user/{id}/status` | 用户管理 |
-| 后台 | `GET /admin/post/page`、`GET /admin/post/{id}`、`PUT /admin/post/{id}/status`、`DELETE /admin/post/{id}` | 帖子管理；`/admin/reply/...` 同构 |
+| 后台 | `GET /admin/post/page`、`GET /admin/post/{id}`、`PUT /admin/post/{id}/status`、`DELETE /admin/post/{id}` | 帖子管理，可按 `riskStatus` 筛选；`/admin/reply/...` 同构 |
+| 后台 | `PUT /admin/post/{id}/risk-review`、`PUT /admin/reply/{id}/risk-review` | 危机内容标记已关注 |
 | 后台 | `GET /admin/report/page`、`GET /admin/report/detail`、`POST /admin/report/handle`、`GET /admin/report/pending-count` | 举报处理 |
 | 后台 | `GET /admin/topic/list`、`POST /admin/topic`、`PUT /admin/topic/{id}`、`PUT /admin/topic/{id}/status` | 话题管理 |
 | 后台 | `GET /admin/ai-replies/page` | AI 日志 |
 
-字段、状态与错误码以功能契约为准：[1a AI 回应](ops/features/ai-reply-service-v1a.md)、[阶段2回顾](ops/features/mood-review.md)、[社区举报与分页](ops/features/community-report.md)、[Redis 限流](ops/features/redis-rate-limit.md)。Python 内部接口见 [`xinyu-ai/README.md`](xinyu-ai/README.md)。
+字段、状态与错误码以功能契约为准：[1a AI 回应](ops/features/ai-reply-service-v1a.md)、[阶段2回顾](ops/features/mood-review.md)、[社区举报、分页与危机识别](ops/features/community-report.md)、[Redis 限流](ops/features/redis-rate-limit.md)。Python 内部接口见 [`xinyu-ai/README.md`](xinyu-ai/README.md)。
 
 ## 文档入口
 

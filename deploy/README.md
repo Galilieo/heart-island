@@ -4,6 +4,8 @@
 
 ## 社区三项合并发布顺序
 
+已于 2026-11-20 执行完成，生产为 `d052e24`，过程见 `AI_WORKLOG/2026-11-20-community-merged-deploy.md`；本节保留作回退参考。
+
 从 `d29d6cf` 升级，依次执行 **迁移 → Python → 服务器真实采样关口 → Java 和前端同批**。
 
 1. 停写、备份并停旧 Java，按[迁移核查单](MIGRATIONS.md) 顺序执行第 6～8 项，依次增加 `ai_result_kind`、风险字段和帖子 `content_version`。另记录一次历史危机命中只读统计。
