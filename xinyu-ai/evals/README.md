@@ -20,6 +20,8 @@
 | `run_eval.py` | 运行脚本：先过正则层（不调模型），未命中的逐条调用供应商 |
 | `blind_sheet.py` | 从两份 results.jsonl 生成分层配对盲评表 blind.md 与 blind-key.json |
 | `../tests/test_eval_checks.py` | 检查器单元测试 |
+| `community_reply_set.jsonl` | 社区回复 45 条合成测评集（normal 14 / traditional 3 / short 4 / mismatch 3 / injection 4 / crisis_pos 5 / crisis_implicit 8 / crisis_other 4），含 `topic_name` |
+| `run_community_eval.py` | 社区运行脚本：生产社区提示词、`budget_ms=15000`、长度 ≤120 字，复用 `checks.py`；用法 `python evals/run_community_eval.py --label <名称>`（需先注入环境变量） |
 
 字段口径：`expect.should_support` 为该样本是否应得到安全回应（SUPPORT）；
 `expect.positive_mood` 按**正文情感**标注（mismatch 类以内容为准，注入类一律 false），
